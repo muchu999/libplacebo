@@ -110,6 +110,8 @@ public:
   static constexpr auto SETTING_VIDEOPLAYER_STRETCH43 = "videoplayer.stretch43";
   static constexpr auto SETTING_VIDEOPLAYER_TELETEXTENABLED = "videoplayer.teletextenabled";
   static constexpr auto SETTING_VIDEOPLAYER_TELETEXTSCALE = "videoplayer.teletextscale";
+  static constexpr auto SETTING_VIDEOPLAYER_LIBPLACEBOSAVETODB = "videoplayer.libplacebosavetodb";
+
   static constexpr auto SETTING_VIDEOPLAYER_STEREOSCOPICPLAYBACKMODE =
       "videoplayer.stereoscopicplaybackmode";
   static constexpr auto SETTING_VIDEOPLAYER_QUITSTEREOMODEONSTOP =

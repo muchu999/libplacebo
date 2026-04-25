@@ -57,6 +57,7 @@
 #include "utils/XMLUtils.h"
 #include "utils/i18n/TableLanguageCodes.h"
 #include "utils/log.h"
+#include "video/dialogs/GUIDialogVideoSettings.h"
 #include "video/VideoDatabaseColumns.h"
 #include "video/VideoDatabaseDDL.h"
 #include "video/VideoDbUrl.h"
@@ -4977,6 +4978,280 @@ void CVideoDatabase::GetUniqueIDs(int media_id, const std::string &media_type, C
   }
 }
 
+
+bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
+{
+  try
+  {
+    if (idFile < 0) return false;
+    if (nullptr == m_pDB)
+      return false;
+    if (nullptr == m_pDS)
+      return false;
+
+    std::string strSQL = PrepareSQL("PRAGMA table_info(settings)", idFile);
+    m_pDS->exec(strSQL);
+    result_set *a = (result_set*)m_pDS->getExecRes();
+
+	if (a->records.size() > 29)
+    {
+	  int numColumns = a->records.size();
+	  // Drop columns, make sure we can get back to a clean slate in case some columns are not present from previous failed attempts
+      std::vector<std::string> list;
+      std::string str;
+      for(int i = 0; i < numColumns; i++)
+      {
+        // cl fix at(1)
+        if ((str = a->records[i]->at(1).get_asString()) == "PlaceboDisplayPeakLuminance") { list.push_back(str); continue; }
+        if ((str = a->records[i]->at(1).get_asString()) == "PlaceboTargetColorspaceHint") { list.push_back(str); continue; }
+        if ((str = a->records[i]->at(1).get_asString()) == "PlaceboTargetColorspaceHintMode") { list.push_back(str); continue; }
+
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorAdjustmentEnabled") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboSaturation") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboHue") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboTemperature") { list.push_back(str); continue; }
+
+        if (a->records[i]->at(1).get_asString() == "PlaceboPeakDetectEnabled") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPeakDetectSmoothingPeriod") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPeakDetectSceneThresholdLow") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPeakDetectSceneThresholdHigh") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPeakDetectPercentile") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPeakDetectBlackCutoff") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPeakDetectAllowDelayed") { list.push_back(str); continue; }
+
+        if (a->records[i]->at(1).get_asString() == "PlaceboUpscaler") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDownscaler") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPlaneUpscaler") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPlaneDownscaler") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboFrameMixer") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDebandEnabled") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDebandGrain") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDebandGrainNeutral0") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDebandGrainNeutral1") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDebandGrainNeutral2") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDebandIterations") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDebandRadius") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDebandThreshold") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapEnabled") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapGamutMapping") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapToneMapping") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapContrastRecovery") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapContrastSmoothness") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapGamutExpansion") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapInverseToneMapping") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapLut3dSizeI") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapLut3dSizeC") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapLut3dSizeH") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapLut3dTricubic") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapLutSize") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapShowClipping") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapIntent") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapForceToneMappingLut") { list.push_back(str); continue; }
+
+        if (a->records[i]->at(1).get_asString() == "PlaceboDeinterlaceEnabled") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDeinterlaceAlgo") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDeinterlaceSkipSpatialCheck") { list.push_back(str); continue; }
+
+        if (a->records[i]->at(1).get_asString() == "PlaceboSigmoidEnabled") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboSigmoidCenter") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboSigmoidSlope") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboConeEnabled") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboConeCones") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboConeStrength") { list.push_back(str); continue; }
+
+        if (a->records[i]->at(1).get_asString() == "PlaceboDitherEnabled") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDitherMethod") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDitherLutSize") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDitherTemporal") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDitherTransfer") { list.push_back(str); continue; }
+
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantExposure") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantKneeAdaptation") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantKneeDefault") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantKneeMaximum") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantKneeMinimum") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantKneeOffset") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantLinearKnee") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantReinhardContrast") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantSlopeOffset") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantSlopeTuning") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboToneConstantSplineContrast") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboGamutConstantsColorimetricGamma") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboGamutConstantsPerceptualDeadzone") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboGamutConstantsSoftclipDesat") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboGamutConstantsSoftclipKnee") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapVisualizeLut") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapVisualizeRectX0") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapVisualizeRectX1") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapVisualizeRectY0") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapVisualizeRectY1") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapVisualizeHue") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboColorMapVisualizeTheta") { list.push_back(str); continue; }
+
+        if (a->records[i]->at(1).get_asString() == "PlaceboAntiringingStrength") { list.push_back(str); continue; ; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboCorrectSubpixelOffset") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDisableBuiltinScalers") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDisableDitherGammaCorrection") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDisableLinearScaling") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboDynamicConstant") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboErrorDiffusion") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboForceDither") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboForceLowBitDepthFbos") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboIgnoreIccProfiles") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboPreserveMixingCache") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboSkipAntiAliasing") { list.push_back(str); continue; }
+        if (a->records[i]->at(1).get_asString() == "PlaceboSkipCachingSingleFrame") { list.push_back(str); continue; }
+      }
+
+      std::string strSQL2;
+      for (int i = 0; i < list.size(); i++)
+      {
+        strSQL2 = PrepareSQL("ALTER TABLE settings DROP COLUMN '%s'",list[i].c_str()); m_pDS->exec(strSQL2);
+      }
+    }
+    return true;
+  }
+  catch (...)
+  {
+    CLog::LogF(LOGERROR, "({}) failed", idFile);
+  }
+}
+
+
+bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVideoSettings& settings)
+{
+  try
+  {
+    if (idFile < 0) return false;
+    if (nullptr == m_pDB)
+      return false;
+    if (nullptr == m_pDS)
+      return false;
+
+    std::string strSQL = PrepareSQL("PRAGMA table_info(settings)", idFile);
+
+    m_pDS->exec(strSQL);
+    result_set*  a = (result_set*) m_pDS->getExecRes();
+
+    if (a->records.size() < 30) //cl what about no rows
+    {
+      CVideoSettings vs;
+      std::string strSQL2;
+        
+      // Add new columns to table
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisplayPeakLuminance      float NOT NULL DEFAULT   %f", vs.m_PlaceboDisplayPeakLuminance); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHint      integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHint); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHintMode  integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHintMode); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorAdjustmentEnabled      bool NOT NULL DEFAULT  %i", vs.m_PlaceboColorAdjustmentEnabled); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSaturation                  float NOT NULL DEFAULT %f", vs.m_PlaceboSaturation); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboHue                         float NOT NULL DEFAULT %f", vs.m_PlaceboHue); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTemperature                 float NOT NULL DEFAULT %f", vs.m_PlaceboTemperature); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectEnabled             bool NOT NULL DEFAULT  %i", vs.m_PlaceboPeakDetectEnabled); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectSmoothingPeriod     float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectSmoothingPeriod); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectSceneThresholdLow   float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectSceneThresholdLow); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectSceneThresholdHigh  float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectSceneThresholdHigh); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectPercentile          float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectPercentile); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectBlackCutoff         float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectBlackCutoff); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectAllowDelayed        bool NOT NULL DEFAULT  %i", vs.m_PlaceboPeakDetectAllowDelayed); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboUpscaler        string NOT NULL DEFAULT %s", vs.m_PlaceboUpscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboUpscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboUpscaler]->description); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDownscaler      string NOT NULL DEFAULT %s", vs.m_PlaceboDownscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboDownscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboDownscaler]->description); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPlaneUpscaler   string NOT NULL DEFAULT %s", vs.m_PlaceboPlaneUpscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboPlaneUpscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboPlaneUpscaler]->description); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPlaneDownscaler string NOT NULL DEFAULT %s", vs.m_PlaceboPlaneDownscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboPlaneDownscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboPlaneDownscaler]->description); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboFrameMixer      string NOT NULL DEFAULT %s", vs.m_PlaceboFrameMixer == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboFrameMixer]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboFrameMixer]->description); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandEnabled       bool NOT NULL DEFAULT     %i", vs.m_PlaceboDebandEnabled); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandGrain         float NOT NULL DEFAULT    %f", vs.m_PlaceboDebandGrain); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandGrainNeutral0 float NOT NULL DEFAULT    %f", vs.m_PlaceboDebandGrainNeutral0); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandGrainNeutral1 float NOT NULL DEFAULT    %f", vs.m_PlaceboDebandGrainNeutral1); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandGrainNeutral2 float NOT NULL DEFAULT    %f", vs.m_PlaceboDebandGrainNeutral2); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandIterations    integer NOT NULL DEFAULT  %i", vs.m_PlaceboDebandIterations); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandRadius        float NOT NULL DEFAULT    %f", vs.m_PlaceboDebandRadius); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandThreshold     float NOT NULL DEFAULT    %f", vs.m_PlaceboDebandThreshold); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapEnabled             bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapEnabled); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapGamutMapping        string NOT NULL DEFAULT  %s", vs.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboColorMapGamutMapping]->description); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapToneMapping         string NOT NULL DEFAULT  %s", vs.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboColorMapToneMapping]->description); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapContrastRecovery    float NOT NULL DEFAULT   %f", vs.m_PlaceboColorMapContrastRecovery); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapContrastSmoothness  float NOT NULL DEFAULT   %f", vs.m_PlaceboColorMapContrastSmoothness); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapGamutExpansion      bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapGamutExpansion); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapInverseToneMapping  bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapInverseToneMapping); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapLut3dSizeI          integer NOT NULL DEFAULT %i", vs.m_PlaceboColorMapLut3dSizeI); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapLut3dSizeC          integer NOT NULL DEFAULT %i", vs.m_PlaceboColorMapLut3dSizeC); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapLut3dSizeH          integer NOT NULL DEFAULT %i", vs.m_PlaceboColorMapLut3dSizeH); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapLut3dTricubic       bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapLut3dTricubic); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapLutSize             integer NOT NULL DEFAULT %i", vs.m_PlaceboColorMapLutSize); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapShowClipping        bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapShowClipping); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapIntent              string NOT NULL DEFAULT '%s'", CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(vs.m_PlaceboColorMapIntent).c_str()); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapForceToneMappingLut bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapForceToneMappingLut); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDeinterlaceEnabled          bool NOT NULL DEFAULT    %i", vs.m_PlaceboDeinterlaceEnabled); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDeinterlaceAlgo             string NOT NULL DEFAULT '%s'", CGUIDialogVideoSettings::getDeinterlaceAlgoDescriptionFromIndex(vs.m_PlaceboDeinterlaceAlgo).c_str()); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDeinterlaceSkipSpatialCheck bool NOT NULL DEFAULT    %i", vs.m_PlaceboDeinterlaceSkipSpatialCheck); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSigmoidEnabled bool NOT NULL DEFAULT    %i", vs.m_PlaceboSigmoidEnabled); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSigmoidCenter  float NOT NULL DEFAULT   %f", vs.m_PlaceboSigmoidCenter); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSigmoidSlope   float NOT NULL DEFAULT   %f", vs.m_PlaceboSigmoidSlope); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboConeEnabled    bool NOT NULL DEFAULT     %i", vs.m_PlaceboConeEnabled); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboConeCones      string NOT NULL DEFAULT   '%s'", CGUIDialogVideoSettings::getConeConesDescriptionFromIndex(vs.m_PlaceboConeCones).c_str()); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboConeStrength   float NOT NULL DEFAULT    %f", vs.m_PlaceboConeStrength); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherEnabled  bool NOT NULL DEFAULT     %i", vs.m_PlaceboDitherEnabled); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherMethod   string NOT NULL DEFAULT   '%s'", CGUIDialogVideoSettings::getDitherMethodDescriptionFromIndex(vs.m_PlaceboDitherMethod).c_str()); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherLutSize  integer NOT NULL DEFAULT  %i", vs.m_PlaceboDitherLutSize); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherTemporal bool NOT NULL DEFAULT     %i", vs.m_PlaceboDitherTemporal); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherTransfer string NOT NULL DEFAULT   '%s'", CGUIDialogVideoSettings::getDitherTransferDescriptionFromIndex(vs.m_PlaceboDitherTransfer).c_str()); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantExposure         float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantExposure); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantKneeAdaptation   float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantKneeAdaptation); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantKneeDefault      float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantKneeDefault); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantKneeMaximum      float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantKneeMaximum); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantKneeMinimum      float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantKneeMinimum); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantKneeOffset       float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantKneeOffset); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantLinearKnee       float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantLinearKnee); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantReinhardContrast float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantReinhardContrast); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantSlopeOffset      float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantSlopeOffset); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantSlopeTuning      float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantSlopeTuning); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantSplineContrast   float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantSplineContrast); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboGamutConstantsColorimetricGamma  float NOT NULL DEFAULT %f", vs.m_PlaceboGamutConstantsColorimetricGamma); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboGamutConstantsPerceptualDeadzone float NOT NULL DEFAULT %f", vs.m_PlaceboGamutConstantsPerceptualDeadzone); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboGamutConstantsSoftclipDesat      float NOT NULL DEFAULT %f", vs.m_PlaceboGamutConstantsSoftclipDesat); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboGamutConstantsSoftclipKnee       float NOT NULL DEFAULT %f", vs.m_PlaceboGamutConstantsSoftclipKnee); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeLut    bool NOT NULL DEFAULT  %i", vs.m_PlaceboColorMapVisualizeLut); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeRectX0 float NOT NULL DEFAULT %f", vs.m_PlaceboColorMapVisualizeRectX0); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeRectX1 float NOT NULL DEFAULT %f", vs.m_PlaceboColorMapVisualizeRectX1); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeRectY0 float NOT NULL DEFAULT %f", vs.m_PlaceboColorMapVisualizeRectY0); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeRectY1 float NOT NULL DEFAULT %f", vs.m_PlaceboColorMapVisualizeRectY1); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeHue    float NOT NULL DEFAULT %f", vs.m_PlaceboColorMapVisualizeHue); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeTheta  float NOT NULL DEFAULT %f", vs.m_PlaceboColorMapVisualizeTheta); m_pDS->exec(strSQL2);
+
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboAntiringingStrength          float NOT NULL DEFAULT   %f", vs.m_PlaceboAntiringingStrength); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboCorrectSubpixelOffset        bool NOT NULL DEFAULT    %i", vs.m_PlaceboCorrectSubpixelOffset); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisableBuiltinScalers        bool NOT NULL DEFAULT    %i", vs.m_PlaceboDisableBuiltinScalers); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisableDitherGammaCorrection bool NOT NULL DEFAULT    %i", vs.m_PlaceboDisableDitherGammaCorrection); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisableLinearScaling         bool NOT NULL DEFAULT    %i", vs.m_PlaceboDisableLinearScaling); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDynamicConstant              bool NOT NULL DEFAULT    %i", vs.m_PlaceboDynamicConstant); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboErrorDiffusion               integer NOT NULL DEFAULT '%s'", CGUIDialogVideoSettings::getDiffusionKernelDescriptionFromIndex(vs.m_PlaceboErrorDiffusion).c_str()); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboForceDither                  bool NOT NULL DEFAULT    %i", vs.m_PlaceboForceDither); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboForceLowBitDepthFbos         bool NOT NULL DEFAULT    %i", vs.m_PlaceboForceLowBitDepthFbos); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboIgnoreIccProfiles            bool NOT NULL DEFAULT    %i", vs.m_PlaceboIgnoreIccProfiles); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPreserveMixingCache          bool NOT NULL DEFAULT    %i", vs.m_PlaceboPreserveMixingCache); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSkipAntiAliasing             bool NOT NULL DEFAULT    %i", vs.m_PlaceboSkipAntiAliasing); m_pDS->exec(strSQL2);
+      strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSkipCachingSingleFrame       bool NOT NULL DEFAULT    %i", vs.m_PlaceboSkipCachingSingleFrame); m_pDS->exec(strSQL2);
+    }
+    return true;
+  }
+  catch (...)
+  {
+    CLog::LogF(LOGERROR, "({}) failed", idFile);
+  }
+}
+
+
 bool CVideoDatabase::GetVideoSettings(const CFileItem &item, CVideoSettings &settings)
 {
   return GetVideoSettings(GetFileId(item), settings);
@@ -4989,6 +5264,7 @@ bool CVideoDatabase::GetVideoSettings(const std::string &filePath, CVideoSetting
   return GetVideoSettings(GetFileId(filePath), settings);
 }
 
+
 bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
 {
   try
@@ -4998,6 +5274,21 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
       return false;
     if (nullptr == m_pDS)
       return false;
+
+    bool libplaceboSaveToDatabase = CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_VIDEOPLAYER_LIBPLACEBOSAVETODB);
+    if(libplaceboSaveToDatabase)
+    { 	  
+      if (!AddLibplaceboColumnsToSettingsTable(idFile, settings))
+      {
+        CLog::LogF(LOGERROR, "Failed to add libplacebo columns to settings table for file id {}", idFile);
+		libplaceboSaveToDatabase = false;
+      }
+	}
+    else
+    {
+      RemoveLibplaceboColumnsFromSettingsTable(idFile);
+    }
+	
 
     std::string strSQL=PrepareSQL("select * from settings where settings.idFile = '%i'", idFile);
     m_pDS->query( strSQL );
@@ -5032,8 +5323,122 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
       settings.m_ToneMapParam = m_pDS->fv("TonemapParam").get_asFloat();
       settings.m_Orientation = m_pDS->fv("Orientation").get_asInt();
       settings.m_CenterMixLevel = m_pDS->fv("CenterMixLevel").get_asInt();
-      m_pDS->close();
-      return true;
+
+      if (libplaceboSaveToDatabase)
+      {
+        std::string str;
+        settings.m_PlaceboDisplayPeakLuminance = m_pDS->fv("PlaceboDisplayPeakLuminance").get_asFloat();
+        settings.m_PlaceboTargetColorspaceHint = m_pDS->fv("PlaceboTargetColorspaceHint").get_asInt();
+        settings.m_PlaceboTargetColorspaceHintMode = m_pDS->fv("PlaceboTargetColorspaceHintMode").get_asInt();
+
+        settings.m_PlaceboColorAdjustmentEnabled = m_pDS->fv("PlaceboColorAdjustmentEnabled").get_asInt();
+        settings.m_PlaceboSaturation = m_pDS->fv("PlaceboSaturation").get_asFloat();
+        settings.m_PlaceboHue = m_pDS->fv("PlaceboHue").get_asFloat();
+        settings.m_PlaceboTemperature = m_pDS->fv("PlaceboTemperature").get_asFloat();
+
+        settings.m_PlaceboPeakDetectEnabled = m_pDS->fv("PlaceboPeakDetectEnabled").get_asInt();
+        settings.m_PlaceboPeakDetectSmoothingPeriod = m_pDS->fv("PlaceboPeakDetectSmoothingPeriod").get_asFloat();
+        settings.m_PlaceboPeakDetectSceneThresholdLow = m_pDS->fv("PlaceboPeakDetectSceneThresholdLow").get_asFloat();
+        settings.m_PlaceboPeakDetectSceneThresholdHigh = m_pDS->fv("PlaceboPeakDetectSceneThresholdHigh").get_asFloat();
+        settings.m_PlaceboPeakDetectPercentile = m_pDS->fv("PlaceboPeakDetectPercentile").get_asFloat();
+        settings.m_PlaceboPeakDetectBlackCutoff = m_pDS->fv("PlaceboPeakDetectBlackCutoff").get_asFloat();
+        settings.m_PlaceboPeakDetectAllowDelayed = m_pDS->fv("PlaceboPeakDetectAllowDelayed").get_asInt();
+
+        settings.m_PlaceboUpscaler = (str=(m_pDS->fv("PlaceboUpscaler").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
+        settings.m_PlaceboDownscaler = (str = (m_pDS->fv("PlaceboDownscaler").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
+        settings.m_PlaceboPlaneUpscaler = (str = (m_pDS->fv("PlaceboPlaneUpscaler").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
+        settings.m_PlaceboPlaneDownscaler = (str = (m_pDS->fv("PlaceboPlaneDownscaler").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
+        settings.m_PlaceboFrameMixer = (str = (m_pDS->fv("PlaceboFrameMixer").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
+
+        settings.m_PlaceboDebandEnabled = m_pDS->fv("PlaceboDebandEnabled").get_asInt();
+        settings.m_PlaceboDebandGrain = m_pDS->fv("PlaceboDebandGrain").get_asFloat();
+        settings.m_PlaceboDebandGrainNeutral0 = m_pDS->fv("PlaceboDebandGrainNeutral0").get_asFloat();
+        settings.m_PlaceboDebandGrainNeutral1 = m_pDS->fv("PlaceboDebandGrainNeutral1").get_asFloat();
+        settings.m_PlaceboDebandGrainNeutral2 = m_pDS->fv("PlaceboDebandGrainNeutral2").get_asFloat();
+        settings.m_PlaceboDebandIterations = m_pDS->fv("PlaceboDebandIterations").get_asInt();
+        settings.m_PlaceboDebandRadius = m_pDS->fv("PlaceboDebandRadius").get_asFloat();
+        settings.m_PlaceboDebandThreshold = m_pDS->fv("PlaceboDebandThreshold").get_asFloat();
+
+        settings.m_PlaceboColorMapEnabled = m_pDS->fv("PlaceboColorMapEnabled").get_asInt();
+        settings.m_PlaceboColorMapGamutMapping = (str = (m_pDS->fv("PlaceboColorMapGamutMapping").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getGamutMapIndexFromDescription(str);
+        settings.m_PlaceboColorMapToneMapping = (str = (m_pDS->fv("PlaceboColorMapToneMapping").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getToneMapIndexFromDescription(str);
+        settings.m_PlaceboColorMapContrastRecovery = m_pDS->fv("PlaceboColorMapContrastRecovery").get_asFloat();
+        settings.m_PlaceboColorMapContrastSmoothness = m_pDS->fv("PlaceboColorMapContrastSmoothness").get_asFloat();
+        settings.m_PlaceboColorMapGamutExpansion = m_pDS->fv("PlaceboColorMapGamutExpansion").get_asInt();
+        settings.m_PlaceboColorMapInverseToneMapping = m_pDS->fv("PlaceboColorMapInverseToneMapping").get_asInt();
+        settings.m_PlaceboColorMapLut3dSizeI = m_pDS->fv("PlaceboColorMapLut3dSizeI").get_asInt();
+        settings.m_PlaceboColorMapLut3dSizeC = m_pDS->fv("PlaceboColorMapLut3dSizeC").get_asInt();
+        settings.m_PlaceboColorMapLut3dSizeH = m_pDS->fv("PlaceboColorMapLut3dSizeH").get_asInt();
+        settings.m_PlaceboColorMapLut3dTricubic = m_pDS->fv("PlaceboColorMapLut3dTricubic").get_asInt();
+        settings.m_PlaceboColorMapLutSize = m_pDS->fv("PlaceboColorMapLutSize").get_asInt();
+        settings.m_PlaceboColorMapShowClipping = m_pDS->fv("PlaceboColorMapShowClipping").get_asInt();
+        settings.m_PlaceboColorMapIntent = (str = (m_pDS->fv("PlaceboColorMapIntent").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getColorMapIntentIndexFromDescription(str);
+        settings.m_PlaceboColorMapForceToneMappingLut = m_pDS->fv("PlaceboColorMapForceToneMappingLut").get_asInt();
+
+        settings.m_PlaceboDeinterlaceEnabled = m_pDS->fv("PlaceboDeinterlaceEnabled").get_asInt();
+        settings.m_PlaceboDeinterlaceAlgo = (str = (m_pDS->fv("PlaceboDeinterlaceAlgo").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getDeinterlaceAlgoIndexFromDescription(str);
+        settings.m_PlaceboDeinterlaceSkipSpatialCheck = m_pDS->fv("PlaceboDeinterlaceSkipSpatialCheck").get_asInt();
+        settings.m_PlaceboSigmoidEnabled = m_pDS->fv("PlaceboSigmoidEnabled").get_asInt();
+        settings.m_PlaceboSigmoidCenter = m_pDS->fv("PlaceboSigmoidCenter").get_asFloat();
+        settings.m_PlaceboSigmoidSlope = m_pDS->fv("PlaceboSigmoidSlope").get_asFloat();
+
+        settings.m_PlaceboConeEnabled = m_pDS->fv("PlaceboConeEnabled").get_asInt();
+        settings.m_PlaceboConeCones = (str = (m_pDS->fv("PlaceboConeCones").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getConeConesIndexFromDescription(str);
+        settings.m_PlaceboConeStrength = m_pDS->fv("PlaceboConeStrength").get_asFloat();
+
+        settings.m_PlaceboDitherEnabled = m_pDS->fv("PlaceboDitherEnabled").get_asInt();
+        settings.m_PlaceboDitherMethod = m_pDS->fv("PlaceboDitherMethod").get_asInt();
+        settings.m_PlaceboDitherMethod = (str = (m_pDS->fv("PlaceboDitherMethod").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getDitherMethodIndexFromDescription(str);
+        settings.m_PlaceboDitherLutSize = m_pDS->fv("PlaceboDitherLutSize").get_asInt();
+        settings.m_PlaceboDitherTemporal = m_pDS->fv("PlaceboDitherTemporal").get_asInt();
+        settings.m_PlaceboDitherTransfer = m_pDS->fv("PlaceboDitherTransfer").get_asInt();
+        settings.m_PlaceboDitherTransfer = (str = (m_pDS->fv("PlaceboDitherTransfer").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getDitherTransferIndexFromDescription(str);
+
+        settings.m_PlaceboToneConstantExposure = m_pDS->fv("PlaceboToneConstantExposure").get_asFloat();
+        settings.m_PlaceboToneConstantKneeAdaptation = m_pDS->fv("PlaceboToneConstantKneeAdaptation").get_asFloat();
+        settings.m_PlaceboToneConstantKneeDefault = m_pDS->fv("PlaceboToneConstantKneeDefault").get_asFloat();
+        settings.m_PlaceboToneConstantKneeMaximum = m_pDS->fv("PlaceboToneConstantKneeMaximum").get_asFloat();
+        settings.m_PlaceboToneConstantKneeMinimum = m_pDS->fv("PlaceboToneConstantKneeMinimum").get_asFloat();
+        settings.m_PlaceboToneConstantKneeOffset = m_pDS->fv("PlaceboToneConstantKneeOffset").get_asFloat();
+        settings.m_PlaceboToneConstantLinearKnee = m_pDS->fv("PlaceboToneConstantLinearKnee").get_asFloat();
+        settings.m_PlaceboToneConstantReinhardContrast = m_pDS->fv("PlaceboToneConstantReinhardContrast").get_asFloat();
+        settings.m_PlaceboToneConstantSlopeOffset = m_pDS->fv("PlaceboToneConstantSlopeOffset").get_asFloat();
+        settings.m_PlaceboToneConstantSlopeTuning = m_pDS->fv("PlaceboToneConstantSlopeTuning").get_asFloat();
+        settings.m_PlaceboToneConstantSplineContrast = m_pDS->fv("PlaceboToneConstantSplineContrast").get_asFloat();
+
+        settings.m_PlaceboGamutConstantsColorimetricGamma = m_pDS->fv("PlaceboGamutConstantsColorimetricGamma").get_asFloat();
+        settings.m_PlaceboGamutConstantsPerceptualDeadzone = m_pDS->fv("PlaceboGamutConstantsPerceptualDeadzone").get_asFloat();
+        settings.m_PlaceboGamutConstantsSoftclipDesat = m_pDS->fv("PlaceboGamutConstantsSoftclipDesat").get_asFloat();
+        settings.m_PlaceboGamutConstantsSoftclipKnee = m_pDS->fv("PlaceboGamutConstantsSoftclipKnee").get_asFloat();
+
+        settings.m_PlaceboColorMapVisualizeLut = m_pDS->fv("PlaceboColorMapVisualizeLut").get_asInt();
+        settings.m_PlaceboColorMapVisualizeRectX0 = m_pDS->fv("PlaceboColorMapVisualizeRectX0").get_asFloat();
+        settings.m_PlaceboColorMapVisualizeRectX1 = m_pDS->fv("PlaceboColorMapVisualizeRectX1").get_asFloat();
+        settings.m_PlaceboColorMapVisualizeRectY0 = m_pDS->fv("PlaceboColorMapVisualizeRectY0").get_asFloat();
+        settings.m_PlaceboColorMapVisualizeRectY1 = m_pDS->fv("PlaceboColorMapVisualizeRectY1").get_asFloat();
+        settings.m_PlaceboColorMapVisualizeHue = m_pDS->fv("PlaceboColorMapVisualizeHue").get_asFloat();
+        settings.m_PlaceboColorMapVisualizeTheta = m_pDS->fv("PlaceboColorMapVisualizeTheta").get_asFloat();
+
+        settings.m_PlaceboAntiringingStrength = m_pDS->fv("PlaceboAntiringingStrength").get_asFloat();
+        settings.m_PlaceboCorrectSubpixelOffset = m_pDS->fv("PlaceboCorrectSubpixelOffset").get_asInt();
+        settings.m_PlaceboDisableBuiltinScalers = m_pDS->fv("PlaceboDisableBuiltinScalers").get_asInt();
+        settings.m_PlaceboDisableDitherGammaCorrection = m_pDS->fv("PlaceboDisableDitherGammaCorrection").get_asInt();
+        settings.m_PlaceboDisableLinearScaling = m_pDS->fv("PlaceboDisableLinearScaling").get_asInt();
+        settings.m_PlaceboDynamicConstant = m_pDS->fv("PlaceboDynamicConstant").get_asInt();
+        settings.m_PlaceboErrorDiffusion = m_pDS->fv("PlaceboErrorDiffusion").get_asInt();
+        settings.m_PlaceboErrorDiffusion = (str = (m_pDS->fv("PlaceboErrorDiffusion").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getErrorDiffusionIndexFromDescription(str);
+        settings.m_PlaceboForceDither = m_pDS->fv("PlaceboForceDither").get_asInt();
+        settings.m_PlaceboForceLowBitDepthFbos = m_pDS->fv("PlaceboForceLowBitDepthFbos").get_asInt();
+        settings.m_PlaceboIgnoreIccProfiles = m_pDS->fv("PlaceboIgnoreIccProfiles").get_asInt();
+        settings.m_PlaceboPreserveMixingCache = m_pDS->fv("PlaceboPreserveMixingCache").get_asInt();
+        settings.m_PlaceboSkipAntiAliasing = m_pDS->fv("PlaceboSkipAntiAliasing").get_asInt();
+        settings.m_PlaceboSkipCachingSingleFrame = m_pDS->fv("PlaceboSkipCachingSingleFrame").get_asInt();
+
+        CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(settings);      
+
+        m_pDS->close();
+        return true;
+      }
     }
     m_pDS->close();
   }
@@ -5050,8 +5455,8 @@ void CVideoDatabase::SetVideoSettings(const CFileItem &item, const CVideoSetting
   SetVideoSettings(idFile, settings);
 }
 
-/// \brief Sets the settings for a particular video file
-void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &setting)
+/// brief Sets the settings for a particular video file
+void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings)
 {
   try
   {
@@ -5061,6 +5466,17 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &setting)
       return;
     if (idFile < 0)
       return;
+
+    bool libplaceboSaveToDatabase = CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_VIDEOPLAYER_LIBPLACEBOSAVETODB);
+    if (libplaceboSaveToDatabase)
+    {
+      if (!AddLibplaceboColumnsToSettingsTable(idFile, settings))
+      {
+        CLog::LogF(LOGERROR, "Failed to add libplacebo columns to settings table for file id {}", idFile);
+        libplaceboSaveToDatabase = false;
+      }
+    }
+
     std::string strSQL = PrepareSQL("select * from settings where idFile=%i", idFile);
     m_pDS->query( strSQL );
     if (m_pDS->num_rows() > 0)
@@ -5074,27 +5490,152 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &setting)
           "%f,Gamma=%f,"
           "VolumeAmplification=%f,AudioDelay=%f,Sharpness=%f,NoiseReduction=%f,NonLinStretch=%i,"
           "PostProcess=%i,ScalingMethod=%i,",
-          setting.m_InterlaceMethod, setting.m_ViewMode,
-          static_cast<double>(setting.m_CustomZoomAmount),
-          static_cast<double>(setting.m_CustomPixelRatio),
-          static_cast<double>(setting.m_CustomVerticalShift), setting.m_AudioStream,
-          setting.m_SubtitleStream, static_cast<double>(setting.m_SubtitleDelay),
-          setting.m_SubtitleOn, static_cast<double>(setting.m_Brightness),
-          static_cast<double>(setting.m_Contrast), static_cast<double>(setting.m_Gamma),
-          static_cast<double>(setting.m_VolumeAmplification),
-          static_cast<double>(setting.m_AudioDelay), static_cast<double>(setting.m_Sharpness),
-          static_cast<double>(setting.m_NoiseReduction), setting.m_CustomNonLinStretch,
-          setting.m_PostProcess, setting.m_ScalingMethod);
+          settings.m_InterlaceMethod, settings.m_ViewMode,
+          static_cast<double>(settings.m_CustomZoomAmount),
+          static_cast<double>(settings.m_CustomPixelRatio),
+          static_cast<double>(settings.m_CustomVerticalShift), settings.m_AudioStream,
+          settings.m_SubtitleStream, static_cast<double>(settings.m_SubtitleDelay),
+          settings.m_SubtitleOn, static_cast<double>(settings.m_Brightness),
+          static_cast<double>(settings.m_Contrast), static_cast<double>(settings.m_Gamma),
+          static_cast<double>(settings.m_VolumeAmplification),
+          static_cast<double>(settings.m_AudioDelay), static_cast<double>(settings.m_Sharpness),
+          static_cast<double>(settings.m_NoiseReduction), settings.m_CustomNonLinStretch,
+          settings.m_PostProcess, settings.m_ScalingMethod);
       std::string strSQL2;
 
       strSQL2 = PrepareSQL("ResumeTime=%i,StereoMode=%i,StereoInvert=%i,VideoStream=%i,"
                            "TonemapMethod=%i,TonemapParam=%f where idFile=%i\n",
-                           setting.m_ResumeTime, setting.m_StereoMode, setting.m_StereoInvert,
-                           setting.m_VideoStream, setting.m_ToneMapMethod,
-                           static_cast<double>(setting.m_ToneMapParam), idFile);
+                           settings.m_ResumeTime, settings.m_StereoMode, settings.m_StereoInvert,
+                           settings.m_VideoStream, settings.m_ToneMapMethod,
+                           static_cast<double>(settings.m_ToneMapParam), idFile);
       strSQL += strSQL2;
       m_pDS->exec(strSQL);
-      return ;
+      m_pDS->close();
+      if (libplaceboSaveToDatabase)
+      {
+        strSQL = PrepareSQL(
+          "update settings set "
+          "PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
+          "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
+          "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
+          "PlaceboUpscaler='%s',PlaceboDownscaler='%s',PlaceboPlaneUpscaler='%s',PlaceboPlaneDownscaler='%s',"
+          "PlaceboFrameMixer='%s',PlaceboDebandEnabled=%i,PlaceboDebandGrain=%f,PlaceboDebandGrainNeutral0=%f,"
+          "PlaceboDebandGrainNeutral1=%f,PlaceboDebandGrainNeutral2=%f,PlaceboDebandIterations=%i,PlaceboDebandRadius=%f,"
+          "PlaceboDebandThreshold=%f,PlaceboColorMapEnabled=%i,PlaceboColorMapGamutMapping='%s',PlaceboColorMapToneMapping='%s',"
+          "PlaceboColorMapContrastRecovery=%f,PlaceboColorMapContrastSmoothness=%f,PlaceboColorMapGamutExpansion=%i,"
+          "PlaceboColorMapInverseToneMapping=%i,PlaceboColorMapLut3dSizeI=%i,PlaceboColorMapLut3dSizeC=%i,PlaceboColorMapLut3dSizeH=%i,"
+          "PlaceboColorMapLut3dTricubic=%i,PlaceboColorMapLutSize=%i,PlaceboColorMapShowClipping=%i,PlaceboColorMapIntent='%s',"
+          "PlaceboColorMapForceToneMappingLut=%i,PlaceboDeinterlaceEnabled=%i,PlaceboDeinterlaceAlgo='%s',PlaceboDeinterlaceSkipSpatialCheck=%i,"
+          "PlaceboSigmoidEnabled=%i,PlaceboSigmoidCenter=%f,PlaceboSigmoidSlope=%f,PlaceboConeEnabled=%i,"
+          "PlaceboConeCones='%s',PlaceboConeStrength=%f,PlaceboDitherEnabled=%i,PlaceboDitherMethod='%s',PlaceboDitherLutSize=%i,"
+          "PlaceboDitherTemporal=%i,PlaceboDitherTransfer='%s',PlaceboToneConstantExposure=%f,PlaceboToneConstantKneeAdaptation=%f,"
+          "PlaceboToneConstantKneeDefault=%f,PlaceboToneConstantKneeMaximum=%f,PlaceboToneConstantKneeMinimum=%f,"
+          "PlaceboToneConstantKneeOffset=%f,PlaceboToneConstantLinearKnee=%f,PlaceboToneConstantReinhardContrast=%f,"
+          "PlaceboToneConstantSlopeOffset=%f,PlaceboToneConstantSlopeTuning=%f,PlaceboToneConstantSplineContrast=%f,"
+          "PlaceboGamutConstantsColorimetricGamma=%f,PlaceboGamutConstantsPerceptualDeadzone=%f,PlaceboGamutConstantsSoftclipDesat=%f,"
+          "PlaceboGamutConstantsSoftclipKnee=%f,PlaceboColorMapVisualizeLut=%i,PlaceboColorMapVisualizeRectX0=%f,"
+          "PlaceboColorMapVisualizeRectX1=%f,PlaceboColorMapVisualizeRectY0=%f,PlaceboColorMapVisualizeRectY1=%f,"
+          "PlaceboColorMapVisualizeHue=%f,PlaceboColorMapVisualizeTheta=%f,PlaceboAntiringingStrength=%f,"
+          "PlaceboCorrectSubpixelOffset=%i,PlaceboDisableBuiltinScalers=%i,PlaceboDisableDitherGammaCorrection=%i,"
+          "PlaceboDisableLinearScaling=%i,PlaceboDynamicConstant=%i,PlaceboErrorDiffusion='%s',PlaceboForceDither=%i,"
+          "PlaceboForceLowBitDepthFbos=%i,PlaceboIgnoreIccProfiles=%i,PlaceboPreserveMixingCache=%i,PlaceboSkipAntiAliasing=%i,"
+          "PlaceboSkipCachingSingleFrame=%i where idFile=%i\n",
+          static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
+          settings.m_PlaceboTargetColorspaceHint,
+          settings.m_PlaceboTargetColorspaceHintMode,
+          settings.m_PlaceboColorAdjustmentEnabled,
+          static_cast<double>(settings.m_PlaceboSaturation),
+          static_cast<double>(settings.m_PlaceboHue),
+          static_cast<double>(settings.m_PlaceboTemperature),
+          settings.m_PlaceboPeakDetectEnabled,
+          static_cast<double>(settings.m_PlaceboPeakDetectSmoothingPeriod),
+          static_cast<double>(settings.m_PlaceboPeakDetectSceneThresholdLow),
+          static_cast<double>(settings.m_PlaceboPeakDetectSceneThresholdHigh),
+          static_cast<double>(settings.m_PlaceboPeakDetectPercentile),
+          static_cast<double>(settings.m_PlaceboPeakDetectBlackCutoff),
+          settings.m_PlaceboPeakDetectAllowDelayed,
+          settings.m_PlaceboUpscaler == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboUpscaler]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboUpscaler]->description,
+          settings.m_PlaceboDownscaler == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboDownscaler]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboDownscaler]->description,
+          settings.m_PlaceboPlaneUpscaler == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboPlaneUpscaler]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboPlaneUpscaler]->description,
+          settings.m_PlaceboPlaneDownscaler == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboPlaneDownscaler]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboPlaneDownscaler]->description,
+          settings.m_PlaceboFrameMixer == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboFrameMixer]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboFrameMixer]->description,
+          settings.m_PlaceboDebandEnabled,
+          static_cast<double>(settings.m_PlaceboDebandGrain),
+          static_cast<double>(settings.m_PlaceboDebandGrainNeutral0),
+          static_cast<double>(settings.m_PlaceboDebandGrainNeutral1),
+          static_cast<double>(settings.m_PlaceboDebandGrainNeutral2),
+          settings.m_PlaceboDebandIterations,
+          static_cast<double>(settings.m_PlaceboDebandRadius),
+          static_cast<double>(settings.m_PlaceboDebandThreshold),
+          settings.m_PlaceboColorMapEnabled,
+          settings.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboColorMapGamutMapping]->description,
+          settings.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboColorMapToneMapping]->description,
+          static_cast<double>(settings.m_PlaceboColorMapContrastRecovery),
+          static_cast<double>(settings.m_PlaceboColorMapContrastSmoothness),
+          settings.m_PlaceboColorMapGamutExpansion,
+          settings.m_PlaceboColorMapInverseToneMapping,
+          settings.m_PlaceboColorMapLut3dSizeI,
+          settings.m_PlaceboColorMapLut3dSizeC,
+          settings.m_PlaceboColorMapLut3dSizeH,
+          settings.m_PlaceboColorMapLut3dTricubic,
+          settings.m_PlaceboColorMapLutSize,
+          settings.m_PlaceboColorMapShowClipping,
+          CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(settings.m_PlaceboColorMapIntent).c_str(),
+          settings.m_PlaceboColorMapForceToneMappingLut,
+          settings.m_PlaceboDeinterlaceEnabled,
+          CGUIDialogVideoSettings::getDeinterlaceAlgoDescriptionFromIndex(settings.m_PlaceboDeinterlaceAlgo).c_str(),
+          settings.m_PlaceboDeinterlaceSkipSpatialCheck,
+          settings.m_PlaceboSigmoidEnabled,
+          static_cast<double>(settings.m_PlaceboSigmoidCenter),
+          static_cast<double>(settings.m_PlaceboSigmoidSlope),
+          settings.m_PlaceboConeEnabled,
+          CGUIDialogVideoSettings::getConeConesDescriptionFromIndex(settings.m_PlaceboConeCones).c_str(),
+          static_cast<double>(settings.m_PlaceboConeStrength),
+          settings.m_PlaceboDitherEnabled,
+          CGUIDialogVideoSettings::getDitherMethodDescriptionFromIndex(settings.m_PlaceboDitherMethod).c_str(),
+          settings.m_PlaceboDitherLutSize,
+          settings.m_PlaceboDitherTemporal,
+          CGUIDialogVideoSettings::getDitherTransferDescriptionFromIndex(settings.m_PlaceboDitherTransfer).c_str(),
+          static_cast<double>(settings.m_PlaceboToneConstantExposure),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeAdaptation),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeDefault),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeMaximum),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeMinimum),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeOffset),
+          static_cast<double>(settings.m_PlaceboToneConstantLinearKnee),
+          static_cast<double>(settings.m_PlaceboToneConstantReinhardContrast),
+          static_cast<double>(settings.m_PlaceboToneConstantSlopeOffset),
+          static_cast<double>(settings.m_PlaceboToneConstantSlopeTuning),
+          static_cast<double>(settings.m_PlaceboToneConstantSplineContrast),
+          static_cast<double>(settings.m_PlaceboGamutConstantsColorimetricGamma),
+          static_cast<double>(settings.m_PlaceboGamutConstantsPerceptualDeadzone),
+          static_cast<double>(settings.m_PlaceboGamutConstantsSoftclipDesat),
+          static_cast<double>(settings.m_PlaceboGamutConstantsSoftclipKnee),
+          settings.m_PlaceboColorMapVisualizeLut,
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeRectX0),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeRectX1),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeRectY0),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeRectY1),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeHue),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeTheta),
+          static_cast<double>(settings.m_PlaceboAntiringingStrength),
+          settings.m_PlaceboCorrectSubpixelOffset,
+          settings.m_PlaceboDisableBuiltinScalers,
+          settings.m_PlaceboDisableDitherGammaCorrection,
+          settings.m_PlaceboDisableLinearScaling,
+          settings.m_PlaceboDynamicConstant,
+          CGUIDialogVideoSettings::getDiffusionKernelDescriptionFromIndex(settings.m_PlaceboErrorDiffusion).c_str(),
+          settings.m_PlaceboForceDither,
+          settings.m_PlaceboForceLowBitDepthFbos,
+          settings.m_PlaceboIgnoreIccProfiles,
+          settings.m_PlaceboPreserveMixingCache,
+          settings.m_PlaceboSkipAntiAliasing,
+          settings.m_PlaceboSkipCachingSingleFrame,
+          idFile);
+        m_pDS->exec(strSQL);
+        m_pDS->close();
+      }
     }
     else
     { // add the items
@@ -5104,24 +5645,150 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &setting)
                 "Contrast,Gamma,VolumeAmplification,AudioDelay,"
                 "ResumeTime,"
                 "Sharpness,NoiseReduction,NonLinStretch,PostProcess,ScalingMethod,StereoMode,StereoInvert,VideoStream,TonemapMethod,TonemapParam,Orientation,CenterMixLevel) "
-              "VALUES ";
+        "VALUES ";
       strSQL += PrepareSQL(
           "(%i,%i,%i,%f,%f,%f,%i,%i,%f,%i,%f,%f,%f,%f,%f,%i,%f,%f,%i,%i,%i,%i,%i,%i,%i,%f,%i,%i)",
-          idFile, setting.m_InterlaceMethod, setting.m_ViewMode,
-          static_cast<double>(setting.m_CustomZoomAmount),
-          static_cast<double>(setting.m_CustomPixelRatio),
-          static_cast<double>(setting.m_CustomVerticalShift), setting.m_AudioStream,
-          setting.m_SubtitleStream, static_cast<double>(setting.m_SubtitleDelay),
-          setting.m_SubtitleOn, static_cast<double>(setting.m_Brightness),
-          static_cast<double>(setting.m_Contrast), static_cast<double>(setting.m_Gamma),
-          static_cast<double>(setting.m_VolumeAmplification),
-          static_cast<double>(setting.m_AudioDelay), setting.m_ResumeTime,
-          static_cast<double>(setting.m_Sharpness), static_cast<double>(setting.m_NoiseReduction),
-          setting.m_CustomNonLinStretch, setting.m_PostProcess, setting.m_ScalingMethod,
-          setting.m_StereoMode, setting.m_StereoInvert, setting.m_VideoStream,
-          setting.m_ToneMapMethod, static_cast<double>(setting.m_ToneMapParam),
-          setting.m_Orientation, setting.m_CenterMixLevel);
+        idFile, settings.m_InterlaceMethod, settings.m_ViewMode,
+          static_cast<double>(settings.m_CustomZoomAmount),
+          static_cast<double>(settings.m_CustomPixelRatio),
+          static_cast<double>(settings.m_CustomVerticalShift), settings.m_AudioStream,
+          settings.m_SubtitleStream, static_cast<double>(settings.m_SubtitleDelay),
+          settings.m_SubtitleOn, static_cast<double>(settings.m_Brightness),
+          static_cast<double>(settings.m_Contrast), static_cast<double>(settings.m_Gamma),
+          static_cast<double>(settings.m_VolumeAmplification),
+          static_cast<double>(settings.m_AudioDelay), settings.m_ResumeTime,
+          static_cast<double>(settings.m_Sharpness), static_cast<double>(settings.m_NoiseReduction),
+          settings.m_CustomNonLinStretch, settings.m_PostProcess, settings.m_ScalingMethod,
+          settings.m_StereoMode, settings.m_StereoInvert, settings.m_VideoStream,
+          settings.m_ToneMapMethod, static_cast<double>(settings.m_ToneMapParam),
+          settings.m_Orientation, settings.m_CenterMixLevel);
       m_pDS->exec(strSQL);
+      m_pDS->close();
+      if (libplaceboSaveToDatabase)
+      {
+        strSQL = PrepareSQL(
+          "update settings set "
+          "PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
+          "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
+          "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
+          "PlaceboUpscaler='%s',PlaceboDownscaler='%s',PlaceboPlaneUpscaler='%s',PlaceboPlaneDownscaler='%s',"
+          "PlaceboFrameMixer='%s',PlaceboDebandEnabled=%i,PlaceboDebandGrain=%f,PlaceboDebandGrainNeutral0=%f,"
+          "PlaceboDebandGrainNeutral1=%f,PlaceboDebandGrainNeutral2=%f,PlaceboDebandIterations=%i,PlaceboDebandRadius=%f,"
+          "PlaceboDebandThreshold=%f,PlaceboColorMapEnabled=%i,PlaceboColorMapGamutMapping='%s',PlaceboColorMapToneMapping='%s',"
+          "PlaceboColorMapContrastRecovery=%f,PlaceboColorMapContrastSmoothness=%f,PlaceboColorMapGamutExpansion=%i,"
+          "PlaceboColorMapInverseToneMapping=%i,PlaceboColorMapLut3dSizeI=%i,PlaceboColorMapLut3dSizeC=%i,PlaceboColorMapLut3dSizeH=%i,"
+          "PlaceboColorMapLut3dTricubic=%i,PlaceboColorMapLutSize=%i,PlaceboColorMapShowClipping=%i,PlaceboColorMapIntent='%s',"
+          "PlaceboColorMapForceToneMappingLut=%i,PlaceboDeinterlaceEnabled=%i,PlaceboDeinterlaceAlgo='%s',PlaceboDeinterlaceSkipSpatialCheck=%i,"
+          "PlaceboSigmoidEnabled=%i,PlaceboSigmoidCenter=%f,PlaceboSigmoidSlope=%f,PlaceboConeEnabled=%i,"
+          "PlaceboConeCones='%s',PlaceboConeStrength=%f,PlaceboDitherEnabled=%i,PlaceboDitherMethod='%s',PlaceboDitherLutSize=%i,"
+          "PlaceboDitherTemporal=%i,PlaceboDitherTransfer='%s',PlaceboToneConstantExposure=%f,PlaceboToneConstantKneeAdaptation=%f,"
+          "PlaceboToneConstantKneeDefault=%f,PlaceboToneConstantKneeMaximum=%f,PlaceboToneConstantKneeMinimum=%f,"
+          "PlaceboToneConstantKneeOffset=%f,PlaceboToneConstantLinearKnee=%f,PlaceboToneConstantReinhardContrast=%f,"
+          "PlaceboToneConstantSlopeOffset=%f,PlaceboToneConstantSlopeTuning=%f,PlaceboToneConstantSplineContrast=%f,"
+          "PlaceboGamutConstantsColorimetricGamma=%f,PlaceboGamutConstantsPerceptualDeadzone=%f,PlaceboGamutConstantsSoftclipDesat=%f,"
+          "PlaceboGamutConstantsSoftclipKnee=%f,PlaceboColorMapVisualizeLut=%i,PlaceboColorMapVisualizeRectX0=%f,"
+          "PlaceboColorMapVisualizeRectX1=%f,PlaceboColorMapVisualizeRectY0=%f,PlaceboColorMapVisualizeRectY1=%f,"
+          "PlaceboColorMapVisualizeHue=%f,PlaceboColorMapVisualizeTheta=%f,PlaceboAntiringingStrength=%f,"
+          "PlaceboCorrectSubpixelOffset=%i,PlaceboDisableBuiltinScalers=%i,PlaceboDisableDitherGammaCorrection=%i,"
+          "PlaceboDisableLinearScaling=%i,PlaceboDynamicConstant=%i,PlaceboErrorDiffusion='%s',PlaceboForceDither=%i,"
+          "PlaceboForceLowBitDepthFbos=%i,PlaceboIgnoreIccProfiles=%i,PlaceboPreserveMixingCache=%i,PlaceboSkipAntiAliasing=%i,"
+          "PlaceboSkipCachingSingleFrame=%i where idFile=%i\n",
+          static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
+          settings.m_PlaceboTargetColorspaceHint,
+          settings.m_PlaceboTargetColorspaceHintMode,
+          settings.m_PlaceboColorAdjustmentEnabled,
+          static_cast<double>(settings.m_PlaceboSaturation),
+          static_cast<double>(settings.m_PlaceboHue),
+          static_cast<double>(settings.m_PlaceboTemperature),
+          settings.m_PlaceboPeakDetectEnabled,
+          static_cast<double>(settings.m_PlaceboPeakDetectSmoothingPeriod),
+          static_cast<double>(settings.m_PlaceboPeakDetectSceneThresholdLow),
+          static_cast<double>(settings.m_PlaceboPeakDetectSceneThresholdHigh),
+          static_cast<double>(settings.m_PlaceboPeakDetectPercentile),
+          static_cast<double>(settings.m_PlaceboPeakDetectBlackCutoff),
+          settings.m_PlaceboPeakDetectAllowDelayed,
+          settings.m_PlaceboUpscaler == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboUpscaler]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboUpscaler]->description,
+          settings.m_PlaceboDownscaler == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboDownscaler]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboDownscaler]->description,
+          settings.m_PlaceboPlaneUpscaler == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboPlaneUpscaler]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboPlaneUpscaler]->description,
+          settings.m_PlaceboPlaneDownscaler == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboPlaneDownscaler]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboPlaneDownscaler]->description,
+          settings.m_PlaceboFrameMixer == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboFrameMixer]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboFrameMixer]->description,
+          settings.m_PlaceboDebandEnabled,
+          static_cast<double>(settings.m_PlaceboDebandGrain),
+          static_cast<double>(settings.m_PlaceboDebandGrainNeutral0),
+          static_cast<double>(settings.m_PlaceboDebandGrainNeutral1),
+          static_cast<double>(settings.m_PlaceboDebandGrainNeutral2),
+          settings.m_PlaceboDebandIterations,
+          static_cast<double>(settings.m_PlaceboDebandRadius),
+          static_cast<double>(settings.m_PlaceboDebandThreshold),
+          settings.m_PlaceboColorMapEnabled,
+          settings.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboColorMapGamutMapping]->description,
+          settings.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboColorMapToneMapping]->description,
+          static_cast<double>(settings.m_PlaceboColorMapContrastRecovery),
+          static_cast<double>(settings.m_PlaceboColorMapContrastSmoothness),
+          settings.m_PlaceboColorMapGamutExpansion,
+          settings.m_PlaceboColorMapInverseToneMapping,
+          settings.m_PlaceboColorMapLut3dSizeI,
+          settings.m_PlaceboColorMapLut3dSizeC,
+          settings.m_PlaceboColorMapLut3dSizeH,
+          settings.m_PlaceboColorMapLut3dTricubic,
+          settings.m_PlaceboColorMapLutSize,
+          settings.m_PlaceboColorMapShowClipping,
+          CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(settings.m_PlaceboColorMapIntent).c_str(),
+          settings.m_PlaceboColorMapForceToneMappingLut,
+          settings.m_PlaceboDeinterlaceEnabled,
+          CGUIDialogVideoSettings::getDeinterlaceAlgoDescriptionFromIndex(settings.m_PlaceboDeinterlaceAlgo).c_str(),
+          settings.m_PlaceboDeinterlaceSkipSpatialCheck,
+          settings.m_PlaceboSigmoidEnabled,
+          static_cast<double>(settings.m_PlaceboSigmoidCenter),
+          static_cast<double>(settings.m_PlaceboSigmoidSlope),
+          settings.m_PlaceboConeEnabled,
+          CGUIDialogVideoSettings::getConeConesDescriptionFromIndex(settings.m_PlaceboConeCones).c_str(),
+          static_cast<double>(settings.m_PlaceboConeStrength),
+          settings.m_PlaceboDitherEnabled,
+          CGUIDialogVideoSettings::getDitherMethodDescriptionFromIndex(settings.m_PlaceboDitherMethod).c_str(),
+          settings.m_PlaceboDitherLutSize,
+          settings.m_PlaceboDitherTemporal,
+          CGUIDialogVideoSettings::getDitherTransferDescriptionFromIndex(settings.m_PlaceboDitherTransfer).c_str(),
+          static_cast<double>(settings.m_PlaceboToneConstantExposure),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeAdaptation),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeDefault),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeMaximum),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeMinimum),
+          static_cast<double>(settings.m_PlaceboToneConstantKneeOffset),
+          static_cast<double>(settings.m_PlaceboToneConstantLinearKnee),
+          static_cast<double>(settings.m_PlaceboToneConstantReinhardContrast),
+          static_cast<double>(settings.m_PlaceboToneConstantSlopeOffset),
+          static_cast<double>(settings.m_PlaceboToneConstantSlopeTuning),
+          static_cast<double>(settings.m_PlaceboToneConstantSplineContrast),
+          static_cast<double>(settings.m_PlaceboGamutConstantsColorimetricGamma),
+          static_cast<double>(settings.m_PlaceboGamutConstantsPerceptualDeadzone),
+          static_cast<double>(settings.m_PlaceboGamutConstantsSoftclipDesat),
+          static_cast<double>(settings.m_PlaceboGamutConstantsSoftclipKnee),
+          settings.m_PlaceboColorMapVisualizeLut,
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeRectX0),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeRectX1),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeRectY0),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeRectY1),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeHue),
+          static_cast<double>(settings.m_PlaceboColorMapVisualizeTheta),
+          static_cast<double>(settings.m_PlaceboAntiringingStrength),
+          settings.m_PlaceboCorrectSubpixelOffset,
+          settings.m_PlaceboDisableBuiltinScalers,
+          settings.m_PlaceboDisableDitherGammaCorrection,
+          settings.m_PlaceboDisableLinearScaling,
+          settings.m_PlaceboDynamicConstant,
+          CGUIDialogVideoSettings::getDiffusionKernelDescriptionFromIndex(settings.m_PlaceboErrorDiffusion).c_str(),
+          settings.m_PlaceboForceDither,
+          settings.m_PlaceboForceLowBitDepthFbos,
+          settings.m_PlaceboIgnoreIccProfiles,
+          settings.m_PlaceboPreserveMixingCache,
+          settings.m_PlaceboSkipAntiAliasing,
+          settings.m_PlaceboSkipCachingSingleFrame,
+          idFile);
+        m_pDS->exec(strSQL);
+        m_pDS->close();
+      }
     }
   }
   catch (...)

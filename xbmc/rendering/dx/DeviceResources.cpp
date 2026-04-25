@@ -1410,6 +1410,107 @@ void DX::DeviceResources::ApplyDisplaySettings()
   CreateWindowSizeDependentResources();
 }
 
+//cl
+#ifndef SUCCEEDED
+#define SUCCEEDED(hr) ((HRESULT)(hr) >= 0)
+#endif
+#ifndef FAILED
+#define FAILED(hr) ((HRESULT)(hr) < 0)
+#endif
+#ifndef SAFE_RELEASE
+#define SAFE_RELEASE(_p)       { if(_p) { _p->Release();  _p=NULL; } }
+#endif
+typedef HRESULT(WINAPI* PFN_CREATE_DXGI_FACTORY)(REFIID riid, void** ppFactory);
+
+bool DX::DeviceResources::get_output_desc_from_ctx(struct mp_dxgi_factory_ctx* ctx, DXGI_OUTPUT_DESC1* pDesc)
+{
+  struct mp_dxgi_factory_ctx tmp = { 0 };
+  if (!ctx)
+    ctx = &tmp;
+
+  HMONITOR monitor = this->GetMonitor(); //MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+  if (!monitor)
+    return false;
+
+  if (!ctx->factory || !ctx->factory->IsCurrent()) {
+    if (ctx)
+    {
+    SAFE_RELEASE(ctx->factory);
+    SAFE_RELEASE(ctx->last_matched_output);
+    }
+
+    ComPtr<IDXGIFactory1> pCreateDXGIFactory1;
+    CreateDXGIFactory1(IID_PPV_ARGS(&ctx->factory));
+  }
+
+  bool found = false;
+  bool result = false;
+  if (ctx->last_matched_output &&
+    SUCCEEDED(ctx->last_matched_output->GetDesc1(pDesc)) &&
+    pDesc->Monitor == monitor)
+  {
+    result = true;
+    goto done;
+  }
+
+  for (UINT adapter_idx = 0; !found; adapter_idx++) {
+    IDXGIAdapter1* adapter;
+    if (FAILED(ctx->factory->EnumAdapters1(adapter_idx, &adapter)))
+      break;
+
+    for (UINT output_idx = 0; !found; output_idx++) {
+      IDXGIOutput* output;
+      if (FAILED(adapter->EnumOutputs(output_idx, &output)))
+        break;
+
+      DXGI_OUTPUT_DESC output_desc;
+      if (SUCCEEDED(output->GetDesc(&output_desc)) &&
+        output_desc.Monitor == monitor)
+      {
+        found = true;
+        IDXGIOutput6* output6;
+        if (SUCCEEDED(output->QueryInterface(IID_IDXGIOutput6, (void**)&output6))) {
+          result = SUCCEEDED(output6->GetDesc1(pDesc));
+          SAFE_RELEASE(ctx->last_matched_output);
+          ctx->last_matched_output = output6;
+        }
+      }
+      SAFE_RELEASE(output);
+    }
+    SAFE_RELEASE(adapter);
+  }
+
+done:
+  //cl 
+  //mp_dxgi_factory_uninit(&tmp);
+  if (&tmp)
+  {
+    SAFE_RELEASE(tmp.factory);
+    SAFE_RELEASE(tmp.last_matched_output);
+  }
+  return result;
+}
+
+
+bool DX::DeviceResources::GetOutputDesc1(DXGI_OUTPUT_DESC1 &Desc1) const
+{
+  /*
+  ComPtr<IDXGIFactory1> currentFactory;
+  CreateDXGIFactory1(IID_PPV_ARGS(&currentFactory));
+
+  ComPtr<IDXGIAdapter1> currentDefaultAdapter;
+  currentFactory->EnumAdapters1(0, &currentDefaultAdapter);
+
+  currentFactory->->IDXGIOutput6::GetDesc1(&Desc1);
+
+    currentDefaultAdapter->GetDesc1(&Desc);
+  
+  DEBUG_INFO_RENDER info;
+  */
+  return true;
+}
+
+
 DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo() const
 {
   if (!m_swapChain)

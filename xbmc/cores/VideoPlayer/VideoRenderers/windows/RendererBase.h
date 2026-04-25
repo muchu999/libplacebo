@@ -43,7 +43,8 @@ enum RenderMethod
   RENDER_INVALID = 0,
   RENDER_DXVA = 1,
   RENDER_PS = 2,
-  RENDER_SW = 3
+  RENDER_SW = 3,
+  RENDER_LIBPLACEBO = 4
 };
 
 enum class HDR_TYPE
@@ -76,6 +77,8 @@ public:
   AVPixelFormat av_format;
   CVideoBuffer* videoBuffer = nullptr;
   unsigned int pictureFlags = 0;
+  double pts;
+  double duration;
   AVColorPrimaries m_originalPrimaries = AVCOL_PRI_BT709;
   AVColorPrimaries primaries = AVCOL_PRI_BT709;
   AVColorSpace color_space = AVCOL_SPC_BT709;
@@ -121,7 +124,7 @@ public:
   virtual bool WantsDoublePass() { return false; }
   virtual bool NeedBuffer(int idx) { return false; }
 
-  void AddVideoPicture(const VideoPicture &picture, int index);
+  virtual void AddVideoPicture(const VideoPicture &picture, int index);
   void Render(int index, int index2, CD3DTexture& target, const CRect& sourceRect, 
               const CRect& destRect, const CRect& viewRect, unsigned flags);
   void Render(CD3DTexture& target, const CRect& sourceRect, const CRect& destRect, 
@@ -133,7 +136,7 @@ public:
   bool Flush(bool saveBuffers);
   void SetBufferSize(int numBuffers) { m_iBuffersRequired = numBuffers; }
 
-  DEBUG_INFO_VIDEO GetDebugInfo(int idx);
+  virtual DEBUG_INFO_VIDEO GetDebugInfo(int idx);
 
   static DXGI_FORMAT GetDXGIFormat(const VideoPicture &picture);
   static DXGI_FORMAT GetDXGIFormat(CVideoBuffer* videoBuffer);
@@ -152,7 +155,7 @@ protected:
   bool CreateRenderBuffer(int index);
   void DeleteRenderBuffer(int index);
 
-  void ProcessHDR(CRenderBuffer* rb);
+  virtual void ProcessHDR(CRenderBuffer* rb);
   /*!
    * \brief Call before rendering begins to find out if rendering will be attempted as SDR or HDR.
    * \param picture description of the source

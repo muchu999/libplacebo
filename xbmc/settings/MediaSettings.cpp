@@ -35,6 +35,7 @@
 #include <limits.h>
 #include <mutex>
 #include <string>
+#include <video/dialogs/GUIDialogVideoSettings.h>
 
 using namespace KODI;
 using namespace KODI::MESSAGING;
@@ -57,54 +58,36 @@ bool CMediaSettings::Load(const TiXmlNode *settings)
   if (pElement)
   {
     int interlaceMethod;
-    XMLUtils::GetInt(pElement, "interlacemethod", interlaceMethod, VS_INTERLACEMETHOD_NONE, VS_INTERLACEMETHOD_MAX);
-
-    m_defaultVideoSettings.m_InterlaceMethod = (EINTERLACEMETHOD)interlaceMethod;
+    XMLUtils::GetInt(pElement, "interlacemethod", interlaceMethod, VS_INTERLACEMETHOD_NONE, VS_INTERLACEMETHOD_MAX); m_defaultVideoSettings.m_InterlaceMethod = (EINTERLACEMETHOD)interlaceMethod;
+    
     int scalingMethod;
-    if (!XMLUtils::GetInt(pElement, "scalingmethod", scalingMethod, VS_SCALINGMETHOD_NEAREST, VS_SCALINGMETHOD_MAX))
-      scalingMethod = (int)VS_SCALINGMETHOD_LINEAR;
-    m_defaultVideoSettings.m_ScalingMethod = (ESCALINGMETHOD)scalingMethod;
+    if (!XMLUtils::GetInt(pElement, "scalingmethod", scalingMethod, VS_SCALINGMETHOD_NEAREST, VS_SCALINGMETHOD_MAX)) scalingMethod = (int)VS_SCALINGMETHOD_LINEAR; m_defaultVideoSettings.m_ScalingMethod = (ESCALINGMETHOD)scalingMethod;
 
     XMLUtils::GetInt(pElement, "viewmode", m_defaultVideoSettings.m_ViewMode, ViewModeNormal, ViewModeZoom110Width);
-    if (!XMLUtils::GetFloat(pElement, "zoomamount", m_defaultVideoSettings.m_CustomZoomAmount, 0.5f, 2.0f))
-      m_defaultVideoSettings.m_CustomZoomAmount = 1.0f;
-    if (!XMLUtils::GetFloat(pElement, "pixelratio", m_defaultVideoSettings.m_CustomPixelRatio, 0.5f, 2.0f))
-      m_defaultVideoSettings.m_CustomPixelRatio = 1.0f;
-    if (!XMLUtils::GetFloat(pElement, "verticalshift", m_defaultVideoSettings.m_CustomVerticalShift, -2.0f, 2.0f))
-      m_defaultVideoSettings.m_CustomVerticalShift = 0.0f;
-    if (!XMLUtils::GetFloat(pElement, "volumeamplification", m_defaultVideoSettings.m_VolumeAmplification, VOLUME_DRC_MINIMUM * 0.01f, VOLUME_DRC_MAXIMUM * 0.01f))
-      m_defaultVideoSettings.m_VolumeAmplification = VOLUME_DRC_MINIMUM * 0.01f;
-    if (!XMLUtils::GetFloat(pElement, "noisereduction", m_defaultVideoSettings.m_NoiseReduction, 0.0f, 1.0f))
-      m_defaultVideoSettings.m_NoiseReduction = 0.0f;
+    if (!XMLUtils::GetFloat(pElement, "zoomamount", m_defaultVideoSettings.m_CustomZoomAmount, 0.5f, 2.0f))         m_defaultVideoSettings.m_CustomZoomAmount = 1.0f;
+    if (!XMLUtils::GetFloat(pElement, "pixelratio", m_defaultVideoSettings.m_CustomPixelRatio, 0.5f, 2.0f))         m_defaultVideoSettings.m_CustomPixelRatio = 1.0f;
+    if (!XMLUtils::GetFloat(pElement, "verticalshift", m_defaultVideoSettings.m_CustomVerticalShift, -2.0f, 2.0f))  m_defaultVideoSettings.m_CustomVerticalShift = 0.0f;
+    if (!XMLUtils::GetFloat(pElement, "volumeamplification", m_defaultVideoSettings.m_VolumeAmplification, VOLUME_DRC_MINIMUM * 0.01f, VOLUME_DRC_MAXIMUM * 0.01f))      m_defaultVideoSettings.m_VolumeAmplification = VOLUME_DRC_MINIMUM * 0.01f;
+    if (!XMLUtils::GetFloat(pElement, "noisereduction", m_defaultVideoSettings.m_NoiseReduction, 0.0f, 1.0f))       m_defaultVideoSettings.m_NoiseReduction = 0.0f;
     XMLUtils::GetBoolean(pElement, "postprocess", m_defaultVideoSettings.m_PostProcess);
-    if (!XMLUtils::GetFloat(pElement, "sharpness", m_defaultVideoSettings.m_Sharpness, -1.0f, 1.0f))
-      m_defaultVideoSettings.m_Sharpness = 0.0f;
+    if (!XMLUtils::GetFloat(pElement, "sharpness", m_defaultVideoSettings.m_Sharpness, -1.0f, 1.0f))      m_defaultVideoSettings.m_Sharpness = 0.0f;
     XMLUtils::GetBoolean(pElement, "showsubtitles", m_defaultVideoSettings.m_SubtitleOn);
-    if (!XMLUtils::GetFloat(pElement, "brightness", m_defaultVideoSettings.m_Brightness, 0, 100))
-      m_defaultVideoSettings.m_Brightness = 50;
-    if (!XMLUtils::GetFloat(pElement, "contrast", m_defaultVideoSettings.m_Contrast, 0, 100))
-      m_defaultVideoSettings.m_Contrast = 50;
-    if (!XMLUtils::GetFloat(pElement, "gamma", m_defaultVideoSettings.m_Gamma, 0, 100))
-      m_defaultVideoSettings.m_Gamma = 20;
-    if (!XMLUtils::GetFloat(pElement, "audiodelay", m_defaultVideoSettings.m_AudioDelay, -10.0f, 10.0f))
-      m_defaultVideoSettings.m_AudioDelay = 0.0f;
-    if (!XMLUtils::GetFloat(pElement, "subtitledelay", m_defaultVideoSettings.m_SubtitleDelay, -10.0f, 10.0f))
-      m_defaultVideoSettings.m_SubtitleDelay = 0.0f;
+    if (!XMLUtils::GetFloat(pElement, "brightness", m_defaultVideoSettings.m_Brightness, 0, 100))      m_defaultVideoSettings.m_Brightness = 50;
+    if (!XMLUtils::GetFloat(pElement, "contrast", m_defaultVideoSettings.m_Contrast, 0, 100))      m_defaultVideoSettings.m_Contrast = 50;
+    if (!XMLUtils::GetFloat(pElement, "gamma", m_defaultVideoSettings.m_Gamma, 0, 100))      m_defaultVideoSettings.m_Gamma = 20;
+    if (!XMLUtils::GetFloat(pElement, "audiodelay", m_defaultVideoSettings.m_AudioDelay, -10.0f, 10.0f))      m_defaultVideoSettings.m_AudioDelay = 0.0f;
+    if (!XMLUtils::GetFloat(pElement, "subtitledelay", m_defaultVideoSettings.m_SubtitleDelay, -10.0f, 10.0f))      m_defaultVideoSettings.m_SubtitleDelay = 0.0f;
     XMLUtils::GetBoolean(pElement, "nonlinstretch", m_defaultVideoSettings.m_CustomNonLinStretch);
-    if (!XMLUtils::GetInt(pElement, "stereomode", m_defaultVideoSettings.m_StereoMode))
-      m_defaultVideoSettings.m_StereoMode = 0;
-    if (!XMLUtils::GetInt(pElement, "centermixlevel", m_defaultVideoSettings.m_CenterMixLevel))
-      m_defaultVideoSettings.m_CenterMixLevel = 0;
+    if (!XMLUtils::GetInt(pElement, "stereomode", m_defaultVideoSettings.m_StereoMode))      m_defaultVideoSettings.m_StereoMode = 0;
+    if (!XMLUtils::GetInt(pElement, "centermixlevel", m_defaultVideoSettings.m_CenterMixLevel))      m_defaultVideoSettings.m_CenterMixLevel = 0;
 
     int toneMapMethod;
-    if (!XMLUtils::GetInt(pElement, "tonemapmethod", toneMapMethod, VS_TONEMAPMETHOD_OFF,
-                          VS_TONEMAPMETHOD_MAX))
-      toneMapMethod = VS_TONEMAPMETHOD_HABLE;
+    if (!XMLUtils::GetInt(pElement, "tonemapmethod", toneMapMethod, VS_TONEMAPMETHOD_OFF, VS_TONEMAPMETHOD_MAX))  toneMapMethod = VS_TONEMAPMETHOD_HABLE;
     m_defaultVideoSettings.m_ToneMapMethod = static_cast<ETONEMAPMETHOD>(toneMapMethod);
-
-    if (!XMLUtils::GetFloat(pElement, "tonemapparam", m_defaultVideoSettings.m_ToneMapParam, 0.1f, 5.0f))
-      m_defaultVideoSettings.m_ToneMapParam = 1.0f;
+    if (!XMLUtils::GetFloat(pElement, "tonemapparam", m_defaultVideoSettings.m_ToneMapParam, 0.1f, 5.0f))  m_defaultVideoSettings.m_ToneMapParam = 1.0f;
   }
+
+  CGUIDialogVideoSettings::LoadLibplaceboSettings(m_defaultVideoSettings, settings);
 
   m_defaultGameSettings.Reset();
   pElement = settings->FirstChildElement("defaultgamesettings");
@@ -218,6 +201,8 @@ bool CMediaSettings::Save(TiXmlNode *settings) const
   XMLUtils::SetInt(pNode, "centermixlevel", m_defaultVideoSettings.m_CenterMixLevel);
   XMLUtils::SetInt(pNode, "tonemapmethod", m_defaultVideoSettings.m_ToneMapMethod);
   XMLUtils::SetFloat(pNode, "tonemapparam", m_defaultVideoSettings.m_ToneMapParam);
+
+  CGUIDialogVideoSettings::SaveLibplaceboSettings(m_defaultVideoSettings, pNode);
 
   // default audio settings for dsp addons
   TiXmlElement audioSettingsNode("defaultaudiosettings");

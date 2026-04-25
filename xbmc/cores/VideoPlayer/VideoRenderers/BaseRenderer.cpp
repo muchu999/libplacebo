@@ -523,13 +523,9 @@ void CBaseRenderer::SettingOptionsRenderMethodsFiller(
                     RENDER_METHOD_AUTO);
 
 #ifdef HAS_DX
-  list.push_back(IntegerSettingOption(
-      CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(16319), RENDER_METHOD_DXVA));
-  list.push_back(
-      IntegerSettingOption(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(13431),
-                           RENDER_METHOD_D3D_PS));
-  list.push_back(
-      IntegerSettingOption(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(13419),
-                           RENDER_METHOD_SOFTWARE));
+  list.push_back(IntegerSettingOption(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(16331), RENDER_METHOD_LIBPLACEBO));
+  list.push_back(IntegerSettingOption(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(16319), RENDER_METHOD_DXVA));
+  list.push_back(IntegerSettingOption(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(13431),RENDER_METHOD_D3D_PS));
+  list.push_back(IntegerSettingOption(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(13419), RENDER_METHOD_SOFTWARE));
 #endif
 }

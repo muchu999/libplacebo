@@ -2564,7 +2564,7 @@ StreamHdrType CDVDDemuxFFmpeg::DetermineHdrType(AVStream* pStream)
                               pStream->codecpar->nb_coded_side_data,
                               AV_PKT_DATA_DOVI_CONF)) // DoVi
     hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
-  else if (pStream->codecpar->color_trc == AVCOL_TRC_SMPTE2084) // HDR10
+  else if (pStream->codecpar->color_trc == AVCOL_TRC_SMPTE2084) // HDR10 //cl could be both
     hdrType = StreamHdrType::HDR_TYPE_HDR10;
   else if (pStream->codecpar->color_trc == AVCOL_TRC_ARIB_STD_B67) // HLG
     hdrType = StreamHdrType::HDR_TYPE_HLG;

@@ -20,7 +20,7 @@
 #include <vector>
 
 #define MAX_FIELDS 3
-#define NUM_BUFFERS 6
+#define NUM_BUFFERS 6 //cl num of video buffers
 
 class CSetting;
 struct IntegerSettingOption;
@@ -40,6 +40,7 @@ enum RenderMethods
   RENDER_METHOD_SOFTWARE,
   RENDER_METHOD_D3D_PS,
   RENDER_METHOD_DXVA,
+  RENDER_METHOD_LIBPLACEBO,
   RENDER_OVERLAYS        = 99   // to retain compatibility
 };
 

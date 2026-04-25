@@ -9609,7 +9609,12 @@ msgctxt "#16330"
 msgid "Bicubic (0,1.)"
 msgstr ""
 
-#empty strings from id 16331 to 16333
+#: xbmc/cores/VideoPlayer/VideoRenderers/BaseRenderer.cpp
+msgctxt "#16331"
+msgid "LibPlacebo"
+msgstr ""
+
+#empty strings from id 16332 to 16333
 
 #. Description of OSD video settings for deinterlace method with label #16334
 #: xbmc/video/dialogs/GUIDialogVideoSettings.cpp
@@ -24845,3 +24850,528 @@ msgstr ""
 msgctxt "#40802"
 msgid "If enabled, a confirmation dialog will be displayed when files shall be deleted. If disabled, files will be deleted without user confirmation."
 msgstr ""
+
+#DSPlayer Libplacebo
+msgctxt "#55200"
+msgid "Libplacebo Settings"
+msgstr ""
+
+msgctxt "#55201"
+msgid ""
+msgstr ""
+
+msgctxt "#55202"
+msgid ""
+msgstr ""
+
+msgctxt "#55203"
+msgid ""
+msgstr ""
+
+msgctxt "#55204"
+msgid ""
+msgstr ""
+
+msgctxt "#55205"
+msgid ""
+msgstr ""
+
+msgctxt "#55206"
+msgid ""
+msgstr ""
+
+msgctxt "#55207"
+msgid "Temperature"
+msgstr ""
+
+msgctxt "#55208"
+msgid ""
+msgstr ""
+
+msgctxt "#55209"
+msgid ""
+msgstr ""
+
+msgctxt "#55210"
+msgid "Saturation"
+msgstr ""
+
+msgctxt "#55211"
+msgid ""
+msgstr ""
+
+msgctxt "#55212"
+msgid "Temperature"
+msgstr ""
+
+msgctxt "#55213"
+msgid "HDR peak detection"
+msgstr ""
+
+msgctxt "#55214"
+msgid "Smoothing period"
+msgstr ""
+
+msgctxt "#55215"
+msgid "Threshold low"
+msgstr ""
+
+msgctxt "#55216"
+msgid "Threshold high"
+msgstr ""
+
+msgctxt "#55217"
+msgid "Minimum Peak"
+msgstr ""
+
+msgctxt "#55218"
+msgid "Peak percentile"
+msgstr ""
+
+msgctxt "#55219"
+msgid "Black cutoff"
+msgstr ""
+
+msgctxt "#55220"
+msgid "Allow 1-frame delay"
+msgstr ""
+
+msgctxt "#55221"
+msgid "Color adjustment"
+msgstr ""
+
+msgctxt "#55222"
+msgid "Hue"
+msgstr ""
+
+msgctxt "#55223"
+msgid "Upscaler"
+msgstr ""
+
+msgctxt "#55224"
+msgid "Downscaler"
+msgstr ""
+
+msgctxt "#55225"
+msgid "Plane upscaler"
+msgstr ""
+
+msgctxt "#55226"
+msgid "Plane downscaler"
+msgstr ""
+
+msgctxt "#55227"
+msgid "Frame mixer"
+msgstr ""
+
+msgctxt "#55228"
+msgid "Gamut map function"
+msgstr ""
+
+msgctxt "#55229"
+msgid "Dither method"
+msgstr ""
+
+msgctxt "#55230"
+msgid ""
+msgstr ""
+
+msgctxt "#55231"
+msgid "Reset libPlacebo settings to Default"
+msgstr ""
+
+msgctxt "#55232"
+msgid "Reset libPlacebo settings to Fast"
+msgstr ""
+
+msgctxt "#55233"
+msgid "Reset libPlacebo settings to High Quality"
+msgstr ""
+
+msgctxt "#55234"
+msgid "Reset HDR peak detection to Default"
+msgstr ""
+
+msgctxt "#55235"
+msgid "Reset HDR peak detection to High Quality"
+msgstr ""
+
+msgctxt "#55236"
+msgid "Tone map function"
+msgstr ""
+
+msgctxt "#55237"
+msgid "Deband"
+msgstr ""
+
+msgctxt "#55238"
+msgid "Grain"
+msgstr ""
+
+msgctxt "#55239"
+msgid "Grain neutral [0]"
+msgstr ""
+
+msgctxt "#55240"
+msgid "Grain neutral [1]"
+msgstr ""
+
+msgctxt "#55241"
+msgid "Grain neutral [2]"
+msgstr ""
+
+msgctxt "#55242"
+msgid "Iterations"
+msgstr ""
+
+msgctxt "#55243"
+msgid "Radius"
+msgstr ""
+
+msgctxt "#55244"
+msgid "Threshold"
+msgstr ""
+
+msgctxt "#55245"
+msgid "Reset deband settings to Default"
+msgstr ""
+
+msgctxt "#55246"
+msgid "Reset color map settings to Default"
+msgstr ""
+
+msgctxt "#55247"
+msgid "Reset color map settings to High Quality"
+msgstr ""
+
+msgctxt "#55248"
+msgid "Color Map"
+msgstr ""
+
+msgctxt "#55249"
+msgid "Deinterlace"
+msgstr ""
+
+msgctxt "#55250"
+msgid "Deinterlace algorithm"
+msgstr ""
+
+msgctxt "#55251"
+msgid "Skip spatial check"
+msgstr ""
+
+msgctxt "#55252"
+msgid "Sigmoid"
+msgstr ""
+
+msgctxt "#55253"
+msgid "Center"
+msgstr ""
+
+msgctxt "#55254"
+msgid "Slope"
+msgstr ""
+
+msgctxt "#55255"
+msgid "Reset sigmoid settings to Default"
+msgstr ""
+
+msgctxt "#55256"
+msgid "Cone distortion"
+msgstr ""
+
+msgctxt "#55257"
+msgid "Load default preset"
+msgstr ""
+
+msgctxt "#55258"
+msgid "Cones"
+msgstr ""
+
+msgctxt "#55259"
+msgid "Strength"
+msgstr ""
+
+msgctxt "#55260"
+msgid "Dither"
+msgstr ""
+
+msgctxt "#55261"
+msgid "Reset dither settings to Default"
+msgstr ""
+
+msgctxt "#55262"
+msgid "Method"
+msgstr ""
+
+msgctxt "#55263"
+msgid "LUT size"
+msgstr ""
+
+msgctxt "#55264"
+msgid "Temporal dithering"
+msgstr ""
+
+msgctxt "#55265"
+msgid "Colorspace transfer function"
+msgstr ""
+
+msgctxt "#55266"
+msgid "Tone mapping constants: Exposure"
+msgstr ""
+
+msgctxt "#55267"
+msgid "Tone mapping constants: Knee adaptation"
+msgstr ""
+
+msgctxt "#55268"
+msgid "Tone mapping constants: Knee default"
+msgstr ""
+
+msgctxt "#55269"
+msgid "Tone mapping constants: Knee Maximum"
+msgstr ""
+
+msgctxt "#55270"
+msgid "Tone mapping constants: Knee Minimum"
+msgstr ""
+
+msgctxt "#55271"
+msgid "Tone mapping constants: Knee Offset"
+msgstr ""
+
+msgctxt "#55272"
+msgid "Tone mapping constants: Linear Knee"
+msgstr ""
+
+msgctxt "#55273"
+msgid "Tone mapping constants: Reinhard contrast"
+msgstr ""
+
+msgctxt "#55274"
+msgid "Tone mapping constants: Slope offset"
+msgstr ""
+
+msgctxt "#55275"
+msgid "Tone mapping constants: Slope tuning"
+msgstr ""
+
+msgctxt "#55276"
+msgid "Tone mapping constants: Spline contrast"
+msgstr ""
+
+msgctxt "#55277"
+msgid "Visualize LUT"
+msgstr ""
+
+msgctxt "#55278"
+msgid "Position X0"
+msgstr ""
+
+msgctxt "#55279"
+msgid "Position X1"
+msgstr ""
+
+msgctxt "#55280"
+msgid "Position Y0"
+msgstr ""
+
+msgctxt "#55281"
+msgid "Position Y1"
+msgstr ""
+
+msgctxt "#55282"
+msgid "Gamut rotation, hue space"
+msgstr ""
+
+msgctxt "#55283"
+msgid "Gamut rotation, cross section"
+msgstr ""
+
+msgctxt "#55284"
+msgid "Contrast recovery"
+msgstr ""
+
+msgctxt "#55285"
+msgid "Contrast smoothness"
+msgstr ""
+
+msgctxt "#55286"
+msgid "Gammut mapping constants: colorimetric gamma"
+msgstr ""
+
+msgctxt "#55287"
+msgid "Gammut mapping constants: Perceptual deadzone"
+msgstr ""
+
+msgctxt "#55288"
+msgid "Gammut mapping constants: Softclip desat"
+msgstr ""
+
+msgctxt "#55289"
+msgid "Gammut mapping constants: softclip knee"
+msgstr ""
+
+msgctxt "#55290"
+msgid "Gamut expansion"
+msgstr ""
+
+msgctxt "#55291"
+msgid "Inverse tone mapping"
+msgstr ""
+
+msgctxt "#55292"
+msgid "Lut3D size I"
+msgstr ""
+
+msgctxt "#55293"
+msgid "LUT 3D size C"
+msgstr ""
+
+msgctxt "#55294"
+msgid "LUT 3D size h"
+msgstr ""
+
+msgctxt "#55295"
+msgid "LUT 3D bicubic"
+msgstr ""
+
+msgctxt "#55296"
+msgid "LUT size"
+msgstr ""
+
+msgctxt "#55297"
+msgid "Show clipping"
+msgstr ""
+
+msgctxt "#55298"
+msgid "Map intent"
+msgstr ""
+
+msgctxt "#55299"
+msgid "Force tone mapping LUT"
+msgstr ""
+
+msgctxt "#55300"
+msgid "Antiringing strength"
+msgstr ""
+
+msgctxt "#55301"
+msgid "Correct subpixel offset"
+msgstr ""
+
+msgctxt "#55302"
+msgid "Disable builtin scalers"
+msgstr ""
+
+msgctxt "#55303"
+msgid "Disable dither gamma correction"
+msgstr ""
+
+msgctxt "#55304"
+msgid "Disable linear scaling"
+msgstr ""
+
+msgctxt "#55305"
+msgid "Dynamic constants"
+msgstr ""
+
+msgctxt "#55306"
+msgid "Error diffusion"
+msgstr ""
+
+msgctxt "#55307"
+msgid "Force dither"
+msgstr ""
+
+msgctxt "#55308"
+msgid "Force low bit depth FBOS"
+msgstr ""
+
+msgctxt "#55309"
+msgid "Ignore ICC profiles"
+msgstr ""
+
+msgctxt "#55310"
+msgid "Preserve mixing cache"
+msgstr ""
+
+msgctxt "#55311"
+msgid "Skip anti aliasing"
+msgstr ""
+
+msgctxt "#55312"
+msgid "Skip caching single frame"
+msgstr ""
+
+msgctxt "#55313"
+msgid "Display peak luminance"
+msgstr ""
+
+msgctxt "#55314"
+msgid "Target colorspace hint"
+msgstr ""
+
+msgctxt "#55315"
+msgid "Auto"
+msgstr ""
+
+msgctxt "#55316"
+msgid "No"
+msgstr ""
+
+msgctxt "#55317"
+msgid "Yes"
+msgstr ""
+
+msgctxt "#55318"
+msgid "Target colorspace hint mode"
+msgstr ""
+
+msgctxt "#55319"
+msgid "Target"
+msgstr ""
+
+msgctxt "#55320"
+msgid "Source"
+msgstr ""
+
+msgctxt "#55321"
+msgid "Source dynamic"
+msgstr ""
+
+msgctxt "#55322"
+msgid "Load libPlacebo settings from file"
+msgstr ""
+
+msgctxt "#55323"
+msgid "Save libPlacebo settings to file"
+msgstr ""
+
+msgctxt "#55324"
+msgid ""
+msgstr ""
+
+msgctxt "#55325"
+msgid ""
+msgstr ""
+
+msgctxt "#55326"
+msgid ""
+msgstr ""
+
+msgctxt "#55327"
+msgid "Libplacebo"
+msgstr ""
+
+msgctxt "#55328"
+msgid "Save libPlacebo settings to database"
+msgstr ""
+
+msgctxt "#55329"
+msgid "Add libplacebo specific fields to the video settings database to store individual settings for each video file. Disabling will erase all new fields on next file play)"
+msgstr ""
+
+
+
+

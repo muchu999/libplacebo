@@ -9,6 +9,8 @@
 #pragma once
 
 #include "utils/Map.h"
+#include "libplacebo/options.h"
+#include "..\VideoPlayer\VideoRenderers\LibPlacebo\PlOptionsWrapper.h"
 
 #include <string_view>
 
@@ -195,7 +197,12 @@ class CVideoSettings
 {
 public:
   CVideoSettings();
-  ~CVideoSettings() = default;
+  ~CVideoSettings();
+  CVideoSettings(const CVideoSettings&  other);
+  CVideoSettings& operator=(const CVideoSettings& other);
+  void copy(const CVideoSettings& other);
+
+
 
   bool operator!=(const CVideoSettings &right) const;
 
@@ -228,6 +235,121 @@ public:
   float m_ToneMapParam;
   int m_Orientation;
   int m_CenterMixLevel; // relative to metadata or default
+  
+  float m_PlaceboDisplayPeakLuminance;
+  int m_PlaceboTargetColorspaceHint;
+  int m_PlaceboTargetColorspaceHintMode;
+  
+  bool m_PlaceboColorAdjustmentEnabled;
+  float m_PlaceboSaturation;
+  float m_PlaceboHue;
+  float m_PlaceboTemperature;
+
+  bool m_PlaceboPeakDetectEnabled;
+  float m_PlaceboPeakDetectSmoothingPeriod;
+  float m_PlaceboPeakDetectSceneThresholdLow;
+  float m_PlaceboPeakDetectSceneThresholdHigh;
+  float m_PlaceboPeakDetectPercentile;
+  float m_PlaceboPeakDetectBlackCutoff;
+  bool m_PlaceboPeakDetectAllowDelayed;
+
+  int m_PlaceboUpscaler;
+  int m_PlaceboDownscaler;
+  int m_PlaceboPlaneUpscaler;
+  int m_PlaceboPlaneDownscaler;
+  int m_PlaceboFrameMixer;
+
+  bool m_PlaceboDebandEnabled;
+  float m_PlaceboDebandGrain;
+  float m_PlaceboDebandGrainNeutral0;
+  float m_PlaceboDebandGrainNeutral1;
+  float m_PlaceboDebandGrainNeutral2;
+  int m_PlaceboDebandIterations;
+  float m_PlaceboDebandRadius;
+  float m_PlaceboDebandThreshold;
+
+  bool m_PlaceboColorMapEnabled;
+  bool m_PlaceboColorMapGamutExpansion;
+  bool m_PlaceboColorMapInverseToneMapping;
+  int  m_PlaceboColorMapLut3dSizeI;
+  int  m_PlaceboColorMapLut3dSizeC;
+  int  m_PlaceboColorMapLut3dSizeH;
+  bool m_PlaceboColorMapLut3dTricubic;
+  int  m_PlaceboColorMapLutSize;
+  bool m_PlaceboColorMapShowClipping;
+  int  m_PlaceboColorMapIntent;
+  bool m_PlaceboColorMapForceToneMappingLut;
+  float m_PlaceboColorMapContrastRecovery;
+  float m_PlaceboColorMapContrastSmoothness;
+  int m_PlaceboColorMapGamutMapping;
+  int m_PlaceboColorMapToneMapping;
+
+  bool m_PlaceboDeinterlaceEnabled;
+  int m_PlaceboDeinterlaceAlgo;
+  bool m_PlaceboDeinterlaceSkipSpatialCheck;
+
+  bool m_PlaceboSigmoidEnabled;
+  float m_PlaceboSigmoidCenter;
+  float m_PlaceboSigmoidSlope;
+
+  bool m_PlaceboConeEnabled;
+  int m_PlaceboConeCones;
+  float m_PlaceboConeStrength;
+
+  bool m_PlaceboDitherEnabled;
+  int m_PlaceboDitherMethod;
+  int m_PlaceboDitherLutSize;
+  bool m_PlaceboDitherTemporal;
+  int m_PlaceboDitherTransfer;
+
+  float m_PlaceboToneConstantExposure;
+  float m_PlaceboToneConstantKneeAdaptation;
+  float m_PlaceboToneConstantKneeDefault;
+  float m_PlaceboToneConstantKneeMaximum;
+  float m_PlaceboToneConstantKneeMinimum;
+  float m_PlaceboToneConstantKneeOffset;
+  float m_PlaceboToneConstantLinearKnee;
+  float m_PlaceboToneConstantReinhardContrast;
+  float m_PlaceboToneConstantSlopeOffset;
+  float m_PlaceboToneConstantSlopeTuning;
+  float m_PlaceboToneConstantSplineContrast;
+
+  bool m_PlaceboColorMapVisualizeLut;
+  float m_PlaceboColorMapVisualizeRectX0;
+  float m_PlaceboColorMapVisualizeRectX1;
+  float m_PlaceboColorMapVisualizeRectY0;
+  float m_PlaceboColorMapVisualizeRectY1;
+  float m_PlaceboColorMapVisualizeHue;
+  float m_PlaceboColorMapVisualizeTheta;
+
+  float m_PlaceboGamutConstantsColorimetricGamma;
+  float m_PlaceboGamutConstantsPerceptualDeadzone;
+  float m_PlaceboGamutConstantsSoftclipDesat;
+  float m_PlaceboGamutConstantsSoftclipKnee;
+
+
+  float m_PlaceboAntiringingStrength;
+  bool m_PlaceboCorrectSubpixelOffset;
+  bool m_PlaceboDisableBuiltinScalers;
+  bool m_PlaceboDisableDitherGammaCorrection;
+  bool m_PlaceboDisableLinearScaling;
+  bool m_PlaceboDynamicConstant;
+  int m_PlaceboErrorDiffusion;
+  bool m_PlaceboForceDither;
+  bool m_PlaceboForceLowBitDepthFbos;
+  bool m_PlaceboIgnoreIccProfiles;
+  bool m_PlaceboPreserveMixingCache;
+  bool m_PlaceboSkipAntiAliasing;
+  bool m_PlaceboSkipCachingSingleFrame;
+  
+  struct pl_options_deleter {
+    void operator()(pl_options* body) const {
+      pl_options_free(body);
+    }
+  };
+
+  //pl_options m_placeboOptions;
+  PlOptionsWrapper *m_placeboOptions;
 };
 
 class CCriticalSection;

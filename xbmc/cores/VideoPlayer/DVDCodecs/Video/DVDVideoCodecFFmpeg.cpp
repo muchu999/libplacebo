@@ -36,10 +36,14 @@ extern "C" {
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
 #include <libavutil/mastering_display_metadata.h>
+#include <libavutil/hdr_dynamic_metadata.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/video_enc_params.h>
 }
+# define PL_LIBAV_IMPLEMENTATION 0
+#include <libplacebo/utils/libav.h>
+#include <libplacebo/utils/dolbyvision.h>
 
 #ifndef TARGET_POSIX
 #define RINT(x) ((x) >= 0 ? ((int)((x) + 0.5)) : ((int)((x) - 0.5)))
@@ -1022,7 +1026,7 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
 
   pVideoPicture->iRepeatPicture = 0.5 * m_pFrame->repeat_pict;
   pVideoPicture->iFlags = 0;
-  pVideoPicture->iFlags |= m_pFrame->flags & AV_FRAME_FLAG_INTERLACED ? DVP_FLAG_INTERLACED : 0;
+  pVideoPicture->iFlags |= m_pFrame->flags & AV_FRAME_FLAG_INTERLACED ? DVP_FLAG_INTERLACED : 0; //cl
   pVideoPicture->iFlags |=
       m_pFrame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST ? DVP_FLAG_TOP_FIELD_FIRST : 0;
 
@@ -1169,6 +1173,78 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
     }
   }
 
+  // hdrplus for libplacebo //cl no conflict from above but needs cleanup/move
+  sd = av_frame_get_side_data(m_pFrame, AV_FRAME_DATA_DYNAMIC_HDR_PLUS);
+  if (sd)
+  {
+    if (sd->size == sizeof(AVDynamicHDRPlus))
+    {
+      AVDynamicHDRPlus* metadata = (AVDynamicHDRPlus*)sd->data;
+      pVideoPicture->hdrMetadata = *metadata;
+      pVideoPicture->hasHDR10PlusMetadata = true;
+    }
+    else
+    {
+      CLog::Log(LOGERROR, "{} Found HDR10 + data of an unexpected size", __FUNCTION__);
+    }
+  }
+  /*dovi for libplacebo*/
+  /*
+  Dolby Vision primarily utilizes the IPTPQc2 color space for streaming and internal processing, particularly 
+  in Profile 5, which is designed for high-dynamic-range (HDR) and wide-color-gamut (WCG) content. This proprietary 
+  color space, combined with Dolby Vision metadata, allows for precise color mapping and superior luminance reproduction. 
+
+  When discussing "residual flags" in the context of Dolby Vision, this usually pertains to Profile 7 
+  (used in UHD Blu-rays), which includes a Base Layer (BL) and an Enhancement Layer (EL). Profile 7 
+  & Residual Data: Profile 7 can be Full Enhancement Layer (FEL) or Minimum Enhancement Layer (MEL). 
+  A FEL file contains residual data—the result of a function involving both the Base Layer and the 
+  Enhancement Layer. This residual data allows for a 12-bit, higher-bitrate image, reconstructing a 
+  more accurate picture than the 10-bit base layer alone. 
+  
+  Color Space Issues: Profile 5 (IPTPQc2) and Profile 7 (residual-based) files can appear 
+  with green/purple tints if played on devices that do not properly interpret these color spaces, 
+  often falling back to incorrect YUV conversions. Best Practices: While the internal mastering 
+  is done in a high-quality format (often utilizing IPTPQc2 or P3), the delivery of a Dolby Vision 
+  master is typically done in Rec. 2020 or P3-D65 within a Rec. 2020 container. 
+
+  The Dolby Vision Reference Picture Unit (RPU) is a NAL unit carrying dynamic metadata 
+  for scene-by-scene brightness and color adjustments. It can be demuxed, edited, or injected 
+  into HDR10 video using tools like dovi_tool or DDVT, allowing for Dolby Vision profile 8/5 
+  creation without re-encoding, though verification is essential.
+*/
+  sd = av_frame_get_side_data(m_pFrame, AV_FRAME_DATA_DOVI_METADATA);
+  if (sd)
+  {
+    AVDOVIMetadata* metadata = (AVDOVIMetadata*)sd->data;
+    AVDOVIRpuDataHeader* header = av_dovi_get_header(metadata);
+    pl_map_dovi_metadata(&pVideoPicture->doviPlMetadata, metadata);
+    pVideoPicture->disable_residual_flag= header->disable_residual_flag;
+    if (header->disable_residual_flag)
+      pl_map_avdovi_metadata(&pVideoPicture->doviColorSpace, &pVideoPicture->doviColorRepr, &pVideoPicture->doviPlMetadata, metadata);
+	pVideoPicture->doviMetadata = *metadata;  //cl just copies the header, not the payload
+    pVideoPicture->hasDoviMetadata = true;
+
+    pVideoPicture->doviColor = *av_dovi_get_color(metadata);
+    AVDOVIDmData *pDoviExt;
+    if(pDoviExt = av_dovi_find_level(metadata, 1))
+    {
+      pVideoPicture->doviExt = *pDoviExt;
+	  pVideoPicture->hasDoviExt = true;
+    }
+  }
+
+  /*dovi rpu for libplacebo*/
+  AVFrameSideData* sdDOVIRPU = av_frame_get_side_data(m_pFrame, AV_FRAME_DATA_DOVI_RPU_BUFFER);
+  if (sdDOVIRPU)
+  {
+    pl_hdr_metadata_from_dovi_rpu(&pVideoPicture->hdrDoviRpu, sdDOVIRPU->buf->data, sdDOVIRPU->buf->size);
+    pVideoPicture->hasDoviRpuMetadata = true;
+  }
+
+
+   
+  /////////////////////////////
+
   if (pVideoPicture->iRepeatPicture)
     pVideoPicture->dts = DVD_NOPTS_VALUE;
   else
@@ -1204,10 +1280,29 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
 
   if (pVideoPicture->color_primaries == AVCOL_PRI_UNSPECIFIED)
   {
+    //cl ?
+    if(1)
+    {
+      if (pVideoPicture->hasDoviMetadata || pVideoPicture->hasHDR10PlusMetadata)
+      {
+        pVideoPicture->color_primaries = AVCOL_PRI_BT2020;
+        pVideoPicture->color_transfer = AVCOL_TRC_SMPTE2084;
+      }
+      else if (pVideoPicture->iDisplayWidth > 1024 || pVideoPicture->iDisplayHeight >= 600)
+      {
+        pVideoPicture->color_primaries = AVCOL_PRI_BT709;
+        pVideoPicture->color_transfer = AVCOL_TRC_BT709;
+      }
+      else
+        pVideoPicture->color_primaries = AVCOL_PRI_BT470BG;
+    }
+    else
+    {
     if (pVideoPicture->iDisplayWidth > 1024 || pVideoPicture->iDisplayHeight >= 600)
       pVideoPicture->color_primaries = AVCOL_PRI_BT709;
     else
       pVideoPicture->color_primaries = AVCOL_PRI_BT470BG;
+    }
   }
 
   return true;

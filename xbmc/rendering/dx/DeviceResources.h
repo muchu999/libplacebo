@@ -16,7 +16,7 @@
 #include <memory>
 
 #include <concrt.h>
-#include <dxgi1_5.h>
+#include <dxgi1_6.h> //cl<dxgi1_5.h>
 #include <winrt/windows.foundation.h>
 #include <wrl.h>
 #include <wrl/client.h>
@@ -67,6 +67,7 @@ namespace DX
     ID3D11DepthStencilView* GetDSV() const { return m_d3dDepthStencilView.Get(); }
     D3D_FEATURE_LEVEL GetDeviceFeatureLevel() const { return m_d3dFeatureLevel; }
     CD3DTexture& GetBackBuffer() { return m_backBufferTex; }
+
 
     void GetOutput(IDXGIOutput** ppOutput) const;
     /*!
@@ -124,6 +125,15 @@ namespace DX
     bool IsDXVA2SharedDecoderSurfaces() const { return m_DXVA2SharedDecoderSurfaces; }
     bool IsSuperResolutionSupported() const { return m_DXVASuperResolutionSupport; }
     bool UseFence() const { return m_DXVA2UseFence; }
+
+    struct mp_dxgi_factory_ctx {
+      IDXGIFactory1* factory;
+      IDXGIOutput6* last_matched_output;
+    };
+
+    bool GetOutputDesc1(DXGI_OUTPUT_DESC1& Desc1) const;
+    bool get_output_desc_from_ctx(struct mp_dxgi_factory_ctx* ctx, DXGI_OUTPUT_DESC1* desc);
+
 
     // Gets debug info from swapchain
     DEBUG_INFO_RENDER GetDebugInfo() const;
