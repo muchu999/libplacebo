@@ -16,7 +16,7 @@
 #include <d3d11_4.h>
 
 //#pragma comment(lib, "libplacebo.a")
-#pragma comment(lib, "libplacebo-362.dll")
+#pragma comment(lib, "libplacebo.dll.a")
 
 extern "C"
 {
