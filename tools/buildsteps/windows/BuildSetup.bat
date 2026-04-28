@@ -152,7 +152,7 @@ IF DEFINED BUILDDIR (
   copy %base_dir%\privacy-policy.txt BUILD_WIN32\application > NUL
   copy %base_dir%\known_issues.txt BUILD_WIN32\application > NUL
 
-  xcopy %base_dir%\DLLs\libplacebo-362.dll BUILD_WIN32\application /Q /I /Y > NUL
+  xcopy %base_dir%\DLLs\*.dll BUILD_WIN32\application /Q /I /Y > NUL
 
   xcopy %BUILDDIR%\%buildconfig%\addons BUILD_WIN32\application\addons /E /Q /I /Y /EXCLUDE:exclude.txt > NUL
   xcopy %BUILDDIR%\%buildconfig%\*.dll BUILD_WIN32\application /Q /I /Y > NUL
