@@ -1910,6 +1910,49 @@ int MysqlDataset::exec(const std::string& sql)
   else
   {
     //! @todo collect results and store in exec_res
+    MYSQL* conn = handle();
+    MYSQL_RES* res2 = mysql_store_result(conn);
+    if (res2)
+     {
+      if (mysql_num_rows(res2) == 0)
+      {
+        mysql_free_result(res2);
+        throw DbErrors("The source database was unexpectedly empty.");
+      }
+      else
+      {
+        MYSQL_ROW row;
+        unsigned int num_fields = mysql_num_fields(res2);
+        unsigned int num_rows = mysql_num_rows(res2);
+
+        for (unsigned int i = 0; i < num_fields; i++)
+        {
+          exec_res.record_header.emplace_back(res2->fields[i].name);
+        }
+        while ((row = mysql_fetch_row(res2)))
+        {
+          unsigned long* lengths = mysql_fetch_lengths(res2);
+          //std::unique_ptr<sql_record> r = std::make_unique<sql_record>();
+		  sql_record* r = new sql_record(); //cl check delete
+          field_value v;
+          for (int i = 0; i < num_fields; i++)
+          {
+            if(lengths[i]>0)
+            {
+              v = std::string(row[i]);
+              r->emplace_back(v); //cl
+            }
+            else
+            {
+              v = "";
+              r->emplace_back(v); //cl
+            }
+          }
+          exec_res.records.emplace_back(r);
+        }
+          mysql_free_result(res2);
+        }
+    }     
     return res;
   }
 }
