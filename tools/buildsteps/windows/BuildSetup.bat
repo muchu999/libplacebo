@@ -82,8 +82,7 @@ IF DEFINED BUILDDIR (
   MKDIR %BUILDDIR%
   PUSHD %BUILDDIR%
 
-copy %base_dir%\DLLs\libplacebo.dll.a %BUILDDIR% > NUL
-copy %base_dir%\DLLs\libplacebo-362.dll %BUILDDIR% > NUL
+  copy %base_dir%\DLLs\libplacebo.dll.a %BUILDDIR% > NUL
 
   cmake.exe -G "%cmakeGenerator%" -A %cmakeArch% -T host=x64 %cmakeProps% %base_dir%
   IF %errorlevel%==1 (
@@ -153,7 +152,7 @@ copy %base_dir%\DLLs\libplacebo-362.dll %BUILDDIR% > NUL
   copy %base_dir%\privacy-policy.txt BUILD_WIN32\application > NUL
   copy %base_dir%\known_issues.txt BUILD_WIN32\application > NUL
 
-  xcopy %base_dir%\DLLs\*.dll BUILD_WIN32\application /Q /I /Y > NUL
+  xcopy %base_dir%\DLLs\libplacebo-362.dll BUILD_WIN32\application /Q /I /Y > NUL
 
   xcopy %BUILDDIR%\%buildconfig%\addons BUILD_WIN32\application\addons /E /Q /I /Y /EXCLUDE:exclude.txt > NUL
   xcopy %BUILDDIR%\%buildconfig%\*.dll BUILD_WIN32\application /Q /I /Y > NUL
