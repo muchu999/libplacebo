@@ -14,6 +14,7 @@
 #include "addons/Skin.h"
 #include "application/ApplicationComponents.h"
 #include "application/ApplicationPlayer.h"
+#include "cores/VideoPlayer/VideoRenderers/BaseRenderer.h"
 #include "dialogs/GUIDialogFileBrowser.h"
 #include "dialogs/GUIDialogYesNo.h"
 #include "guilib/GUIComponent.h"
@@ -1907,6 +1908,7 @@ void CGUIDialogVideoSettings::SetupView()
 void CGUIDialogVideoSettings::InitializeSettings()
 {
   CGUIDialogSettingsManualBase::InitializeSettings();
+  int renderMethod = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_RENDERMETHOD);
 
   const std::shared_ptr<CSettingCategory> category = AddCategory("videosettings", -1);
   if (category == NULL)
@@ -1950,7 +1952,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
   TranslatableIntegerSettingOptions entries;
 
     // cl not sure how to handle interlacing...
-    if (appPlayer->Supports(RENDERFEATURE_LIBPLACEBO))
+    if (renderMethod == RENDER_METHOD_LIBPLACEBO)
     {
     }
     else
@@ -2043,7 +2045,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
   AddList(groupVideo, SETTING_VIDEO_ORIENTATION, 21843, SettingLevel::Basic, videoSettings.m_Orientation, CGUIDialogVideoSettings::VideoOrientationFiller, 21843);
 
     if (appPlayer->Supports(RENDERFEATURE_POSTPROCESS))    AddToggle(groupVideo, SETTING_VIDEO_POSTPROCESS, 16400, SettingLevel::Basic, videoSettings.m_PostProcess);
-    if (!appPlayer->Supports(RENDERFEATURE_LIBPLACEBO))
+    if (renderMethod != RENDER_METHOD_LIBPLACEBO)
     {
       if (appPlayer->Supports(RENDERFEATURE_BRIGHTNESS))     AddPercentageSlider(groupVideo, SETTING_VIDEO_BRIGHTNESS, 464, SettingLevel::Basic, static_cast<int>(videoSettings.m_Brightness), 14047, 1, 464, usePopup);
       if (appPlayer->Supports(RENDERFEATURE_CONTRAST))       AddPercentageSlider(groupVideo, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, static_cast<int>(videoSettings.m_Contrast), 14047, 1, 465, usePopup);
@@ -2083,7 +2085,8 @@ void CGUIDialogVideoSettings::InitializeSettings()
   AddButton(groupSaveAsDefault, SETTING_VIDEO_CALIBRATION, 214, SettingLevel::Basic);
 
   // libplacebo settings
-  if (appPlayer->Supports(RENDERFEATURE_LIBPLACEBO))
+
+  if (renderMethod == RENDER_METHOD_LIBPLACEBO)
   {
     AddButton(groupLpFile, SETTING_LIB_PLACEBO_SAVE_TO_FILE, 55323, SettingLevel::Basic);
     AddButton(groupLpFile, SETTING_LIB_PLACEBO_LOAD_FROM_FILE,   55322, SettingLevel::Basic);
