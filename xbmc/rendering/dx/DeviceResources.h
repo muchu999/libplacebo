@@ -36,6 +36,19 @@ namespace DX
   // Controls all the DirectX device resources.
   class DeviceResources
   {
+    //cl
+    #ifndef SUCCEEDED
+      #define SUCCEEDED(hr) ((HRESULT)(hr) >= 0)
+    #endif
+    #ifndef FAILED
+      #define FAILED(hr) ((HRESULT)(hr) < 0)
+    #endif
+    #ifndef SAFE_RELEASE
+      #define SAFE_RELEASE(_p) { if(_p) { _p->Release();  _p=NULL; } }
+    #endif
+    typedef HRESULT(WINAPI* PFN_CREATE_DXGI_FACTORY)(REFIID riid, void** ppFactory);
+
+
   public:
     static std::shared_ptr<DX::DeviceResources> Get();
 
@@ -131,8 +144,7 @@ namespace DX
       IDXGIOutput6* last_matched_output;
     };
 
-    bool GetOutputDesc1(DXGI_OUTPUT_DESC1& Desc1) const;
-    bool get_output_desc_from_ctx(struct mp_dxgi_factory_ctx* ctx, DXGI_OUTPUT_DESC1* desc);
+      bool get_output_desc_from_ctx(struct mp_dxgi_factory_ctx* ctx, DXGI_OUTPUT_DESC1* desc);
 
 
     // Gets debug info from swapchain
