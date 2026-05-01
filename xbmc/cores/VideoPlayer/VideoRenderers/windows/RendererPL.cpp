@@ -295,7 +295,7 @@ static void ApplyTargetContrast(struct pl_color_space* color, float min_luma, fl
 //------------------------------------------
 struct pl_color_space MpDxgiDescToColorSpace(const DXGI_OUTPUT_DESC1* desc)
 {
-  struct pl_color_space ret = { 0 };
+  struct pl_color_space ret = { };
   if (!desc)
     return ret;
 
@@ -409,6 +409,8 @@ void CRendererPL::ApplyTargetOptions(pl_color_space* target_csp, struct pl_frame
 //---------------------------------------------------
 void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags)
 {
+  CLog::Log(LOGDEBUG, "RenderImpl: Enter");
+
   pl_frame frameOut{};
   pl_frame frameIn{};
   pl_render_params params = m_videoSettings.m_placeboOptions->getPlOptions()->params;
@@ -501,11 +503,10 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
     frameIn.first_field = PL_FIELD_NONE;
   }
 
-  //cl ctx cache???
-  pl_color_space target_csp{ 0 };
+  pl_color_space target_csp{ };
   DXGI_OUTPUT_DESC1 desc;
-  DX::DeviceResources::mp_dxgi_factory_ctx* ctx = NULL;
-  if (DX::DeviceResources::Get()->get_output_desc_from_ctx(ctx, &desc))
+  static DX::DeviceResources::mp_dxgi_factory_ctx ctx = {0}; //cl
+  if (DX::DeviceResources::Get()->get_output_desc_from_ctx(&ctx, &desc))
     target_csp = MpDxgiDescToColorSpace(&desc);
 
   if (target_csp.primaries == PL_COLOR_PRIM_UNKNOWN)
@@ -522,7 +523,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   SettinglibPlaceboTargetColorspaceHintMode hintMode = (SettinglibPlaceboTargetColorspaceHintMode)m_videoSettings.m_PlaceboTargetColorspaceHintMode;
   SettinglibPlaceboTargetColorspaceHint hintFunc = (SettinglibPlaceboTargetColorspaceHint)m_videoSettings.m_PlaceboTargetColorspaceHint;
-  hint = { 0 };
+  hint = { };
   
   bool target_hint = hintFunc == SettinglibPlaceboTargetColorspaceHint::YES || (hintFunc == SettinglibPlaceboTargetColorspaceHint::AUTO && target_csp.transfer != PL_COLOR_TRC_UNKNOWN);
 
@@ -724,7 +725,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   frameOut.planes[0].component_mapping[1] = PL_CHANNEL_G;
   frameOut.planes[0].component_mapping[2] = PL_CHANNEL_B;
   frameOut.planes[0].component_mapping[3] = PL_CHANNEL_A;
-  
+
   frameOut.crop.x0 = dst.x1;
   frameOut.crop.x1 = dst.x2;
   frameOut.crop.y0 = dst.y1;
@@ -742,8 +743,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   m_videoMatrix = frameIn.repr.sys;
   pl_frame_set_chroma_location(&frameIn, m_chromaLocation);
 
+  CLog::Log(LOGDEBUG, "RenderImpl: pl_render_image start");
   bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, &params);
   pl_swapchain_submit_frame(PL::PLInstance::Get()->GetSwapchain());
+  CLog::Log(LOGDEBUG, "RenderImpl: pl_swapchain_submit_frame exit");
+  pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes[0].texture);
+
   //pl_swapchain_swap_buffers(PL::PLInstance::Get()->GetSwapchain()); // cl don't, vsync controled from kodi...
 
   // cl unclear, libplacebo disabled peak detection for dolby vision in renderer.c
@@ -753,6 +758,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //}
 
   sourceRect = dst; //cl?
+  CLog::Log(LOGDEBUG, "RenderImpl: Exit");
 }
 
 
@@ -858,14 +864,22 @@ CRendererPL::CRenderBufferImpl::CRenderBufferImpl(AVPixelFormat av_pix_format, u
 
 CRendererPL::CRenderBufferImpl::~CRenderBufferImpl()
 {
-  //do we release the ref to plplanes and pltex here???
-  CRenderBufferImpl::ReleasePicture();
+  //cl something to release on player close???
 }
 
+void CRendererPL::CRenderBufferImpl::ReleasePicture()
+{
+  for (int i = 0; i < plFormat.num_planes; i++)
+  {
+    pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &pltex[i]);
+  }
+
+  CRenderBuffer::ReleasePicture();
+}
 
 void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
 {
-  __super::AppendPicture(picture);  //cl picture.videoBuffer comes from here
+  __super::AppendPicture(picture);
   hdrDoviRpu = picture.hdrDoviRpu;
   hdrMetadata = picture.hdrMetadata;
   doviMetadata = picture.doviMetadata;
@@ -928,6 +942,7 @@ bool CRendererPL::CRenderBufferImpl::GetLibplaceboFrame(pl_frame& frame)
   
   return true;
 }
+
 bool CRendererPL::CRenderBufferImpl::UploadBuffer()
 {
   if (!videoBuffer)
@@ -983,7 +998,6 @@ bool CRendererPL::CRenderBufferImpl::UploadWrapPlanes()
 {
   ComPtr<ID3D11Resource> pResource;
   ComPtr<ID3D11Texture2D> pTexture;
-  ComPtr<ID3D11ShaderResourceView> srvY;
   D3D11_TEXTURE2D_DESC desc;
   HRESULT hr;
   unsigned arrayIdx;
@@ -1009,15 +1023,8 @@ bool CRendererPL::CRenderBufferImpl::UploadWrapPlanes()
   
   
   // Wrap the plane of the D3D11 texture
-  // TODO maybe reuse the srv
   for (int i = 0; i < plFormat.num_planes; i++)
   {
-    CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc(
-      D3D11_SRV_DIMENSION_TEXTURE2DARRAY,
-      plFormat.planes[i],
-      0, 1, arrayIdx, 1
-    );
-    hr = DX::DeviceResources::Get()->GetD3DDevice()->CreateShaderResourceView(pTexture.Get(), &srvDesc, &srvY);
     pl_d3d11_wrap_params params = {};
     params.tex = pTexture.Get();
     params.w = desc.Width / plFormat.width_div[i];

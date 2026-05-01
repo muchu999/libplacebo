@@ -93,7 +93,7 @@ protected:
 private:
   // Color space info
   pl_color_space m_colorSpace;
-  pl_color_space hint {0};
+  pl_color_space hint = {};
   uint64_t m_signatureCounter=1;
   int lastBufferIndex=-1;
   pl_frame prevFrame {0};
@@ -118,6 +118,8 @@ private:
 class CRendererPL::CRenderBufferImpl : public CRenderBuffer
 {
 public:
+  void ReleasePicture() override;
+
   explicit CRenderBufferImpl(AVPixelFormat av_pix_format, unsigned width, unsigned height);
   ~CRenderBufferImpl();
 
