@@ -25305,7 +25305,7 @@ msgid "Skip caching single frame"
 msgstr ""
 
 msgctxt "#55313"
-msgid "Display peak luminance"
+msgid "Display peak luminance (0 for auto)"
 msgstr ""
 
 msgctxt "#55314"

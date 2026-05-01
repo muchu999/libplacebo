@@ -126,7 +126,7 @@ CVideoSettings::CVideoSettings()
   m_CenterMixLevel = 0;
 
   // LibPLacebo specific video settings
-  m_PlaceboDisplayPeakLuminance = 400;
+  m_PlaceboDisplayPeakLuminance = 0;
   m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::YES;
   m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC;
 
