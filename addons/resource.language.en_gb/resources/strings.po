@@ -25381,7 +25381,7 @@ msgid "File:"
 msgstr ""
 
 msgctxt "#55332"
-msgid "Load LUT from file (.cube)"
+msgid "Load LUT from file (.3dlut)"
 msgstr ""
 
 

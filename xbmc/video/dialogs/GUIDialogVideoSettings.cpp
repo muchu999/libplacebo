@@ -8,9 +8,7 @@
 
 #include "GUIDialogVideoSettings.h"
 
-#include "filesystem/Directory.h"
 #include "FileItem.h"
-#include "FileItemList.h"
 #include "GUIPassword.h"
 #include "ServiceBroker.h"
 #include "addons/Skin.h"
@@ -101,6 +99,8 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING                  "video.libplacebo.tone_map_funtion"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY             "video.libplacebo.color_map_contrast_recovery"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS           "video.libplacebo.color_map_contrast_smoothness"
+#define SETTING_LIB_PLACEBO_LUT_FILENAME_LABEL                      "video.libplacebo.lut_filename_label"
+#define SETTING_LIB_PLACEBO_LOAD_LUT_FROM_FILE                      "video.libplacebo.load_lut_file"
 #define SETTING_LIB_PLACEBO_LOAD_PRESET_DEFAULT                     "video.libplacebo.load_preset_default"
 #define SETTING_LIB_PLACEBO_LOAD_PRESET_FAST                        "video.libplacebo.load_preset_fast"
 #define SETTING_LIB_PLACEBO_LOAD_PRESET_HIGH_QUALITY                "video.libplacebo.load_preset_high_quality"
@@ -168,7 +168,6 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_COLOR_MAP_SHOW_CLIPPING        "video.libplacebo.color_map_show_clipping"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_INTENT               "video.libplacebo.color_map_map_intent"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_FORCE_TONE_MAPPING_LUT "video.libplacebo.color_map_force_tone_mapping_lut"
-#define SETTING_LIB_PLACEBO_LUT_FILENAME                        "video.libplacebo.lut_filename"
 #define SETTING_LIB_PLACEBO_LUT_TYPE                            "video.libplacebo.lut_type"
 #define SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH                "video.libplacebo.antiringing_strength"
 #define SETTING_LIB_PLACEBO_CORRECT_SUBPIXEL_OFFSET             "video.libplacebo.correct_subpixel_offset"
@@ -792,19 +791,13 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
     m_placeboOptions->color_map_params.force_tone_mapping_lut = vs.m_PlaceboColorMapForceToneMappingLut;
     appPlayer->SetVideoSettings(vs);
   }
-  else if (settingId == SETTING_LIB_PLACEBO_LUT_FILENAME)
-  {
-    vs.m_PlaceboLutFilename = std::static_pointer_cast<const CSettingString>(setting)->GetValue();
-    LoadLutFile(vs, vs.m_PlaceboLutFilename);
-    appPlayer->SetVideoSettings(vs);
-  }
   else if (settingId == SETTING_LIB_PLACEBO_LUT_TYPE)
   {
     vs.m_PlaceboLutType = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
     m_placeboOptions->params.lut_type =  (pl_lut_type) vs.m_PlaceboLutType;
 	m_placeboOptions->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut;
     appPlayer->SetVideoSettings(vs);
-  }
+    }
   else if (settingId == SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH)
   {
     vs.m_PlaceboAntiringingStrength = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
@@ -1824,6 +1817,25 @@ void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetti
 
     CServiceBroker::GetGUI()->GetWindowManager().ForceActivateWindow(WINDOW_SCREEN_CALIBRATION);
   }
+  else if (settingId == SETTING_LIB_PLACEBO_LOAD_LUT_FROM_FILE)
+  {
+    //auto settingsComponent = CServiceBroker::GetSettingsComponent();
+    //std::string fileName = settingsComponent->GetSettings()->GetString("videoscreen.cms3dlut");
+
+    std::string path;
+    if (!CGUIDialogFileBrowser::ShowAndGetFile("special://masterprofile/", ".3dlut", CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(55331), path))
+    {
+      return;
+    }
+
+    if (path.empty())
+      return;
+
+	vs.m_PlaceboLutFilename = path;
+    LoadLutFile(vs, path);
+    appPlayer->SetVideoSettings(vs);
+    SetupView();
+  }
   else if (settingId == SETTING_VIDEO_MAKE_DEFAULT)
   {
     Save();
@@ -2314,7 +2326,9 @@ void CGUIDialogVideoSettings::InitializeSettings()
     AddList(groupDither,   SETTING_LIB_PLACEBO_DITHER_TRANSFER,            55265, SettingLevel::Basic, videoSettings.m_PlaceboDitherTransfer, PlDitherTransferOptionFiller, 55265);
         
     AddList(groupLut,   SETTING_LIB_PLACEBO_LUT_TYPE,                        55330, SettingLevel::Basic, videoSettings.m_PlaceboLutType, PlLutTypeOptionFiller, 55330);
-    AddList(groupLut,   SETTING_LIB_PLACEBO_LUT_FILENAME,                    55332, SettingLevel::Basic, videoSettings.m_PlaceboLutFilename, PlLutOptionFiller, 55332);
+    AddButton(groupLut, SETTING_LIB_PLACEBO_LOAD_LUT_FROM_FILE,              55332, SettingLevel::Basic);
+    AddInfoLabelButton(groupLut, SETTING_LIB_PLACEBO_LUT_FILENAME_LABEL,     55331, SettingLevel::Basic, videoSettings.m_PlaceboLutFilename);
+
     AddSlider(groupMisc, SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH,            55300, SettingLevel::Basic, videoSettings.m_PlaceboAntiringingStrength, "{0:3.2f}", (float)0.0, (float)0.01, (float)1.0, 55300, usePopup);
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_CORRECT_SUBPIXEL_OFFSET,         55301, SettingLevel::Basic, videoSettings.m_PlaceboCorrectSubpixelOffset);
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_BUILTIN_SCALERS,         55302, SettingLevel::Basic, videoSettings.m_PlaceboDisableBuiltinScalers);
@@ -2536,26 +2550,6 @@ std::string CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(int i
     return "";
   else
     return alist[index+1].label;
-}
-
-void CGUIDialogVideoSettings::PlLutOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<StringSettingOption>& list, std::string& current)
-{
-  CFileItemList items;
-  auto& components = CServiceBroker::GetAppComponents();
-  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-  CVideoSettings vs = appPlayer->GetVideoSettings();
-
-    // list .cube files
-  std::string currentLut = vs.m_PlaceboLutFilename;
-  //if (!currentLut.empty())
-  //  currentLut = URIUtils::GetDirectory(currentLut);
-  XFILE::CDirectory::GetDirectory("special://masterprofile/", items, ".cube", DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_NO_FILE_INFO);
-
-  for (int i = 0; i < items.Size(); i++)
-  {
-    if(items[i]->IsType(".cube"))
-      list.emplace_back(items[i]->GetLabel(), items[i]->GetPath());
-  }
 }
 
 void CGUIDialogVideoSettings::PlLutTypeOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
