@@ -64,6 +64,8 @@ public:
 
   pl_queue queue=NULL;
 
+  static pl_custom_lut* ReadLut(const std::string& filename);
+  void UpdateVideoFilters() override;
   bool NeedBuffer(int idx) override;
   CRenderInfo GetRenderInfo() override;
   bool Supports(ESCALINGMETHOD method) const override;

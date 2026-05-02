@@ -25372,6 +25372,18 @@ msgctxt "#55329"
 msgid "Add libplacebo specific fields to the video settings database to store individual settings for each video file. Disabling will erase all new fields on next file play)"
 msgstr ""
 
+msgctxt "#55330"
+msgid "LUT type"
+msgstr ""
+
+msgctxt "#55331"
+msgid "File:"
+msgstr ""
+
+msgctxt "#55332"
+msgid "Load LUT from file (.3dlut)"
+msgstr ""
+
 
 
 
