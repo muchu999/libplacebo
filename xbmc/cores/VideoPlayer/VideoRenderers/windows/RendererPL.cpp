@@ -9,6 +9,7 @@
 #include "RendererPL.h"
 
 #include "DVDCodecs/Video/DVDVideoCodec.h"
+#include "settings/SettingsComponent.h"
 #include "VideoRenderers/BaseRenderer.h"
 #include "VideoRenderers/HwDecRender/DXVAEnumeratorHD.h"
 #include "WIN32Util.h"
@@ -16,11 +17,11 @@
 #include "utils/log.h"
 #include "utils/memcpy_sse2.h"
 #include "windowing/GraphicContext.h"
+#include "filesystem/File.h"
 
 #include <ppl.h>
 
-
-
+using namespace XFILE;
 using namespace Microsoft::WRL;
 
 CRendererPL::~CRendererPL()
@@ -39,6 +40,62 @@ CRendererPL::~CRendererPL()
     DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
 
 }
+
+void CRendererPL::UpdateVideoFilters()
+{
+  if (!m_outputShader)
+  {
+    m_outputShader = std::make_shared<COutputShader>();
+    //if (!m_outputShader->Create(m_cmsOn, m_useDithering, m_ditherDepth, m_toneMapping, m_toneMapMethod, m_useHLGtoPQ))
+    if (!m_outputShader->Create(false, false, m_ditherDepth, false, m_toneMapMethod, false))
+    {
+      CLog::LogF(LOGDEBUG, "unable to create output shader.");
+      m_outputShader.reset();
+    }
+    else
+    {
+      m_outputShader->SetFinalShader(true);
+      if (m_pLUTView && m_lutSize)
+        m_outputShader->SetLUT(m_lutSize, m_pLUTView.Get());
+    }
+  }
+}
+
+pl_custom_lut* CRendererPL::ReadLut(const std::string& fileName)
+{
+  pl_custom_lut* lut = nullptr;
+  pl_log_params log_param{};
+  log_param.log_cb = nullptr;;
+  log_param.log_level = PL_LOG_NONE;
+  pl_log plLog = pl_log_create(PL_API_VER, &log_param);
+
+
+  if (fileName.empty())
+    return nullptr;
+
+  CFile lutFile;
+  if (!lutFile.Open(fileName))
+  {
+    CLog::Log(LOGERROR, "{}: Could not open 3DLUT file: {}", __FUNCTION__, fileName);
+    return nullptr;
+  }
+
+  // Read entire file to memory
+  ULONGLONG fileSize = lutFile.GetLength();
+  if (fileSize > 0) 
+  {
+    BYTE* pBuffer = new BYTE[(size_t)fileSize];
+    UINT bytesRead = lutFile.Read(pBuffer, (UINT)fileSize);
+
+    //cl free... PL_API void pl_lut_free(struct pl_custom_lut **lut);
+    lut = pl_lut_parse_cube(plLog, (const char*)pBuffer, (size_t)bytesRead);
+    delete[] pBuffer;
+  }
+  lutFile.Close();
+  pl_log_destroy(&plLog);
+  return lut;
+}
+
 
 
 bool CRendererPL::NeedBuffer(int idx)

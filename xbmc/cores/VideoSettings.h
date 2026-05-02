@@ -236,6 +236,7 @@ public:
   int m_Orientation;
   int m_CenterMixLevel; // relative to metadata or default
   
+  std::string m_PlaceboLutFilename;
   float m_PlaceboDisplayPeakLuminance;
   int m_PlaceboTargetColorspaceHint;
   int m_PlaceboTargetColorspaceHintMode;
@@ -327,7 +328,8 @@ public:
   float m_PlaceboGamutConstantsSoftclipDesat;
   float m_PlaceboGamutConstantsSoftclipKnee;
 
-
+  pl_custom_lut* m_PlaceboLut = nullptr;
+  int m_PlaceboLutType;
   float m_PlaceboAntiringingStrength;
   bool m_PlaceboCorrectSubpixelOffset;
   bool m_PlaceboDisableBuiltinScalers;
@@ -342,13 +344,6 @@ public:
   bool m_PlaceboSkipAntiAliasing;
   bool m_PlaceboSkipCachingSingleFrame;
   
-  struct pl_options_deleter {
-    void operator()(pl_options* body) const {
-      pl_options_free(body);
-    }
-  };
-
-  //pl_options m_placeboOptions;
   PlOptionsWrapper *m_placeboOptions;
 };
 

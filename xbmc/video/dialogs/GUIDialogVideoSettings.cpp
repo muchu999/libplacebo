@@ -46,8 +46,8 @@
 #include "..\VideoPlayer\VideoRenderers\windows\RendererPL.h"
 
 #include <utility>
-#include <filesystem/File.h>
 #include <utils/URIUtils.h>
+using namespace XFILE;
 
 #define SETTING_VIDEO_VIEW_MODE           "video.viewmode"
 #define SETTING_VIDEO_ZOOM                "video.zoom"
@@ -95,10 +95,12 @@
 #define SETTING_LIB_PLACEBO_PLANE_UPSCALER                          "video.libplacebo.plane_upscaler"
 #define SETTING_LIB_PLACEBO_PLANE_DOWNSCALER                        "video.libplacebo.plane_dowsnscaler"
 #define SETTING_LIB_PLACEBO_FRAME_MIXER                             "video.libplacebo.frame_mixer"
-#define SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING                           "video.libplacebo.gammut_map_funtion"
-#define SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING                            "video.libplacebo.tone_map_funtion"
+#define SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING                 "video.libplacebo.gammut_map_funtion"
+#define SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING                  "video.libplacebo.tone_map_funtion"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY             "video.libplacebo.color_map_contrast_recovery"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS           "video.libplacebo.color_map_contrast_smoothness"
+#define SETTING_LIB_PLACEBO_LUT_FILENAME_LABEL                      "video.libplacebo.lut_filename_label"
+#define SETTING_LIB_PLACEBO_LOAD_LUT_FROM_FILE                      "video.libplacebo.load_lut_file"
 #define SETTING_LIB_PLACEBO_LOAD_PRESET_DEFAULT                     "video.libplacebo.load_preset_default"
 #define SETTING_LIB_PLACEBO_LOAD_PRESET_FAST                        "video.libplacebo.load_preset_fast"
 #define SETTING_LIB_PLACEBO_LOAD_PRESET_HIGH_QUALITY                "video.libplacebo.load_preset_high_quality"
@@ -166,6 +168,7 @@
 #define SETTING_LIB_PLACEBO_COLOR_MAP_SHOW_CLIPPING        "video.libplacebo.color_map_show_clipping"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_INTENT               "video.libplacebo.color_map_map_intent"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_FORCE_TONE_MAPPING_LUT "video.libplacebo.color_map_force_tone_mapping_lut"
+#define SETTING_LIB_PLACEBO_LUT_TYPE                            "video.libplacebo.lut_type"
 #define SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH                "video.libplacebo.antiringing_strength"
 #define SETTING_LIB_PLACEBO_CORRECT_SUBPIXEL_OFFSET             "video.libplacebo.correct_subpixel_offset"
 #define SETTING_LIB_PLACEBO_DISABLE_BUILTIN_SCALERS             "video.libplacebo.disable_builtin_scalers"
@@ -788,6 +791,13 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
     m_placeboOptions->color_map_params.force_tone_mapping_lut = vs.m_PlaceboColorMapForceToneMappingLut;
     appPlayer->SetVideoSettings(vs);
   }
+  else if (settingId == SETTING_LIB_PLACEBO_LUT_TYPE)
+  {
+    vs.m_PlaceboLutType = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+    m_placeboOptions->params.lut_type =  (pl_lut_type) vs.m_PlaceboLutType;
+	m_placeboOptions->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut;
+    appPlayer->SetVideoSettings(vs);
+    }
   else if (settingId == SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH)
   {
     vs.m_PlaceboAntiringingStrength = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
@@ -981,6 +991,22 @@ int CGUIDialogVideoSettings::getGamutMapIndexFromDescription(std::string descrip
   return -1;
 }
 
+int CGUIDialogVideoSettings::getLutTypeIndexFromDescription(std::string description)
+{
+  std::vector<IntegerSettingOption> alist;
+  int value;
+  const std::shared_ptr<const CSetting> asetting;
+  PlLutTypeOptionFiller(asetting, alist, value);
+  if (description == "")
+    return -1; 
+
+  for (int i = 0; i < alist.size(); i++)
+  {
+    if (alist[i].label == description)
+      return i;
+  }
+  return -1; // auto
+}
 
 int CGUIDialogVideoSettings::getDeinterlaceAlgoIndexFromDescription(std::string description)
 {
@@ -998,7 +1024,6 @@ int CGUIDialogVideoSettings::getDeinterlaceAlgoIndexFromDescription(std::string 
   }
   return -1;
 }
-
 
 void CGUIDialogVideoSettings::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings &vs)
 {
@@ -1095,6 +1120,7 @@ void CGUIDialogVideoSettings::UpdateVideoSettingsFromLibPLaceboParams(CVideoSett
   vs.m_PlaceboGamutConstantsSoftclipDesat = m_placeboOptions->color_map_params.gamut_constants.softclip_desat;
   vs.m_PlaceboGamutConstantsSoftclipKnee = m_placeboOptions->color_map_params.gamut_constants.softclip_knee;
 
+  vs.m_PlaceboLutType = m_placeboOptions->params.lut_type; //check logic with params.lut in case of reset
   vs.m_PlaceboAntiringingStrength = m_placeboOptions->params.antiringing_strength;
   vs.m_PlaceboCorrectSubpixelOffset = m_placeboOptions->params.correct_subpixel_offsets;
   vs.m_PlaceboDisableBuiltinScalers = m_placeboOptions->params.disable_builtin_scalers;
@@ -1116,6 +1142,8 @@ void CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(CVideoSett
 {
   pl_options m_placeboOptions = vs.m_placeboOptions->getPlOptions();
   
+  m_placeboOptions->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut;
+
   m_placeboOptions->params.color_adjustment = vs.m_PlaceboColorAdjustmentEnabled ? &m_placeboOptions->color_adjustment : NULL;
   m_placeboOptions->color_adjustment.brightness = vs.m_Brightness / 50.0 - 1.0;
   m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.0;
@@ -1208,6 +1236,7 @@ void CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(CVideoSett
   m_placeboOptions->color_map_params.gamut_constants.softclip_desat = vs.m_PlaceboGamutConstantsSoftclipDesat;
   m_placeboOptions->color_map_params.gamut_constants.softclip_knee = vs.m_PlaceboGamutConstantsSoftclipKnee;
 
+  m_placeboOptions->params.lut_type =  (pl_lut_type) vs.m_PlaceboLutType;
   m_placeboOptions->params.antiringing_strength = vs.m_PlaceboAntiringingStrength;
   m_placeboOptions->params.correct_subpixel_offsets = vs.m_PlaceboCorrectSubpixelOffset;
   m_placeboOptions->params.disable_builtin_scalers = vs.m_PlaceboDisableBuiltinScalers;
@@ -1237,6 +1266,7 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, c
   }
   else
   {
+    XMLUtils::SetString(lpNode, "placebolutfilename", vs.m_PlaceboLutFilename);
     XMLUtils::SetFloat(lpNode, "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
     XMLUtils::SetInt(lpNode, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
     XMLUtils::SetInt(lpNode, "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
@@ -1316,25 +1346,26 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, c
     XMLUtils::SetFloat(lpNode, "placebotoneconstantssplinecontrast", vs.m_PlaceboToneConstantSplineContrast);
 
     XMLUtils::SetBoolean(lpNode, "placebotoneconstantscolormapvisualizelut", vs.m_PlaceboColorMapVisualizeLut);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantscolormapvisualizerectx0", vs.m_PlaceboColorMapVisualizeRectX0);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantscolormapvisualizerectx1", vs.m_PlaceboColorMapVisualizeRectX1);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantscolormapvisualizerecty0", vs.m_PlaceboColorMapVisualizeRectY0);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantscolormapvisualizerecty1", vs.m_PlaceboColorMapVisualizeRectY1);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantscolormapvisualizehue", vs.m_PlaceboColorMapVisualizeHue);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantscolormapvisualizetheta", vs.m_PlaceboColorMapVisualizeTheta);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantscolorimetricgamma", vs.m_PlaceboGamutConstantsColorimetricGamma);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
-    XMLUtils::SetFloat(lpNode, "placebotoneconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantscolormapvisualizerectx0", vs.m_PlaceboColorMapVisualizeRectX0);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantscolormapvisualizerectx1", vs.m_PlaceboColorMapVisualizeRectX1);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantscolormapvisualizerecty0", vs.m_PlaceboColorMapVisualizeRectY0);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantscolormapvisualizerecty1", vs.m_PlaceboColorMapVisualizeRectY1);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantscolormapvisualizehue", vs.m_PlaceboColorMapVisualizeHue);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantscolormapvisualizetheta", vs.m_PlaceboColorMapVisualizeTheta);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantscolorimetricgamma", vs.m_PlaceboGamutConstantsColorimetricGamma);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
+    XMLUtils::SetFloat(lpNode,   "placebotoneconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
 
-    XMLUtils::SetFloat(lpNode, "placebotoantiringingstrength", vs.m_PlaceboAntiringingStrength);
+    XMLUtils::SetString(lpNode,  "placeboluttype", getLutTypeDescriptionFromIndex(vs.m_PlaceboLutType));
+    XMLUtils::SetFloat(lpNode,   "placebotoantiringingstrength", vs.m_PlaceboAntiringingStrength);
     XMLUtils::SetBoolean(lpNode, "placebotocorrectsubpixeloffset", vs.m_PlaceboCorrectSubpixelOffset);
     XMLUtils::SetBoolean(lpNode, "placebotodisablebuiltinscalers", vs.m_PlaceboDisableBuiltinScalers);
     XMLUtils::SetBoolean(lpNode, "placebotodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
     XMLUtils::SetBoolean(lpNode, "placebotodisablelinearscaling", vs.m_PlaceboDisableLinearScaling);
     XMLUtils::SetBoolean(lpNode, "placebotodynamicconstant", vs.m_PlaceboDynamicConstant);
 
-    XMLUtils::SetString(lpNode, "placebotoerrordiffusion", getDiffusionKernelDescriptionFromIndex(vs.m_PlaceboErrorDiffusion));
+    XMLUtils::SetString(lpNode,  "placebotoerrordiffusion", getDiffusionKernelDescriptionFromIndex(vs.m_PlaceboErrorDiffusion));
     XMLUtils::SetBoolean(lpNode, "placebotoforcedither", vs.m_PlaceboForceDither);
     XMLUtils::SetBoolean(lpNode, "placebotoforcelowbitdepthfbos", vs.m_PlaceboForceLowBitDepthFbos);
     XMLUtils::SetBoolean(lpNode, "placebotoignoreiccprofiles", vs.m_PlaceboIgnoreIccProfiles);
@@ -1349,7 +1380,7 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, c
 
 void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* settings)
 {
-
+    XMLUtils::SetString(settings, "placebolutfilename", vs.m_PlaceboLutFilename);
     XMLUtils::SetFloat(settings, "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
     XMLUtils::SetInt(settings, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
     XMLUtils::SetInt(settings, "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
@@ -1439,7 +1470,8 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, T
     XMLUtils::SetFloat(settings, "placebotoneconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
     XMLUtils::SetFloat(settings, "placebotoneconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
 
-    XMLUtils::SetFloat(settings, "placebotoantiringingstrength", vs.m_PlaceboAntiringingStrength);
+    XMLUtils::SetString(settings,  "placeboluttype", getLutTypeDescriptionFromIndex(vs.m_PlaceboLutType));
+    XMLUtils::SetFloat(settings,   "placebotoantiringingstrength", vs.m_PlaceboAntiringingStrength);
     XMLUtils::SetBoolean(settings, "placebotocorrectsubpixeloffset", vs.m_PlaceboCorrectSubpixelOffset);
     XMLUtils::SetBoolean(settings, "placebotodisablebuiltinscalers", vs.m_PlaceboDisableBuiltinScalers);
     XMLUtils::SetBoolean(settings, "placebotodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
@@ -1455,7 +1487,13 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, T
     XMLUtils::SetBoolean(settings, "placebotoskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
 }
 
+void CGUIDialogVideoSettings::LoadLutFile(CVideoSettings& vs, const std::string& path)
+{
+  vs.m_PlaceboLut = CRendererPL::ReadLut(path);
+  CLog::Log(LOGDEBUG, "CGUIDialogVideoSettings: loading LUT file from {}", path);
+  vs.m_placeboOptions->getPlOptions()->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut;
 
+}
 
 void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings &vs)
 {
@@ -1500,6 +1538,8 @@ void CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs)
 bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::string path)
 {
   CXBMCTinyXML xmlDoc;
+  std::string value;
+
   if (!xmlDoc.LoadFile(path))
   {
     CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo settings {}, Line {}\n{}", path, xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
@@ -1513,10 +1553,10 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::st
     return false;
   }
 
+  XMLUtils::GetString(lpNode, "placebolutfilename", vs.m_PlaceboLutFilename); LoadLutFile(vs, vs.m_PlaceboLutFilename); // depends on type
   XMLUtils::GetFloat(lpNode, "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
   XMLUtils::GetInt(lpNode, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
   XMLUtils::GetInt(lpNode, "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
-  std::string value;
 
   XMLUtils::GetBoolean(lpNode, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
   XMLUtils::GetFloat(lpNode, "saturation", vs.m_PlaceboSaturation);
@@ -1530,11 +1570,11 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::st
   XMLUtils::GetFloat(lpNode, "placebopeakdetectpercentile", vs.m_PlaceboPeakDetectPercentile);
   XMLUtils::GetFloat(lpNode, "placebopeakdetectblackcutoff", vs.m_PlaceboPeakDetectBlackCutoff);
   XMLUtils::GetBoolean(lpNode, "placebopeakdetectallowdelayed", vs.m_PlaceboPeakDetectAllowDelayed);
-  XMLUtils::GetString(lpNode, "placeboupscaler", value);
-  XMLUtils::GetString(lpNode, "placebodownscaler", value);
-  XMLUtils::GetString(lpNode, "placeboplaneupscaler", value);
-  XMLUtils::GetString(lpNode, "placeboplanedownscaler", value);
-  XMLUtils::GetString(lpNode, "placeboframemixer", value);
+  XMLUtils::GetString(lpNode, "placeboupscaler", value); vs.m_PlaceboUpscaler = getFilterIndexFromDescription(value);
+  XMLUtils::GetString(lpNode, "placebodownscaler", value); vs.m_PlaceboDownscaler = getFilterIndexFromDescription(value);
+  XMLUtils::GetString(lpNode, "placeboplaneupscaler", value); vs.m_PlaceboPlaneUpscaler = getFilterIndexFromDescription(value);
+  XMLUtils::GetString(lpNode, "placeboplanedownscaler", value); vs.m_PlaceboPlaneDownscaler = getFilterIndexFromDescription(value);
+  XMLUtils::GetString(lpNode, "placeboframemixer", value); vs.m_PlaceboFrameMixer = getFilterIndexFromDescription(value);
   XMLUtils::GetBoolean(lpNode, "placebodebandenabled", vs.m_PlaceboDebandEnabled);
   XMLUtils::GetFloat(lpNode, "placebodebandgrain", vs.m_PlaceboDebandGrain);
   XMLUtils::GetFloat(lpNode, "placebodebandgrainneutral0", vs.m_PlaceboDebandGrainNeutral0);
@@ -1547,8 +1587,8 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::st
   XMLUtils::GetFloat(lpNode, "placebocolormapcontrastrecovery", vs.m_PlaceboColorMapContrastRecovery);
   XMLUtils::GetFloat(lpNode, "placebocolormapcontrastsmoothness", vs.m_PlaceboColorMapContrastSmoothness);
   XMLUtils::GetBoolean(lpNode, "placebocolormapgamutexpansion", vs.m_PlaceboColorMapGamutExpansion);
-  XMLUtils::GetString(lpNode, "placebocolormapgamutmapping", value);
-  XMLUtils::GetString(lpNode, "placebocolormaptonemapping", value);
+  XMLUtils::GetString(lpNode, "placebocolormapgamutmapping", value); vs.m_PlaceboColorMapGamutMapping = getGamutMapIndexFromDescription(value);
+  XMLUtils::GetString(lpNode, "placebocolormaptonemapping", value); vs.m_PlaceboColorMapToneMapping = getToneMapIndexFromDescription(value);
   XMLUtils::GetBoolean(lpNode, "placebocolormapinversetonemapping", vs.m_PlaceboColorMapInverseToneMapping);
   XMLUtils::GetInt(lpNode, "placebocolormaplut3dsizei", vs.m_PlaceboColorMapLut3dSizeI);
   XMLUtils::GetInt(lpNode, "placebocolormaplut3dsizec", vs.m_PlaceboColorMapLut3dSizeC);
@@ -1556,24 +1596,24 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::st
   XMLUtils::GetBoolean(lpNode, "placebocolormaplut3dtricubic", vs.m_PlaceboColorMapLut3dTricubic);
   XMLUtils::GetInt(lpNode, "placebocolormaplutsize", vs.m_PlaceboColorMapLutSize);
   XMLUtils::GetBoolean(lpNode, "placebocolormapshowclipping", vs.m_PlaceboColorMapShowClipping);
-  XMLUtils::GetString(lpNode, "placebocolormapintent", value);
+  XMLUtils::GetString(lpNode, "placebocolormapintent", value); vs.m_PlaceboColorMapIntent = getColorMapIntentIndexFromDescription(value);
   XMLUtils::GetBoolean(lpNode, "placebocolormapforcetonemappinglut", vs.m_PlaceboColorMapForceToneMappingLut);
 
   XMLUtils::GetBoolean(lpNode, "placebodeinterlaceenabled", vs.m_PlaceboDeinterlaceEnabled);
-  XMLUtils::GetString(lpNode, "placebodeinterlacealgo", value);
+  XMLUtils::GetString(lpNode, "placebodeinterlacealgo", value); vs.m_PlaceboDeinterlaceAlgo = getDeinterlaceAlgoIndexFromDescription(value);
   XMLUtils::GetBoolean(lpNode, "placebodeinterlaceskipspatialcheck", vs.m_PlaceboDeinterlaceSkipSpatialCheck);
   XMLUtils::GetBoolean(lpNode, "placebodesigmoidenabled", vs.m_PlaceboSigmoidEnabled);
   XMLUtils::GetFloat(lpNode, "placebosoigmoidcenter", vs.m_PlaceboSigmoidCenter);
   XMLUtils::GetFloat(lpNode, "placebosigmoidslope", vs.m_PlaceboSigmoidSlope);
   XMLUtils::GetBoolean(lpNode, "placeboconeenabled", vs.m_PlaceboConeEnabled);
-  XMLUtils::GetString(lpNode, "placeboconecones", value);
+  XMLUtils::GetString(lpNode, "placeboconecones", value); vs.m_PlaceboConeCones = getConeConesIndexFromDescription(value);
   XMLUtils::GetFloat(lpNode, "placeboconestrength", vs.m_PlaceboConeStrength);
 
   XMLUtils::GetBoolean(lpNode, "placeboditherenabled", vs.m_PlaceboDitherEnabled);
-  XMLUtils::GetString(lpNode, "placebodithermethod", value);
+  XMLUtils::GetString(lpNode, "placebodithermethod", value); vs.m_PlaceboDitherMethod = getDitherMethodIndexFromDescription(value);
   XMLUtils::GetInt(lpNode, "placeboditherlutsize", vs.m_PlaceboDitherLutSize);
   XMLUtils::GetBoolean(lpNode, "placebodithertemporal", vs.m_PlaceboDitherTemporal);
-  XMLUtils::GetString(lpNode, "placebodithertransfer", value);
+  XMLUtils::GetString(lpNode, "placebodithertransfer", value); vs.m_PlaceboDitherTransfer = getDitherTransferIndexFromDescription(value);
 
   XMLUtils::GetFloat(lpNode, "placebotoneconstantsexposure", vs.m_PlaceboToneConstantExposure);
   XMLUtils::GetFloat(lpNode, "placebotoneconstantskneeadaptation", vs.m_PlaceboToneConstantKneeAdaptation);
@@ -1598,13 +1638,15 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::st
   XMLUtils::GetFloat(lpNode, "placebotoneconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
   XMLUtils::GetFloat(lpNode, "placebotoneconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
   XMLUtils::GetFloat(lpNode, "placebotoneconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
+  
+  XMLUtils::GetString(lpNode, "placeboluttype", value); vs.m_PlaceboLutType = getLutTypeIndexFromDescription(value); //params.lut will be updated in UpdateLibPLaceboParamsFromVideoSettings 
   XMLUtils::GetFloat(lpNode, "placebotoantiringingstrength", vs.m_PlaceboAntiringingStrength);
   XMLUtils::GetBoolean(lpNode, "placebotocorrectsubpixeloffset", vs.m_PlaceboCorrectSubpixelOffset);
   XMLUtils::GetBoolean(lpNode, "placebotodisablebuiltinscalers", vs.m_PlaceboDisableBuiltinScalers);
   XMLUtils::GetBoolean(lpNode, "placebotodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
   XMLUtils::GetBoolean(lpNode, "placebotodisablelinearscaling", vs.m_PlaceboDisableLinearScaling);
   XMLUtils::GetBoolean(lpNode, "placebotodynamicconstant", vs.m_PlaceboDynamicConstant);
-  XMLUtils::GetString(lpNode, "placebotoerrordiffusion", value);
+  XMLUtils::GetString(lpNode, "placebotoerrordiffusion", value); vs.m_PlaceboErrorDiffusion = getErrorDiffusionIndexFromDescription(value);
   XMLUtils::GetBoolean(lpNode, "placebotoforcedither", vs.m_PlaceboForceDither);
   XMLUtils::GetBoolean(lpNode, "placebotoforcelowbitdepthfbos", vs.m_PlaceboForceLowBitDepthFbos);
   XMLUtils::GetBoolean(lpNode, "placebotoignoreiccprofiles", vs.m_PlaceboIgnoreIccProfiles);
@@ -1619,6 +1661,7 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::st
 
 bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlNode* settings)
 {
+  std::string value;
   if (!settings)
     return false;
 
@@ -1626,109 +1669,113 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, const T
   const TiXmlElement* pElement = settings->FirstChildElement("defaultvideosettings");
   if (pElement)
   {
-  XMLUtils::GetFloat(pElement, "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
-  XMLUtils::GetInt(pElement, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
-  XMLUtils::GetInt(pElement, "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
-  std::string value;
+    XMLUtils::GetString(pElement, "placebolutfilename", vs.m_PlaceboLutFilename);  LoadLutFile(vs, vs.m_PlaceboLutFilename);
+    XMLUtils::GetFloat(pElement,  "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
+    XMLUtils::GetInt(pElement,    "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
+    XMLUtils::GetInt(pElement,    "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
 
-  XMLUtils::GetBoolean(pElement, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
-  XMLUtils::GetFloat(pElement, "saturation", vs.m_PlaceboSaturation);
-  XMLUtils::GetFloat(pElement, "hue", vs.m_PlaceboHue);
-  XMLUtils::GetFloat(pElement, "temperature", vs.m_PlaceboTemperature);
+    XMLUtils::GetBoolean(pElement, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
+    XMLUtils::GetFloat(pElement, "saturation", vs.m_PlaceboSaturation);
+    XMLUtils::GetFloat(pElement, "hue", vs.m_PlaceboHue);
+    XMLUtils::GetFloat(pElement, "temperature", vs.m_PlaceboTemperature);
 
-  XMLUtils::GetBoolean(pElement, "placebopeakdetectenabled", vs.m_PlaceboPeakDetectEnabled);
-  XMLUtils::GetFloat(pElement, "placebopeakdetectsmoothingperiod", vs.m_PlaceboPeakDetectSmoothingPeriod);
-  XMLUtils::GetFloat(pElement, "placebopeakdetectscenethresholdlow", vs.m_PlaceboPeakDetectSceneThresholdLow);
-  XMLUtils::GetFloat(pElement, "placebopeakdetectscenethresholdhigh", vs.m_PlaceboPeakDetectSceneThresholdHigh);
-  XMLUtils::GetFloat(pElement, "placebopeakdetectpercentile", vs.m_PlaceboPeakDetectPercentile);
-  XMLUtils::GetFloat(pElement, "placebopeakdetectblackcutoff", vs.m_PlaceboPeakDetectBlackCutoff);
-  XMLUtils::GetBoolean(pElement, "placebopeakdetectallowdelayed", vs.m_PlaceboPeakDetectAllowDelayed);
-  XMLUtils::GetString(pElement, "placeboupscaler", value);
-  XMLUtils::GetString(pElement, "placebodownscaler", value);
-  XMLUtils::GetString(pElement, "placeboplaneupscaler", value);
-  XMLUtils::GetString(pElement, "placeboplanedownscaler", value);
-  XMLUtils::GetString(pElement, "placeboframemixer", value);
-  XMLUtils::GetBoolean(pElement, "placebodebandenabled", vs.m_PlaceboDebandEnabled);
-  XMLUtils::GetFloat(pElement, "placebodebandgrain", vs.m_PlaceboDebandGrain);
-  XMLUtils::GetFloat(pElement, "placebodebandgrainneutral0", vs.m_PlaceboDebandGrainNeutral0);
-  XMLUtils::GetFloat(pElement, "placebodebandgrainneutral1", vs.m_PlaceboDebandGrainNeutral1);
-  XMLUtils::GetFloat(pElement, "placebodebandgrainneutral2", vs.m_PlaceboDebandGrainNeutral2);
-  XMLUtils::GetInt(pElement, "placebodebanditerations", vs.m_PlaceboDebandIterations);
-  XMLUtils::GetFloat(pElement, "placebodebandradius", vs.m_PlaceboDebandRadius);
-  XMLUtils::GetFloat(pElement, "placebodebandthreshold", vs.m_PlaceboDebandThreshold);
-  XMLUtils::GetBoolean(pElement, "placebocolormapenabled", vs.m_PlaceboColorMapEnabled);
-  XMLUtils::GetFloat(pElement, "placebocolormapcontrastrecovery", vs.m_PlaceboColorMapContrastRecovery);
-  XMLUtils::GetFloat(pElement, "placebocolormapcontrastsmoothness", vs.m_PlaceboColorMapContrastSmoothness);
-  XMLUtils::GetBoolean(pElement, "placebocolormapgamutexpansion", vs.m_PlaceboColorMapGamutExpansion);
-  XMLUtils::GetString(pElement, "placebocolormapgamutmapping", value);
-  XMLUtils::GetString(pElement, "placebocolormaptonemapping", value);
-  XMLUtils::GetBoolean(pElement, "placebocolormapinversetonemapping", vs.m_PlaceboColorMapInverseToneMapping);
-  XMLUtils::GetInt(pElement, "placebocolormaplut3dsizei", vs.m_PlaceboColorMapLut3dSizeI);
-  XMLUtils::GetInt(pElement, "placebocolormaplut3dsizec", vs.m_PlaceboColorMapLut3dSizeC);
-  XMLUtils::GetInt(pElement, "placebocolormaplut3dsizeh", vs.m_PlaceboColorMapLut3dSizeH);
-  XMLUtils::GetBoolean(pElement, "placebocolormaplut3dtricubic", vs.m_PlaceboColorMapLut3dTricubic);
-  XMLUtils::GetInt(pElement, "placebocolormaplutsize", vs.m_PlaceboColorMapLutSize);
-  XMLUtils::GetBoolean(pElement, "placebocolormapshowclipping", vs.m_PlaceboColorMapShowClipping);
-  XMLUtils::GetString(pElement, "placebocolormapintent", value);
-  XMLUtils::GetBoolean(pElement, "placebocolormapforcetonemappinglut", vs.m_PlaceboColorMapForceToneMappingLut);
+    XMLUtils::GetBoolean(pElement, "placebopeakdetectenabled", vs.m_PlaceboPeakDetectEnabled);
+    XMLUtils::GetFloat(pElement, "placebopeakdetectsmoothingperiod", vs.m_PlaceboPeakDetectSmoothingPeriod);
+    XMLUtils::GetFloat(pElement, "placebopeakdetectscenethresholdlow", vs.m_PlaceboPeakDetectSceneThresholdLow);
+    XMLUtils::GetFloat(pElement, "placebopeakdetectscenethresholdhigh", vs.m_PlaceboPeakDetectSceneThresholdHigh);
+    XMLUtils::GetFloat(pElement, "placebopeakdetectpercentile", vs.m_PlaceboPeakDetectPercentile);
+    XMLUtils::GetFloat(pElement, "placebopeakdetectblackcutoff", vs.m_PlaceboPeakDetectBlackCutoff);
+    XMLUtils::GetBoolean(pElement, "placebopeakdetectallowdelayed", vs.m_PlaceboPeakDetectAllowDelayed);
+    XMLUtils::GetString(pElement, "placeboupscaler", value); vs.m_PlaceboUpscaler = getFilterIndexFromDescription(value);
+    XMLUtils::GetString(pElement, "placebodownscaler", value); vs.m_PlaceboDownscaler = getFilterIndexFromDescription(value);
+    XMLUtils::GetString(pElement, "placeboplaneupscaler", value); vs.m_PlaceboPlaneUpscaler = getFilterIndexFromDescription(value);
+    XMLUtils::GetString(pElement, "placeboplanedownscaler", value); vs.m_PlaceboPlaneDownscaler = getFilterIndexFromDescription(value);
+    XMLUtils::GetString(pElement, "placeboframemixer", value); vs.m_PlaceboFrameMixer = getFilterIndexFromDescription(value);
+    XMLUtils::GetBoolean(pElement, "placebodebandenabled", vs.m_PlaceboDebandEnabled);
+    XMLUtils::GetFloat(pElement, "placebodebandgrain", vs.m_PlaceboDebandGrain);
+    XMLUtils::GetFloat(pElement, "placebodebandgrainneutral0", vs.m_PlaceboDebandGrainNeutral0);
+    XMLUtils::GetFloat(pElement, "placebodebandgrainneutral1", vs.m_PlaceboDebandGrainNeutral1);
+    XMLUtils::GetFloat(pElement, "placebodebandgrainneutral2", vs.m_PlaceboDebandGrainNeutral2);
+    XMLUtils::GetInt(pElement, "placebodebanditerations", vs.m_PlaceboDebandIterations);
+    XMLUtils::GetFloat(pElement, "placebodebandradius", vs.m_PlaceboDebandRadius);
+    XMLUtils::GetFloat(pElement, "placebodebandthreshold", vs.m_PlaceboDebandThreshold);
+    XMLUtils::GetBoolean(pElement, "placebocolormapenabled", vs.m_PlaceboColorMapEnabled);
+    XMLUtils::GetFloat(pElement, "placebocolormapcontrastrecovery", vs.m_PlaceboColorMapContrastRecovery);
+    XMLUtils::GetFloat(pElement, "placebocolormapcontrastsmoothness", vs.m_PlaceboColorMapContrastSmoothness);
+    XMLUtils::GetBoolean(pElement, "placebocolormapgamutexpansion", vs.m_PlaceboColorMapGamutExpansion);
+    XMLUtils::GetString(pElement, "placebocolormapgamutmapping", value); vs.m_PlaceboColorMapGamutMapping = getGamutMapIndexFromDescription(value);
+    XMLUtils::GetString(pElement, "placebocolormaptonemapping", value); vs.m_PlaceboColorMapToneMapping = getToneMapIndexFromDescription(value);
+    XMLUtils::GetBoolean(pElement, "placebocolormapinversetonemapping", vs.m_PlaceboColorMapInverseToneMapping);
+    XMLUtils::GetInt(pElement, "placebocolormaplut3dsizei", vs.m_PlaceboColorMapLut3dSizeI);
+    XMLUtils::GetInt(pElement, "placebocolormaplut3dsizec", vs.m_PlaceboColorMapLut3dSizeC);
+    XMLUtils::GetInt(pElement, "placebocolormaplut3dsizeh", vs.m_PlaceboColorMapLut3dSizeH);
+    XMLUtils::GetBoolean(pElement, "placebocolormaplut3dtricubic", vs.m_PlaceboColorMapLut3dTricubic);
+    XMLUtils::GetInt(pElement, "placebocolormaplutsize", vs.m_PlaceboColorMapLutSize);
+    XMLUtils::GetBoolean(pElement, "placebocolormapshowclipping", vs.m_PlaceboColorMapShowClipping);
+    XMLUtils::GetString(pElement, "placebocolormapintent", value); vs.m_PlaceboColorMapIntent = getColorMapIntentIndexFromDescription(value);
+    XMLUtils::GetBoolean(pElement, "placebocolormapforcetonemappinglut", vs.m_PlaceboColorMapForceToneMappingLut);
 
-  XMLUtils::GetBoolean(pElement, "placebodeinterlaceenabled", vs.m_PlaceboDeinterlaceEnabled);
-  XMLUtils::GetString(pElement, "placebodeinterlacealgo", value);
-  XMLUtils::GetBoolean(pElement, "placebodeinterlaceskipspatialcheck", vs.m_PlaceboDeinterlaceSkipSpatialCheck);
-  XMLUtils::GetBoolean(pElement, "placebodesigmoidenabled", vs.m_PlaceboSigmoidEnabled);
-  XMLUtils::GetFloat(pElement, "placebosoigmoidcenter", vs.m_PlaceboSigmoidCenter);
-  XMLUtils::GetFloat(pElement, "placebosigmoidslope", vs.m_PlaceboSigmoidSlope);
-  XMLUtils::GetBoolean(pElement, "placeboconeenabled", vs.m_PlaceboConeEnabled);
-  XMLUtils::GetString(pElement, "placeboconecones", value);
-  XMLUtils::GetFloat(pElement, "placeboconestrength", vs.m_PlaceboConeStrength);
+    XMLUtils::GetBoolean(pElement, "placebodeinterlaceenabled", vs.m_PlaceboDeinterlaceEnabled);
+    XMLUtils::GetString(pElement, "placebodeinterlacealgo", value); vs.m_PlaceboDeinterlaceAlgo = getDeinterlaceAlgoIndexFromDescription(value);
+    XMLUtils::GetBoolean(pElement, "placebodeinterlaceskipspatialcheck", vs.m_PlaceboDeinterlaceSkipSpatialCheck);
+    XMLUtils::GetBoolean(pElement, "placebodesigmoidenabled", vs.m_PlaceboSigmoidEnabled);
+    XMLUtils::GetFloat(pElement, "placebosoigmoidcenter", vs.m_PlaceboSigmoidCenter);
+    XMLUtils::GetFloat(pElement, "placebosigmoidslope", vs.m_PlaceboSigmoidSlope);
+    XMLUtils::GetBoolean(pElement, "placeboconeenabled", vs.m_PlaceboConeEnabled);
+    XMLUtils::GetString(pElement, "placeboconecones", value); vs.m_PlaceboConeCones = getConeConesIndexFromDescription(value);
+    XMLUtils::GetFloat(pElement, "placeboconestrength", vs.m_PlaceboConeStrength);
 
-  XMLUtils::GetBoolean(pElement, "placeboditherenabled", vs.m_PlaceboDitherEnabled);
-  XMLUtils::GetString(pElement, "placebodithermethod", value);
-  XMLUtils::GetInt(pElement, "placeboditherlutsize", vs.m_PlaceboDitherLutSize);
-  XMLUtils::GetBoolean(pElement, "placebodithertemporal", vs.m_PlaceboDitherTemporal);
-  XMLUtils::GetString(pElement, "placebodithertransfer", value);
+    XMLUtils::GetBoolean(pElement, "placeboditherenabled", vs.m_PlaceboDitherEnabled);
+    XMLUtils::GetString(pElement, "placebodithermethod", value); vs.m_PlaceboDitherMethod = getDitherMethodIndexFromDescription(value);
+    XMLUtils::GetInt(pElement, "placeboditherlutsize", vs.m_PlaceboDitherLutSize);
+    XMLUtils::GetBoolean(pElement, "placebodithertemporal", vs.m_PlaceboDitherTemporal);
+    XMLUtils::GetString(pElement, "placebodithertransfer", value); vs.m_PlaceboDitherTransfer = getDitherTransferIndexFromDescription(value);
 
-  XMLUtils::GetFloat(pElement, "placebotoneconstantsexposure", vs.m_PlaceboToneConstantExposure);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantskneeadaptation", vs.m_PlaceboToneConstantKneeAdaptation);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantskneedefault", vs.m_PlaceboToneConstantKneeDefault);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantskneemaximum", vs.m_PlaceboToneConstantKneeMaximum);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantskneeminimum", vs.m_PlaceboToneConstantKneeMinimum);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantskneeoffset", vs.m_PlaceboToneConstantKneeOffset);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantslinearknee", vs.m_PlaceboToneConstantLinearKnee);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantsreinhardcontrast", vs.m_PlaceboToneConstantReinhardContrast);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantsslopeoffset", vs.m_PlaceboToneConstantSlopeOffset);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantsslopetuning", vs.m_PlaceboToneConstantSlopeTuning);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantssplinecontrast", vs.m_PlaceboToneConstantSplineContrast);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantsexposure", vs.m_PlaceboToneConstantExposure);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantskneeadaptation", vs.m_PlaceboToneConstantKneeAdaptation);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantskneedefault", vs.m_PlaceboToneConstantKneeDefault);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantskneemaximum", vs.m_PlaceboToneConstantKneeMaximum);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantskneeminimum", vs.m_PlaceboToneConstantKneeMinimum);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantskneeoffset", vs.m_PlaceboToneConstantKneeOffset);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantslinearknee", vs.m_PlaceboToneConstantLinearKnee);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantsreinhardcontrast", vs.m_PlaceboToneConstantReinhardContrast);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantsslopeoffset", vs.m_PlaceboToneConstantSlopeOffset);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantsslopetuning", vs.m_PlaceboToneConstantSlopeTuning);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantssplinecontrast", vs.m_PlaceboToneConstantSplineContrast);
 
-  XMLUtils::GetBoolean(pElement, "placebotoneconstantscolormapvisualizelut", vs.m_PlaceboColorMapVisualizeLut);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizerectx0", vs.m_PlaceboColorMapVisualizeRectX0);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizerectx1", vs.m_PlaceboColorMapVisualizeRectX1);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizerecty0", vs.m_PlaceboColorMapVisualizeRectY0);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizerecty1", vs.m_PlaceboColorMapVisualizeRectY1);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizehue", vs.m_PlaceboColorMapVisualizeHue);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizetheta", vs.m_PlaceboColorMapVisualizeTheta);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantscolorimetricgamma", vs.m_PlaceboGamutConstantsColorimetricGamma);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
-  XMLUtils::GetFloat(pElement, "placebotoantiringingstrength", vs.m_PlaceboAntiringingStrength);
-  XMLUtils::GetBoolean(pElement, "placebotocorrectsubpixeloffset", vs.m_PlaceboCorrectSubpixelOffset);
-  XMLUtils::GetBoolean(pElement, "placebotodisablebuiltinscalers", vs.m_PlaceboDisableBuiltinScalers);
-  XMLUtils::GetBoolean(pElement, "placebotodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
-  XMLUtils::GetBoolean(pElement, "placebotodisablelinearscaling", vs.m_PlaceboDisableLinearScaling);
-  XMLUtils::GetBoolean(pElement, "placebotodynamicconstant", vs.m_PlaceboDynamicConstant);
-  XMLUtils::GetString(pElement, "placebotoerrordiffusion", value);
-  XMLUtils::GetBoolean(pElement, "placebotoforcedither", vs.m_PlaceboForceDither);
-  XMLUtils::GetBoolean(pElement, "placebotoforcelowbitdepthfbos", vs.m_PlaceboForceLowBitDepthFbos);
-  XMLUtils::GetBoolean(pElement, "placebotoignoreiccprofiles", vs.m_PlaceboIgnoreIccProfiles);
-  XMLUtils::GetBoolean(pElement, "placebotopreservemixingcache", vs.m_PlaceboPreserveMixingCache);
-  XMLUtils::GetBoolean(pElement, "placebotoskipantialiasing", vs.m_PlaceboSkipAntiAliasing);
-  XMLUtils::GetBoolean(pElement, "placebotoskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
+    XMLUtils::GetBoolean(pElement, "placebotoneconstantscolormapvisualizelut", vs.m_PlaceboColorMapVisualizeLut);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizerectx0", vs.m_PlaceboColorMapVisualizeRectX0);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizerectx1", vs.m_PlaceboColorMapVisualizeRectX1);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizerecty0", vs.m_PlaceboColorMapVisualizeRectY0);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizerecty1", vs.m_PlaceboColorMapVisualizeRectY1);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizehue", vs.m_PlaceboColorMapVisualizeHue);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantscolormapvisualizetheta", vs.m_PlaceboColorMapVisualizeTheta);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantscolorimetricgamma", vs.m_PlaceboGamutConstantsColorimetricGamma);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
+    XMLUtils::GetFloat(pElement, "placebotoneconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
 
-  UpdateLibPLaceboParamsFromVideoSettings(vs);
-  return true;
+    XMLUtils::GetString(pElement, "placeboluttype", value); vs.m_PlaceboLutType = getLutTypeIndexFromDescription(value); //params.lut will be updated in UpdateLibPLaceboParamsFromVideoSettings 
+    XMLUtils::GetFloat(pElement, "placebotoantiringingstrength", vs.m_PlaceboAntiringingStrength);
+    XMLUtils::GetBoolean(pElement, "placebotocorrectsubpixeloffset", vs.m_PlaceboCorrectSubpixelOffset);
+    XMLUtils::GetBoolean(pElement, "placebotodisablebuiltinscalers", vs.m_PlaceboDisableBuiltinScalers);
+    XMLUtils::GetBoolean(pElement, "placebotodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
+    XMLUtils::GetBoolean(pElement, "placebotodisablelinearscaling", vs.m_PlaceboDisableLinearScaling);
+    XMLUtils::GetBoolean(pElement, "placebotodynamicconstant", vs.m_PlaceboDynamicConstant);
+    XMLUtils::GetString(pElement, "placebotoerrordiffusion", value); vs.m_PlaceboErrorDiffusion = getErrorDiffusionIndexFromDescription(value);
+    XMLUtils::GetBoolean(pElement, "placebotoforcedither", vs.m_PlaceboForceDither);
+    XMLUtils::GetBoolean(pElement, "placebotoforcelowbitdepthfbos", vs.m_PlaceboForceLowBitDepthFbos);
+    XMLUtils::GetBoolean(pElement, "placebotoignoreiccprofiles", vs.m_PlaceboIgnoreIccProfiles);
+    XMLUtils::GetBoolean(pElement, "placebotopreservemixingcache", vs.m_PlaceboPreserveMixingCache);
+    XMLUtils::GetBoolean(pElement, "placebotoskipantialiasing", vs.m_PlaceboSkipAntiAliasing);
+    XMLUtils::GetBoolean(pElement, "placebotoskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
+
+    UpdateLibPLaceboParamsFromVideoSettings(vs);
+    return true;
   }
 }
+
+
 
 void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetting>& setting)
 {
@@ -1770,7 +1817,25 @@ void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetti
 
     CServiceBroker::GetGUI()->GetWindowManager().ForceActivateWindow(WINDOW_SCREEN_CALIBRATION);
   }
-  //! @todo implement
+  else if (settingId == SETTING_LIB_PLACEBO_LOAD_LUT_FROM_FILE)
+  {
+    //auto settingsComponent = CServiceBroker::GetSettingsComponent();
+    //std::string fileName = settingsComponent->GetSettings()->GetString("videoscreen.cms3dlut");
+
+    std::string path;
+    if (!CGUIDialogFileBrowser::ShowAndGetFile("special://masterprofile/", ".3dlut", CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(55331), path))
+    {
+      return;
+    }
+
+    if (path.empty())
+      return;
+
+	vs.m_PlaceboLutFilename = path;
+    LoadLutFile(vs, path);
+    appPlayer->SetVideoSettings(vs);
+    SetupView();
+  }
   else if (settingId == SETTING_VIDEO_MAKE_DEFAULT)
   {
     Save();
@@ -1900,6 +1965,35 @@ void CGUIDialogVideoSettings::SetupView()
   SET_CONTROL_LABEL(CONTROL_SETTINGS_CANCEL_BUTTON, 15067);
 }
 
+
+bool CGUIDialogVideoSettings::OnMessage(CGUIMessage& message)
+{
+  switch (message.GetMessage())
+  {
+    case GUI_MSG_WINDOW_DEINIT:
+    {
+      CServiceBroker::GetSettingsComponent()->GetSettings()->SetInt("lookandfeel.skinzoom", previousSkinZoom);
+      {
+		//cl kludge, will not reset default (stored in file) if kodi crashes before this
+        CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+        CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+      }
+      //return true;
+    }
+  }
+  return CGUIDialogSettingsBase::OnMessage(message);
+}
+
+bool CGUIDialogVideoSettings::OnBack(int actionID)
+{
+ //CServiceBroker::GetSettingsComponent()->GetSettings()->SetInt("lookandfeel.skinzoom", previousSkinZoom);
+ // {
+ //   CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+ //   CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+ // }
+  return CGUIDialogSettingsBase::OnBack(actionID);
+}
+
 //-------------------------------------------------------
 // 
 // 
@@ -1908,7 +2002,17 @@ void CGUIDialogVideoSettings::SetupView()
 void CGUIDialogVideoSettings::InitializeSettings()
 {
   CGUIDialogSettingsManualBase::InitializeSettings();
+
   int renderMethod = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_RENDERMETHOD);
+
+  previousSkinZoom = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt("lookandfeel.skinzoom");
+  CServiceBroker::GetSettingsComponent()->GetSettings()->SetInt("lookandfeel.skinzoom", -60);
+  {
+    CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+    CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+  }
+
+  /////////////////
 
   const std::shared_ptr<CSettingCategory> category = AddCategory("videosettings", -1);
   if (category == NULL)
@@ -1936,6 +2040,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
   CreateGroup(groupDither, category);
   CreateGroup(groupCone, category);
   CreateGroup(groupDeinterlace, category);
+  CreateGroup(groupLut, category);
   CreateGroup(groupMisc, category);
 
 
@@ -2088,6 +2193,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
   if (renderMethod == RENDER_METHOD_LIBPLACEBO)
   {
+
     AddButton(groupLpFile, SETTING_LIB_PLACEBO_SAVE_TO_FILE, 55323, SettingLevel::Basic);
     AddButton(groupLpFile, SETTING_LIB_PLACEBO_LOAD_FROM_FILE,   55322, SettingLevel::Basic);
 
@@ -2096,7 +2202,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
     AddButton(groupLpReset, SETTING_LIB_PLACEBO_LOAD_PRESET_HIGH_QUALITY, 55233, SettingLevel::Basic);
 
     // Render Options
-    AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE, 55313, SettingLevel::Basic, videoSettings.m_PlaceboDisplayPeakLuminance, "{0:5.0f}", (float)1.0, (float)1, (float)10000.0, 55313, usePopup);
+    AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE, 55313, SettingLevel::Basic, videoSettings.m_PlaceboDisplayPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55313, usePopup);
     entries.clear();
     entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));
     entries.emplace_back(55316, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::NO));
@@ -2219,6 +2325,10 @@ void CGUIDialogVideoSettings::InitializeSettings()
     AddToggle(groupDither, SETTING_LIB_PLACEBO_DITHER_TEMPORAL,            55264, SettingLevel::Basic, videoSettings.m_PlaceboDitherTemporal);
     AddList(groupDither,   SETTING_LIB_PLACEBO_DITHER_TRANSFER,            55265, SettingLevel::Basic, videoSettings.m_PlaceboDitherTransfer, PlDitherTransferOptionFiller, 55265);
         
+    AddList(groupLut,   SETTING_LIB_PLACEBO_LUT_TYPE,                        55330, SettingLevel::Basic, videoSettings.m_PlaceboLutType, PlLutTypeOptionFiller, 55330);
+    AddButton(groupLut, SETTING_LIB_PLACEBO_LOAD_LUT_FROM_FILE,              55332, SettingLevel::Basic);
+    AddInfoLabelButton(groupLut, SETTING_LIB_PLACEBO_LUT_FILENAME_LABEL,     55331, SettingLevel::Basic, videoSettings.m_PlaceboLutFilename);
+
     AddSlider(groupMisc, SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH,            55300, SettingLevel::Basic, videoSettings.m_PlaceboAntiringingStrength, "{0:3.2f}", (float)0.0, (float)0.01, (float)1.0, 55300, usePopup);
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_CORRECT_SUBPIXEL_OFFSET,         55301, SettingLevel::Basic, videoSettings.m_PlaceboCorrectSubpixelOffset);
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_BUILTIN_SCALERS,         55302, SettingLevel::Basic, videoSettings.m_PlaceboDisableBuiltinScalers);
@@ -2382,6 +2492,23 @@ std::string CGUIDialogVideoSettings::getDitherMethodDescriptionFromIndex(int ind
     return alist[index].label;
 }
 
+std::string CGUIDialogVideoSettings::getLutTypeDescriptionFromIndex(int index)
+{
+  std::vector<IntegerSettingOption> alist;
+  int value;
+  const std::shared_ptr<const CSetting> asetting;
+
+  PlLutTypeOptionFiller(asetting, alist, value);
+
+  if (index == -1)
+    return "disabled";
+  if (index < 0 || index >= alist.size())
+    return "disabled";
+  else
+    return alist[index].label;
+}
+
+
 std::string CGUIDialogVideoSettings::getDeinterlaceAlgoDescriptionFromIndex(int index)
 {
   std::vector<IntegerSettingOption> alist;
@@ -2425,6 +2552,14 @@ std::string CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(int i
     return alist[index+1].label;
 }
 
+void CGUIDialogVideoSettings::PlLutTypeOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
+{
+  list.emplace_back("Disabled", -1);
+  list.emplace_back("Auto (unknown)", PL_LUT_UNKNOWN);
+  list.emplace_back("Raw RGB (native)", PL_LUT_NATIVE);
+  list.emplace_back("Linear RGB (normalized)", PL_LUT_NORMALIZED);
+  list.emplace_back("Gamut conversion (native)", PL_LUT_CONVERSION);
+}
 
 void CGUIDialogVideoSettings::PlDiffusionKernelOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
   {

@@ -30,6 +30,7 @@ public:
   static std::string getDitherMethodDescriptionFromIndex(int index);
   static std::string getDitherTransferDescriptionFromIndex(int index);
   static std::string getDiffusionKernelDescriptionFromIndex(int index);
+  static std::string getLutTypeDescriptionFromIndex(int index);
   static std::string getDeinterlaceAlgoDescriptionFromIndex(int index);
 
   static int getErrorDiffusionIndexFromDescription(std::string description);
@@ -40,6 +41,7 @@ public:
   static int getFilterIndexFromDescription(std::string description);
   static int getToneMapIndexFromDescription(std::string description);
   static int getGamutMapIndexFromDescription(std::string description);
+  static int getLutTypeIndexFromDescription(std::string description);
   static int getDeinterlaceAlgoIndexFromDescription(std::string description);
   static void UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings &vs);
   static void UpdateLibPLaceboParamsFromVideoSettings(CVideoSettings &vs);
@@ -48,6 +50,7 @@ public:
   static bool LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlNode* settings);
   static void SaveLibplaceboSettings(const CVideoSettings& vs, std::string path);
   static void SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* settings);
+  static void LoadLutFile(CVideoSettings& vs, const std::string& path);
 
 protected:
   // implementations of ISettingCallback
@@ -64,7 +67,8 @@ protected:
   static void PlConeConesOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void PlDitherTransferOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void PlDitherMethodOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
-  static void PlColorMapIntentOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
+  static void PlColorMapIntentOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current); 
+  static void PlLutTypeOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void PlDiffusionKernelOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
 
   
@@ -86,6 +90,11 @@ protected:
   bool AllowResettingSettings() const override { return false; }
   bool Save() override;
   void SetupView() override;
+
+  bool OnMessage(CGUIMessage& message) override;
+  bool OnBack(int actionID) override;
+
+  int previousSkinZoom = 0;
 
   // specialization of CGUIDialogSettingsManualBase
   void InitializeSettings() override;

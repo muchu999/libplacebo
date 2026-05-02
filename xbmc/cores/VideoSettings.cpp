@@ -79,6 +79,8 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboDisplayPeakLuminance = other.m_PlaceboDisplayPeakLuminance;
   m_PlaceboTargetColorspaceHint = other.m_PlaceboTargetColorspaceHint;
   m_PlaceboTargetColorspaceHintMode = other.m_PlaceboTargetColorspaceHintMode;
+  m_PlaceboLutFilename = other.m_PlaceboLutFilename;
+  m_PlaceboLut = other.m_PlaceboLut;
   
   // Shallow copy and deep copy of m_placeboOptions content
   if (m_placeboOptions && other.m_placeboOptions)
@@ -129,6 +131,9 @@ CVideoSettings::CVideoSettings()
   m_PlaceboDisplayPeakLuminance = 0;
   m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::YES;
   m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC;
+  m_PlaceboLutFilename = "";
+  m_PlaceboLut = nullptr;
+
 
   // m_placeboOptions2 already reset in constructor, just update
   CGUIDialogVideoSettings::UpdateVideoSettingsFromLibPLaceboParams(*this);
@@ -171,6 +176,7 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   if (m_PlaceboDisplayPeakLuminance != right.m_PlaceboDisplayPeakLuminance) return true;
   if (m_PlaceboTargetColorspaceHint != right.m_PlaceboTargetColorspaceHint) return true;
   if (m_PlaceboTargetColorspaceHintMode != right.m_PlaceboTargetColorspaceHintMode) return true;
+  if (m_PlaceboLutFilename != right.m_PlaceboLutFilename) return true;
 
   if (m_PlaceboColorAdjustmentEnabled != right.m_PlaceboColorAdjustmentEnabled) return true;
   if (m_PlaceboSaturation != right.m_PlaceboSaturation) return true;
@@ -259,6 +265,7 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   if (m_PlaceboColorMapVisualizeHue != right.m_PlaceboColorMapVisualizeHue) return true;
   if (m_PlaceboColorMapVisualizeTheta != right.m_PlaceboColorMapVisualizeTheta) return true;
   
+  if (m_PlaceboLutType != right.m_PlaceboLutType) return true;
   if (m_PlaceboAntiringingStrength != right.m_PlaceboAntiringingStrength) return true;
   if (m_PlaceboCorrectSubpixelOffset != right.m_PlaceboCorrectSubpixelOffset) return true;
   if (m_PlaceboDisableBuiltinScalers != right.m_PlaceboDisableBuiltinScalers) return true;
