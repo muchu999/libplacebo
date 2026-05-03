@@ -5009,6 +5009,9 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
       for(int i = 0; i < numColumns; i++)
       {
         // cl fix at(col)
+        if ((str = a->records[i]->at(col).get_asString()) == "SubtitleVerticalPosition") { list.push_back(str); continue; }
+        if ((str = a->records[i]->at(col).get_asString()) == "PlaceboSkinZoom") { list.push_back(str); continue; }
+        if ((str = a->records[i]->at(col).get_asString()) == "PlaceboLutFilename") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboDisplayPeakLuminance") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHint") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHintMode") { list.push_back(str); continue; }
@@ -5095,6 +5098,7 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
         if (a->records[i]->at(col).get_asString() == "PlaceboColorMapVisualizeHue") { list.push_back(str); continue; }
         if (a->records[i]->at(col).get_asString() == "PlaceboColorMapVisualizeTheta") { list.push_back(str); continue; }
 
+        if (a->records[i]->at(col).get_asString() == "PlaceboLutType") { list.push_back(str); continue; ; }
         if (a->records[i]->at(col).get_asString() == "PlaceboAntiringingStrength") { list.push_back(str); continue; ; }
         if (a->records[i]->at(col).get_asString() == "PlaceboCorrectSubpixelOffset") { list.push_back(str); continue; }
         if (a->records[i]->at(col).get_asString() == "PlaceboDisableBuiltinScalers") { list.push_back(str); continue; }
@@ -5125,6 +5129,8 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
 }
 
 static std::vector<std::string> LibplaceboColumnslist = { 
+								   "SubtitleVerticalPosition",
+                                   "PlaceboSkinZoom",
                                    "PlaceboLutFilename",
                                    "PlaceboDisplayPeakLuminance",
                                    "PlaceboTargetColorspaceHint",
@@ -5265,29 +5271,31 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
       CVideoSettings vs; //get defaults
       for (int i = 0; i < list.size(); i++)
       {
-        if (list[i] == "PlaceboLutFilename") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboLutFilename               VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboLutFilename.c_str()); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboDisplayPeakLuminance") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisplayPeakLuminance      float NOT NULL DEFAULT   %f", vs.m_PlaceboDisplayPeakLuminance); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboTargetColorspaceHint") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHint      integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHint); m_pDS->exec(strSQL2); }
+        if (list[i] == "SubtitleVerticalPosition") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN SubtitleVerticalPosition                integer NOT NULL DEFAULT %i", vs.m_subtitleVerticalPosition); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboSkinZoom") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSkinZoom                                  integer NOT NULL DEFAULT %i", vs.m_PlaceboSkinZoom); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboLutFilename") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboLutFilename                            VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboLutFilename.c_str()); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboDisplayPeakLuminance") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisplayPeakLuminance          float NOT NULL DEFAULT   %f", vs.m_PlaceboDisplayPeakLuminance); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboTargetColorspaceHint") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHint          integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHint); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboTargetColorspaceHintMode") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHintMode  integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHintMode); m_pDS->exec(strSQL2); }
 
-        if (list[i] == "PlaceboColorAdjustmentEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorAdjustmentEnabled      bool NOT NULL DEFAULT  %i", vs.m_PlaceboColorAdjustmentEnabled); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboSaturation") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSaturation                  float NOT NULL DEFAULT %f", vs.m_PlaceboSaturation); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboHue") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboHue                         float NOT NULL DEFAULT %f", vs.m_PlaceboHue); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboTemperature") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTemperature                 float NOT NULL DEFAULT %f", vs.m_PlaceboTemperature); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboColorAdjustmentEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorAdjustmentEnabled bool NOT NULL DEFAULT  %i", vs.m_PlaceboColorAdjustmentEnabled); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboSaturation") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSaturation                         float NOT NULL DEFAULT %f", vs.m_PlaceboSaturation); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboHue") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboHue                                       float NOT NULL DEFAULT %f", vs.m_PlaceboHue); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboTemperature") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTemperature                       float NOT NULL DEFAULT %f", vs.m_PlaceboTemperature); m_pDS->exec(strSQL2); }
 
-        if (list[i] == "PlaceboPeakDetectEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectEnabled             bool NOT NULL DEFAULT  %i", vs.m_PlaceboPeakDetectEnabled); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboPeakDetectSmoothingPeriod") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectSmoothingPeriod     float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectSmoothingPeriod); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboPeakDetectEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectEnabled                       bool NOT NULL DEFAULT  %i", vs.m_PlaceboPeakDetectEnabled); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboPeakDetectSmoothingPeriod") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectSmoothingPeriod       float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectSmoothingPeriod); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboPeakDetectSceneThresholdLow") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectSceneThresholdLow   float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectSceneThresholdLow); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboPeakDetectSceneThresholdHigh") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectSceneThresholdHigh  float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectSceneThresholdHigh); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboPeakDetectPercentile") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectPercentile          float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectPercentile); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboPeakDetectBlackCutoff") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectBlackCutoff         float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectBlackCutoff); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboPeakDetectAllowDelayed") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectAllowDelayed        bool NOT NULL DEFAULT  %i", vs.m_PlaceboPeakDetectAllowDelayed); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboPeakDetectSceneThresholdHigh") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectSceneThresholdHigh float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectSceneThresholdHigh); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboPeakDetectPercentile") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectPercentile                 float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectPercentile); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboPeakDetectBlackCutoff") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectBlackCutoff               float NOT NULL DEFAULT %f", vs.m_PlaceboPeakDetectBlackCutoff); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboPeakDetectAllowDelayed") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPeakDetectAllowDelayed             bool NOT NULL DEFAULT  %i", vs.m_PlaceboPeakDetectAllowDelayed); m_pDS->exec(strSQL2); }
 
-        if (list[i] == "PlaceboUpscaler") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboUpscaler        VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboUpscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboUpscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboUpscaler]->description); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboDownscaler") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDownscaler      VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboDownscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboDownscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboDownscaler]->description); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboPlaneUpscaler") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPlaneUpscaler   VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboPlaneUpscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboPlaneUpscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboPlaneUpscaler]->description); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboUpscaler") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboUpscaler               VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboUpscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboUpscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboUpscaler]->description); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboDownscaler") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDownscaler           VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboDownscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboDownscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboDownscaler]->description); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboPlaneUpscaler") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPlaneUpscaler     VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboPlaneUpscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboPlaneUpscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboPlaneUpscaler]->description); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboPlaneDownscaler") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboPlaneDownscaler VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboPlaneDownscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboPlaneDownscaler]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboPlaneDownscaler]->description); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboFrameMixer") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboFrameMixer      VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboFrameMixer == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboFrameMixer]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboFrameMixer]->description); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboFrameMixer") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboFrameMixer           VARCHAR(255) NOT NULL DEFAULT '%s'", vs.m_PlaceboFrameMixer == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboFrameMixer]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboFrameMixer]->description); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboDebandEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandEnabled       bool NOT NULL DEFAULT     %i", vs.m_PlaceboDebandEnabled); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboDebandGrain") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandGrain         float NOT NULL DEFAULT    %f", vs.m_PlaceboDebandGrain); m_pDS->exec(strSQL2); }
@@ -5442,21 +5450,23 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
       settings.m_SubtitleStream = m_pDS->fv("SubtitleStream").get_asInt();
       settings.m_ViewMode = m_pDS->fv("ViewMode").get_asInt();
       settings.m_ResumeTime = m_pDS->fv("ResumeTime").get_asInt();
-      settings.m_InterlaceMethod = (EINTERLACEMETHOD)m_pDS->fv("Deinterlace").get_asInt();
+      settings.m_InterlaceMethod = (EINTERLACEMETHOD)m_pDS->fv("DeinterlaceMode").get_asInt();
       settings.m_VolumeAmplification = m_pDS->fv("VolumeAmplification").get_asFloat();
       settings.m_ScalingMethod = (ESCALINGMETHOD)m_pDS->fv("ScalingMethod").get_asInt();
       settings.m_StereoMode = m_pDS->fv("StereoMode").get_asInt();
       settings.m_StereoInvert = m_pDS->fv("StereoInvert").get_asBool();
       settings.m_VideoStream = m_pDS->fv("VideoStream").get_asInt();
-      settings.m_ToneMapMethod =
-          static_cast<ETONEMAPMETHOD>(m_pDS->fv("TonemapMethod").get_asInt());
+      settings.m_ToneMapMethod = static_cast<ETONEMAPMETHOD>(m_pDS->fv("TonemapMethod").get_asInt());
       settings.m_ToneMapParam = m_pDS->fv("TonemapParam").get_asFloat();
       settings.m_Orientation = m_pDS->fv("Orientation").get_asInt();
       settings.m_CenterMixLevel = m_pDS->fv("CenterMixLevel").get_asInt();
+      settings.m_subtitleVerticalPosition = m_pDS->fv("SubtitleVerticalPosition").get_asInt();
+
 
       if (libplaceboSaveToDatabase)
       {
         std::string str;
+        settings.m_PlaceboSkinZoom = m_pDS->fv("PlaceboSkinZoom").get_asInt();
         settings.m_PlaceboLutFilename = m_pDS->fv("PlaceboLutFilename").get_asString(); CGUIDialogVideoSettings::LoadLutFile(settings, settings.m_PlaceboLutFilename); //cl load depends on type...
         settings.m_PlaceboDisplayPeakLuminance = m_pDS->fv("PlaceboDisplayPeakLuminance").get_asFloat();
         settings.m_PlaceboTargetColorspaceHint = m_pDS->fv("PlaceboTargetColorspaceHint").get_asInt();
@@ -5613,13 +5623,14 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
     {
       m_pDS->close();
       // update the item
+      //cl deinterlaceMode not actually used in database, instead the deinterlaceMethod is stored in the DB column bool Deinterlace, which is a bug, corrected here... column Deinterlace becomes useless, disabled by using method none...
       strSQL = PrepareSQL(
           "update settings set "
-          "Deinterlace=%i,ViewMode=%i,ZoomAmount=%f,PixelRatio=%f,VerticalShift=%f,"
+          "DeinterlaceMode=%i,ViewMode=%i,ZoomAmount=%f,PixelRatio=%f,VerticalShift=%f,"
           "AudioStream=%i,SubtitleStream=%i,SubtitleDelay=%f,SubtitlesOn=%i,Brightness=%f,Contrast="
           "%f,Gamma=%f,"
           "VolumeAmplification=%f,AudioDelay=%f,Sharpness=%f,NoiseReduction=%f,NonLinStretch=%i,"
-          "PostProcess=%i,ScalingMethod=%i,",
+          "PostProcess=%i,ScalingMethod=%i,Orientation=%i,CenterMixLevel=%i,SubtitleVerticalPosition=%i,",
           settings.m_InterlaceMethod, settings.m_ViewMode,
           static_cast<double>(settings.m_CustomZoomAmount),
           static_cast<double>(settings.m_CustomPixelRatio),
@@ -5630,7 +5641,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_VolumeAmplification),
           static_cast<double>(settings.m_AudioDelay), static_cast<double>(settings.m_Sharpness),
           static_cast<double>(settings.m_NoiseReduction), settings.m_CustomNonLinStretch,
-          settings.m_PostProcess, settings.m_ScalingMethod);
+          settings.m_PostProcess, settings.m_ScalingMethod, settings.m_Orientation, settings.m_CenterMixLevel, settings.m_subtitleVerticalPosition);
       std::string strSQL2;
 
       strSQL2 = PrepareSQL("ResumeTime=%i,StereoMode=%i,StereoInvert=%i,VideoStream=%i,"
@@ -5645,7 +5656,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
       {
         strSQL = PrepareSQL(
           "update settings set "
-          "PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
           "PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
@@ -5671,6 +5682,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           "PlaceboDisableLinearScaling=%i,PlaceboDynamicConstant=%i,PlaceboErrorDiffusion='%s',PlaceboForceDither=%i,"
           "PlaceboForceLowBitDepthFbos=%i,PlaceboIgnoreIccProfiles=%i,PlaceboPreserveMixingCache=%i,PlaceboSkipAntiAliasing=%i,"
           "PlaceboSkipCachingSingleFrame=%i where idFile=%i\n",
+          settings.m_PlaceboSkinZoom,
           settings.m_PlaceboLutFilename.c_str(),  //cl check handling of  single/double quotes...
           static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
           settings.m_PlaceboTargetColorspaceHint,
@@ -5772,14 +5784,14 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
     else
     { // add the items
       m_pDS->close();
-      strSQL= "INSERT INTO settings (idFile,Deinterlace,ViewMode,ZoomAmount,PixelRatio, VerticalShift, "
+      strSQL= "INSERT INTO settings (idFile,DeinterlaceMode,ViewMode,ZoomAmount,PixelRatio, VerticalShift, "
                 "AudioStream,SubtitleStream,SubtitleDelay,SubtitlesOn,Brightness,"
                 "Contrast,Gamma,VolumeAmplification,AudioDelay,"
                 "ResumeTime,"
-                "Sharpness,NoiseReduction,NonLinStretch,PostProcess,ScalingMethod,StereoMode,StereoInvert,VideoStream,TonemapMethod,TonemapParam,Orientation,CenterMixLevel) "
+                "Sharpness,NoiseReduction,NonLinStretch,PostProcess,ScalingMethod,StereoMode,StereoInvert,VideoStream,TonemapMethod,TonemapParam,Orientation,CenterMixLevel,SubtitleVerticalPosition) "
         "VALUES ";
       strSQL += PrepareSQL(
-          "(%i,%i,%i,%f,%f,%f,%i,%i,%f,%i,%f,%f,%f,%f,%f,%i,%f,%f,%i,%i,%i,%i,%i,%i,%i,%f,%i,%i)",
+          "(%i,%i,%i,%f,%f,%f,%i,%i,%f,%i,%f,%f,%f,%f,%f,%i,%f,%f,%i,%i,%i,%i,%i,%i,%i,%f,%i,%i,%i)",
         idFile, settings.m_InterlaceMethod, settings.m_ViewMode,
           static_cast<double>(settings.m_CustomZoomAmount),
           static_cast<double>(settings.m_CustomPixelRatio),
@@ -5793,14 +5805,14 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           settings.m_CustomNonLinStretch, settings.m_PostProcess, settings.m_ScalingMethod,
           settings.m_StereoMode, settings.m_StereoInvert, settings.m_VideoStream,
           settings.m_ToneMapMethod, static_cast<double>(settings.m_ToneMapParam),
-          settings.m_Orientation, settings.m_CenterMixLevel);
+          settings.m_Orientation, settings.m_CenterMixLevel, settings.m_subtitleVerticalPosition);
       m_pDS->exec(strSQL);
       m_pDS->close();
       if (libplaceboSaveToDatabase)
       {
         strSQL = PrepareSQL(
           "update settings set "
-          "PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
           "PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
@@ -5826,6 +5838,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           "PlaceboDisableLinearScaling=%i,PlaceboDynamicConstant=%i,PlaceboErrorDiffusion='%s',PlaceboForceDither=%i,"
           "PlaceboForceLowBitDepthFbos=%i,PlaceboIgnoreIccProfiles=%i,PlaceboPreserveMixingCache=%i,PlaceboSkipAntiAliasing=%i,"
           "PlaceboSkipCachingSingleFrame=%i where idFile=%i\n",
+          settings.m_PlaceboSkinZoom,
           settings.m_PlaceboLutFilename.c_str(), //cl check handling of  single/double quotes...
           static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
           settings.m_PlaceboTargetColorspaceHint,

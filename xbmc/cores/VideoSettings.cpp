@@ -75,6 +75,9 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_Orientation = other.m_Orientation;
   m_CenterMixLevel = other.m_CenterMixLevel;
 
+  m_PlaceboSkinZoom = other.m_PlaceboSkinZoom;
+  m_PlaceboSkinZoomHint = other.m_PlaceboSkinZoomHint;
+
   // LibPLacebo specific CVideoSettings only video settings
   m_PlaceboDisplayPeakLuminance = other.m_PlaceboDisplayPeakLuminance;
   m_PlaceboTargetColorspaceHint = other.m_PlaceboTargetColorspaceHint;
@@ -127,6 +130,9 @@ CVideoSettings::CVideoSettings()
   m_Orientation = 0;
   m_CenterMixLevel = 0;
 
+  m_PlaceboSkinZoom = 0;
+  m_PlaceboSkinZoomHint = 0;
+
   // LibPLacebo specific video settings
   m_PlaceboDisplayPeakLuminance = 0;
   m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::YES;
@@ -134,8 +140,7 @@ CVideoSettings::CVideoSettings()
   m_PlaceboLutFilename = "";
   m_PlaceboLut = nullptr;
 
-
-  // m_placeboOptions2 already reset in constructor, just update
+  // m_placeboOptions already reset in constructor, just update
   CGUIDialogVideoSettings::UpdateVideoSettingsFromLibPLaceboParams(*this);
 
 }
@@ -153,8 +158,12 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   if (m_AudioStream != right.m_AudioStream) return true;
   if (m_SubtitleStream != right.m_SubtitleStream) return true;
   if (m_SubtitleDelay != right.m_SubtitleDelay) return true;
-  if (m_subtitleVerticalPosition != right.m_subtitleVerticalPosition) return true;
-  if (m_subtitleVerticalPositionSave != right.m_subtitleVerticalPositionSave) return true;
+  //cl m_subtitleVerticalPosition+save used here in comparison but not stored in database, which means every file that 
+  // eventually displays subtitles will change these value and result in unchanged settings being stored in the database, 
+  // without the changed fields...To investigate further
+  if(m_subtitleVerticalPositionSave == true)
+    if (m_subtitleVerticalPosition != right.m_subtitleVerticalPosition) return true;          
+  //if (m_subtitleVerticalPositionSave != right.m_subtitleVerticalPositionSave) return true;
   if (m_SubtitleOn != right.m_SubtitleOn) return true;
   if (m_Brightness != right.m_Brightness) return true;
   if (m_Contrast != right.m_Contrast) return true;
@@ -172,6 +181,9 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   if (m_ToneMapParam != right.m_ToneMapParam) return true;
   if (m_Orientation != right.m_Orientation) return true;
   if (m_CenterMixLevel != right.m_CenterMixLevel) return true;
+
+  if (m_PlaceboSkinZoom != right.m_PlaceboSkinZoom) return true; 
+  //if (m_PlaceboSkinZoomHint != right.m_PlaceboSkinZoomHint) return true; //No!
 
   if (m_PlaceboDisplayPeakLuminance != right.m_PlaceboDisplayPeakLuminance) return true;
   if (m_PlaceboTargetColorspaceHint != right.m_PlaceboTargetColorspaceHint) return true;

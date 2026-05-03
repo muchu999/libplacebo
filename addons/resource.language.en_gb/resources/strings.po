@@ -25384,6 +25384,10 @@ msgctxt "#55332"
 msgid "Load LUT from file (.cube)"
 msgstr ""
 
+msgctxt "#55333"
+msgid "Video settings zoom"
+msgstr ""
+
 
 
 

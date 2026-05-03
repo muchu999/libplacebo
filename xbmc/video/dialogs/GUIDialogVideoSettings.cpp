@@ -79,8 +79,7 @@ using namespace XFILE;
 #define SETTING_VIDEO_CALIBRATION         "video.calibration"
 #define SETTING_VIDEO_STREAM              "video.stream"
 
-#define SETTING_LIBPLACEBO_SIGMOID_CENTER         "video.libplacebo.sigmoid.center"
-#define SETTING_LIBPLACEBO_SIGMOID_SLOPE          "video.libplacebo.sigmoid.slope"
+#define SETTING_LIB_PLACEBO_SKIN_ZOOM             "video.libplacebo.skin_zoom"
 #define SETTING_LIB_PLACEBO_COLOR_ADJUSTMENT_ENABLED "video.libplacebo.color_adjustment.enabled"
 #define SETTING_LIB_PLACEBO_SATURATION            "video.libplacebo.color_adjustment.saturation"
 #define SETTING_LIB_PLACEBO_HUE                   "video.libplacebo.hue"
@@ -488,6 +487,14 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
     vs.m_PlaceboColorMapEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
     m_placeboOptions->params.color_map_params = vs.m_PlaceboColorMapEnabled ? &m_placeboOptions->color_map_params : NULL;
     appPlayer->SetVideoSettings(vs);
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_SKIN_ZOOM)
+  {
+    vs.m_PlaceboSkinZoom = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+    vs.m_PlaceboSkinZoomHint = vs.m_PlaceboSkinZoom;
+    appPlayer->SetVideoSettings(vs);
+    CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+    CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE)
   {
@@ -1273,6 +1280,7 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, c
   }
   else
   {
+    XMLUtils::SetInt(lpNode, "placeboskinzoom", vs.m_PlaceboSkinZoom);
     XMLUtils::SetString(lpNode, "placebolutfilename", vs.m_PlaceboLutFilename);
     XMLUtils::SetFloat(lpNode, "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
     XMLUtils::SetInt(lpNode, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
@@ -1387,6 +1395,7 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, c
 
 void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* settings)
 {
+    XMLUtils::SetInt(settings, "placeboskinzoom", vs.m_PlaceboSkinZoom);
     XMLUtils::SetString(settings, "placebolutfilename", vs.m_PlaceboLutFilename);
     XMLUtils::SetFloat(settings, "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
     XMLUtils::SetInt(settings, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
@@ -1560,6 +1569,7 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::st
     return false;
   }
 
+  XMLUtils::GetInt(lpNode, "placeboskinzoom", vs.m_PlaceboSkinZoom);
   XMLUtils::GetString(lpNode, "placebolutfilename", vs.m_PlaceboLutFilename); LoadLutFile(vs, vs.m_PlaceboLutFilename); // depends on type
   XMLUtils::GetFloat(lpNode, "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
   XMLUtils::GetInt(lpNode, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
@@ -1661,10 +1671,24 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::st
   XMLUtils::GetBoolean(lpNode, "placebotoskipantialiasing", vs.m_PlaceboSkipAntiAliasing);
   XMLUtils::GetBoolean(lpNode, "placebotoskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
 
+  SkinZoomUpdate();
   UpdateLibPLaceboParamsFromVideoSettings(vs);
   return true;
 }
 
+void CGUIDialogVideoSettings::SkinZoomUpdate(void)
+{
+  auto& components = CServiceBroker::GetAppComponents();
+  auto appPlayer = components.GetComponent<CApplicationPlayer>();
+  CVideoSettings vs = appPlayer->GetVideoSettings();
+  if (vs.m_PlaceboSkinZoomHint != vs.m_PlaceboSkinZoom)
+  {
+    vs.m_PlaceboSkinZoomHint = vs.m_PlaceboSkinZoom;
+    appPlayer->SetVideoSettings(vs);
+    CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+    CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+  }
+}
 
 bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlNode* settings)
 {
@@ -1676,6 +1700,7 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, const T
   const TiXmlElement* pElement = settings->FirstChildElement("defaultvideosettings");
   if (pElement)
   {
+    XMLUtils::GetInt(pElement,    "placeboskinzoom", vs.m_PlaceboSkinZoom);
     XMLUtils::GetString(pElement, "placebolutfilename", vs.m_PlaceboLutFilename);  LoadLutFile(vs, vs.m_PlaceboLutFilename);
     XMLUtils::GetFloat(pElement,  "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
     XMLUtils::GetInt(pElement,    "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
@@ -1777,6 +1802,7 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, const T
     XMLUtils::GetBoolean(pElement, "placebotoskipantialiasing", vs.m_PlaceboSkipAntiAliasing);
     XMLUtils::GetBoolean(pElement, "placebotoskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
 
+    SkinZoomUpdate();
     UpdateLibPLaceboParamsFromVideoSettings(vs);
     return true;
   }
@@ -1960,13 +1986,16 @@ bool CGUIDialogVideoSettings::OnMessage(CGUIMessage& message)
   {
     case GUI_MSG_WINDOW_DEINIT:
     {
-      CServiceBroker::GetSettingsComponent()->GetSettings()->SetInt("lookandfeel.skinzoom", previousSkinZoom);
       {
-		//cl kludge, will not reset default (stored in file) if kodi crashes before this
+        auto& components = CServiceBroker::GetAppComponents();
+        auto appPlayer = components.GetComponent<CApplicationPlayer>();
+        CVideoSettings videoSettings = appPlayer->GetVideoSettings();
+
+        videoSettings.m_PlaceboSkinZoomHint = 0;
+        appPlayer->SetVideoSettings(videoSettings);
         CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
         CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
       }
-      //return true;
     }
   }
   return CGUIDialogSettingsBase::OnMessage(message);
@@ -1974,11 +2003,6 @@ bool CGUIDialogVideoSettings::OnMessage(CGUIMessage& message)
 
 bool CGUIDialogVideoSettings::OnBack(int actionID)
 {
- //CServiceBroker::GetSettingsComponent()->GetSettings()->SetInt("lookandfeel.skinzoom", previousSkinZoom);
- // {
- //   CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
- //   CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
- // }
   return CGUIDialogSettingsBase::OnBack(actionID);
 }
 
@@ -1992,15 +2016,19 @@ void CGUIDialogVideoSettings::InitializeSettings()
   CGUIDialogSettingsManualBase::InitializeSettings();
 
   int renderMethod = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_RENDERMETHOD);
+  
+  
+  auto& components = CServiceBroker::GetAppComponents();
+  auto appPlayer = components.GetComponent<CApplicationPlayer>();
+  CVideoSettings videoSettings = appPlayer->GetVideoSettings();
 
-  previousSkinZoom = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt("lookandfeel.skinzoom");
-  CServiceBroker::GetSettingsComponent()->GetSettings()->SetInt("lookandfeel.skinzoom", -60);
+  if (renderMethod == RENDER_METHOD_LIBPLACEBO)
   {
+    videoSettings.m_PlaceboSkinZoomHint = videoSettings.m_PlaceboSkinZoom;
+    appPlayer->SetVideoSettings(videoSettings);
     CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
     CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
   }
-
-  /////////////////
 
   const std::shared_ptr<CSettingCategory> category = AddCategory("videosettings", -1);
   if (category == NULL)
@@ -2035,12 +2063,6 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
   auto skin = CServiceBroker::GetGUI()->GetSkinInfo();
   const bool usePopup = skin && skin->HasSkinFile("DialogSlider.xml");
-
-  const auto& components = CServiceBroker::GetAppComponents();
-  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-
-  const CVideoSettings videoSettings = appPlayer->GetVideoSettings();
-
 
   TranslatableIntegerSettingOptions entries;
 
@@ -2181,7 +2203,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
   if (renderMethod == RENDER_METHOD_LIBPLACEBO)
   {
-
+    AddSlider(groupLpFile, SETTING_LIB_PLACEBO_SKIN_ZOOM, 55333, SettingLevel::Basic, videoSettings.m_PlaceboSkinZoom, -1, -80, 1, 0, 55292, false);
     AddButton(groupLpFile, SETTING_LIB_PLACEBO_SAVE_TO_FILE, 55323, SettingLevel::Basic);
     AddButton(groupLpFile, SETTING_LIB_PLACEBO_LOAD_FROM_FILE,   55322, SettingLevel::Basic);
 

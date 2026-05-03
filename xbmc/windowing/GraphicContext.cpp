@@ -683,20 +683,40 @@ void CGraphicContext::GetGUIScaling(const RESOLUTION_INFO &res, float &scaleX, f
     auto fToWidth = info.Overscan.right - info.guiInsets.right - fToPosX;
     auto fToHeight = info.Overscan.bottom - info.guiInsets.bottom - fToPosY;
 
-    float fZoom = (100 + CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_LOOKANDFEEL_SKINZOOM)) * 0.01f;
+    auto& components = CServiceBroker::GetAppComponents();
+    const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+    CVideoSettings vs = appPlayer->GetVideoSettings();
+    if (vs.m_PlaceboSkinZoomHint == 0)
+    {
+      float fZoom = (100 + CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_LOOKANDFEEL_SKINZOOM)) * 0.01f;
+      fZoom -= 1.0f;
 
-    fZoom -= 1.0f;
-    fToPosX -= fToWidth * fZoom * 0.5f;
-    fToWidth *= fZoom + 1.0f;
+      // Center aligned
+      fToPosX -= fToWidth * fZoom * 0.5f;
+      fToWidth *= fZoom + 1.0f;
 
-    // adjust for aspect ratio as zoom is given in the vertical direction and we don't
-    // do aspect ratio corrections in the gui code
-    fZoom = fZoom / info.fPixelRatio;
-    fToPosY -= fToHeight * fZoom * 0.5f;
-    fToHeight *= fZoom + 1.0f;
+      // adjust for aspect ratio as zoom is given in the vertical direction and we don't
+      // do aspect ratio corrections in the gui code
+      fZoom = fZoom / info.fPixelRatio;
+      fToPosY -= fToHeight * fZoom * 0.5f;
+      fToHeight *= fZoom + 1.0f;
 
-    scaleX = fFromWidth / fToWidth;
-    scaleY = fFromHeight / fToHeight;
+      scaleX = fFromWidth / fToWidth;
+      scaleY = fFromHeight / fToHeight;
+    }
+    else
+    {
+      float fZoom = (100 + vs.m_PlaceboSkinZoomHint) * 0.01f;
+      fZoom -= 1.0f;
+
+      // Left top aligned
+      fToWidth *= fZoom + 1.0f;
+      fZoom = fZoom / info.fPixelRatio;
+      fToHeight *= fZoom + 1.0f;
+      scaleX = fFromWidth / fToWidth;
+      scaleY = fFromHeight / fToHeight;
+    }
+
     if (matrix)
     {
       TransformMatrix guiScaler = TransformMatrix::CreateScaler(fToWidth / fFromWidth, fToHeight / fFromHeight, fToHeight / fFromHeight);

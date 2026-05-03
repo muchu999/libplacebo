@@ -56,7 +56,8 @@ protected:
   // implementations of ISettingCallback
   void OnSettingChanged(const std::shared_ptr<const CSetting>& setting) override;
   void OnSettingAction(const std::shared_ptr<const CSetting>& setting) override;
-
+  
+  static void SkinZoomUpdate(void);
   void AddVideoStreams(const std::shared_ptr<CSettingGroup>& group, const std::string& settingId);
   static void PlUpscalerOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void PlDownscalerOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
@@ -94,8 +95,6 @@ protected:
 
   bool OnMessage(CGUIMessage& message) override;
   bool OnBack(int actionID) override;
-
-  int previousSkinZoom = 0;
 
   // specialization of CGUIDialogSettingsManualBase
   void InitializeSettings() override;

@@ -236,6 +236,9 @@ public:
   int m_Orientation;
   int m_CenterMixLevel; // relative to metadata or default
   
+  int m_PlaceboSkinZoom;
+  int m_PlaceboSkinZoomHint;
+
   std::string m_PlaceboLutFilename;
   float m_PlaceboDisplayPeakLuminance;
   int m_PlaceboTargetColorspaceHint;
