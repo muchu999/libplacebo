@@ -61,6 +61,44 @@ void CRendererPL::UpdateVideoFilters()
   }
 }
 
+pl_icc_object CRendererPL::ReadIcc(const std::string& fileName)
+{
+  pl_log_params log_param{};
+  log_param.log_cb = nullptr;;
+  log_param.log_level = PL_LOG_DEBUG;
+  pl_log plLog = pl_log_create(PL_API_VER, &log_param);
+  
+  pl_icc_object iccObject = {};
+  pl_icc_profile profile = {};
+
+  if (fileName.empty())
+    return iccObject;
+
+  CFile iccFile;
+  if (!iccFile.Open(fileName))
+  {
+    CLog::Log(LOGERROR, "{}: Could not open ICC file: {}", __FUNCTION__, fileName);
+    return iccObject;
+  }
+
+  // Read entire file to memory
+  ULONGLONG fileSize = iccFile.GetLength();
+  if (fileSize > 0)
+  {
+	BYTE* pBuffer = new BYTE[(size_t)fileSize]; //cl delete[] 
+    UINT bytesRead = iccFile.Read(pBuffer, (UINT)fileSize);
+
+	profile.data = pBuffer;
+	profile.len = (size_t)bytesRead;
+
+    iccObject = pl_icc_open(plLog, &profile, nullptr);
+
+  }
+  iccFile.Close();
+  pl_log_destroy(&plLog);
+  return iccObject;
+}
+
 pl_custom_lut* CRendererPL::ReadLut(const std::string& fileName)
 {
   pl_custom_lut* lut = nullptr;
@@ -593,114 +631,128 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
       target_csp.transfer = pl_color_space_hdr10.transfer;
   }
 
-  struct pl_color_space* sourceCS = &frameIn.color;
-  struct pl_color_space* targetCS = &target_csp;
-  hint = *sourceCS;
-  // Apply target contrast to the hint, this is important for SDR, because
-  // libplacebo defaults to 1000:1 contrast ratio otherwise.
-  if (!hint.hdr.min_luma)
-    hint.hdr.min_luma = targetCS->hdr.min_luma;
-  if (hintMode == SettinglibPlaceboTargetColorspaceHintMode::TARGET) {
-    hint = *targetCS;
-    if (pl_color_transfer_is_hdr(hint.transfer) && !pl_primaries_valid(&hint.hdr.prim))
-      pl_color_space_merge(&hint, sourceCS);
-    if (targetCS->hdr.max_luma) {
+  if (target_hint) 
+  {
+    struct pl_color_space* sourceCS = &frameIn.color;
+    struct pl_color_space* targetCS = &target_csp;
+    hint = *sourceCS;
+    // Apply target contrast to the hint, this is important for SDR, because
+    // libplacebo defaults to 1000:1 contrast ratio otherwise.
+    if (!hint.hdr.min_luma)
+      hint.hdr.min_luma = targetCS->hdr.min_luma;
+    if (hintMode == SettinglibPlaceboTargetColorspaceHintMode::TARGET)
+    {
+      hint = *targetCS;
+      if (pl_color_transfer_is_hdr(hint.transfer) && !pl_primaries_valid(&hint.hdr.prim))
+        pl_color_space_merge(&hint, sourceCS);
+      if (targetCS->hdr.max_luma) 
+      {
+        hint.hdr.max_luma = targetCS->hdr.max_luma;
+        hint.hdr.min_luma = targetCS->hdr.min_luma;
+        hint.hdr.max_cll = targetCS->hdr.max_cll;
+        hint.hdr.max_fall = targetCS->hdr.max_fall;
+      }
+    }
+    if (hintMode == SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC) 
+    {
+      pl_nominal_luma_params p = 
+      {
+        .color = &hint,
+        .metadata = PL_HDR_METADATA_ANY,
+        .scaling = PL_HDR_NITS,
+        .out_min = !hint.hdr.min_luma ? &hint.hdr.min_luma : NULL,
+        .out_max = &hint.hdr.max_luma,
+      };
+      pl_color_space_nominal_luma_ex(&p);
+
+      // Set maxCLL to dynamic max luminance. Note that libplacebo uses
+      // max luminace as maxCLL in practice.
+      hint.hdr.max_cll = hint.hdr.max_luma;
+      // Keep maxFALL from static metadata, unless its value is too high.
+      // Could be set to 0, but let's keep it for now.
+      if (hint.hdr.max_fall > hint.hdr.max_cll)
+        hint.hdr.max_fall = 0;
+    }
+    // Infer missing bits now. This is important so that we don't lose
+    // information after user option overrides. For example, if the user
+    // sets target_trc to PQ, but the hint(source) is SDR, we want to fill
+    // in SDR luminance values instead of the default PQ range.
+    struct pl_color_space source_csp = *sourceCS;
+    pl_color_space_infer_map(&source_csp, &hint);
+
+    // Always prefer target luminance and transfer for inverse tone mapping
+    bool inverseToneMapping = m_videoSettings.m_placeboOptions->getPlOptions()->params.color_map_params == NULL ? false : m_videoSettings.m_placeboOptions->getPlOptions()->params.color_map_params->inverse_tone_mapping;
+    if (pl_color_transfer_is_hdr(targetCS->transfer) && inverseToneMapping)
+    {
+      hint.transfer = targetCS->transfer;
       hint.hdr.max_luma = targetCS->hdr.max_luma;
       hint.hdr.min_luma = targetCS->hdr.min_luma;
       hint.hdr.max_cll = targetCS->hdr.max_cll;
       hint.hdr.max_fall = targetCS->hdr.max_fall;
     }
-  }
-  if (hintMode == SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC) {
-    pl_nominal_luma_params p = {
-      .color = &hint,
-      .metadata = PL_HDR_METADATA_ANY,
-      .scaling = PL_HDR_NITS,
-      .out_min = !hint.hdr.min_luma ? &hint.hdr.min_luma : NULL,
-      .out_max = &hint.hdr.max_luma,
-    };
-    pl_color_space_nominal_luma_ex(&p);
 
-    // Set maxCLL to dynamic max luminance. Note that libplacebo uses
-    // max luminace as maxCLL in practice.
-    hint.hdr.max_cll = hint.hdr.max_luma;
-    // Keep maxFALL from static metadata, unless its value is too high.
-    // Could be set to 0, but let's keep it for now.
-    if (hint.hdr.max_fall > hint.hdr.max_cll)
-      hint.hdr.max_fall = 0;
-  }
-  // Infer missing bits now. This is important so that we don't lose
-  // information after user option overrides. For example, if the user
-  // sets target_trc to PQ, but the hint(source) is SDR, we want to fill
-  // in SDR luminance values instead of the default PQ range.
-  struct pl_color_space source_csp = *sourceCS;
-  pl_color_space_infer_map(&source_csp, &hint);
+    //cl if (opts->target_prim)
+    //  hint.primaries = opts->target_prim;
+    //if (opts->target_gamut)
+    //  mp_parse_raw_primaries(mp_null_log, opts->target_gamut, &hint.hdr.prim);
+    //if (opts->target_trc)
+    //  hint.transfer = opts->target_trc;
 
-  // Always prefer target luminance and transfer for inverse tone mapping
-  bool inverseToneMapping = m_videoSettings.m_placeboOptions->getPlOptions()->params.color_map_params == NULL ? false : m_videoSettings.m_placeboOptions->getPlOptions()->params.color_map_params->inverse_tone_mapping;
-  if (pl_color_transfer_is_hdr(targetCS->transfer) && inverseToneMapping)
-  {
-    hint.transfer = targetCS->transfer;
-    hint.hdr.max_luma = targetCS->hdr.max_luma;
-    hint.hdr.min_luma = targetCS->hdr.min_luma;
-    hint.hdr.max_cll = targetCS->hdr.max_cll;
-    hint.hdr.max_fall = targetCS->hdr.max_fall;
-  }
-
-  //cl if (opts->target_prim)
-  //  hint.primaries = opts->target_prim;
-  //if (opts->target_gamut)
-  //  mp_parse_raw_primaries(mp_null_log, opts->target_gamut, &hint.hdr.prim);
-  //if (opts->target_trc)
-  //  hint.transfer = opts->target_trc;
-
-  if (m_videoSettings.m_PlaceboDisplayPeakLuminance) 
-    if(hint.hdr.max_luma > m_videoSettings.m_PlaceboDisplayPeakLuminance) //cl problems with sdr when peak setting set to e.g 400 for hdr but peak calculated at e.g. 203 for sdr, image is way overblown and constant untill reaching 203 (something kinks in at 203...
-      hint.hdr.max_luma = m_videoSettings.m_PlaceboDisplayPeakLuminance;
+    if (m_videoSettings.m_PlaceboDisplayPeakLuminance)
+      if (hint.hdr.max_luma > m_videoSettings.m_PlaceboDisplayPeakLuminance) //cl problems with sdr when peak setting set to e.g 400 for hdr but peak calculated at e.g. 203 for sdr, image is way overblown and constant untill reaching 203 (something kinks in at 203...
+        hint.hdr.max_luma = m_videoSettings.m_PlaceboDisplayPeakLuminance;
 
 
-  //if (opts->hdr_reference_white && !pl_color_transfer_is_hdr(hint.transfer))
-  //  hint.hdr.max_luma = opts->hdr_reference_white;
+    //if (opts->hdr_reference_white && !pl_color_transfer_is_hdr(hint.transfer))
+    //  hint.hdr.max_luma = opts->hdr_reference_white;
 
-  // Always set maxCLL, display uses this metadata and we shouldn't let it
-  // fallback to default value.
-  if (!hint.hdr.max_cll)
-    hint.hdr.max_cll = hint.hdr.max_luma;
-
-  // If tone mapping is required, adjust maxCLL and maxFALL
-  if (sourceCS->hdr.max_luma > hint.hdr.max_luma || inverseToneMapping) {
-    // Set maxCLL to the target luminance if it's not already lower
-    if (!hint.hdr.max_cll || hint.hdr.max_luma < hint.hdr.max_cll || inverseToneMapping)
+    // Always set maxCLL, display uses this metadata and we shouldn't let it
+    // fallback to default value.
+    if (!hint.hdr.max_cll)
       hint.hdr.max_cll = hint.hdr.max_luma;
-    // There's no reliable way to estimate maxFALL here
-    hint.hdr.max_fall = 0;
+
+    // If tone mapping is required, adjust maxCLL and maxFALL
+    if (sourceCS->hdr.max_luma > hint.hdr.max_luma || inverseToneMapping) 
+    {
+      // Set maxCLL to the target luminance if it's not already lower
+      if (!hint.hdr.max_cll || hint.hdr.max_luma < hint.hdr.max_cll || inverseToneMapping)
+        hint.hdr.max_cll = hint.hdr.max_luma;
+      // There's no reliable way to estimate maxFALL here
+      hint.hdr.max_fall = 0;
+    }
+
+    if (hint.hdr.max_cll && hint.hdr.max_fall > hint.hdr.max_cll)
+      hint.hdr.max_fall = 0;
+
+    ApplyTargetContrast(&hint, hint.hdr.min_luma, m_videoSettings.m_Contrast);
+
+    //if (m_videoSettings.m_PlaceboIccProfile)
+    //  hint = m_videoSettings.m_PlaceboIccProfile->csp;
+    //if (m_videoSettings->icc_opts->icc_use_luma) {
+    //  p->icc_params.max_luma = 0.0f;
+    //}
+    //else {
+    //  pl_nominal_luma_params p2 {
+    //    .color = &hint,
+    //    .metadata = PL_HDR_METADATA_HDR10, // use only static HDR nits
+    //    .scaling = PL_HDR_NITS,
+    //    .out_max = &p->icc_params.max_luma,
+    //  };
+    //  pl_color_space_nominal_luma_ex(p);
+    //}
+    //pl_icc_update(p->pllog, &p->icc_profile, NULL, &p->icc_params);
+    // 
+    //// Update again after possible max_luma change
+    //if (p->icc_profile)
+    //  hint = p->icc_profile->csp;
+    // external_params = set_colorspace_hint(p, &hint);
   }
-
-  if (hint.hdr.max_cll && hint.hdr.max_fall > hint.hdr.max_cll)
-    hint.hdr.max_fall = 0;
-
-  ApplyTargetContrast(&hint, hint.hdr.min_luma, m_videoSettings.m_Contrast);
-
-  //if (p->icc_profile)
-  //  hint = p->icc_profile->csp;
-  //clif (opts->icc_opts->icc_use_luma) {
-  //  p->icc_params.max_luma = 0.0f;
-  //}
-  //else {
-  //  pl_nominal_luma_params p2 {
-  //    .color = &hint,
-  //    .metadata = PL_HDR_METADATA_HDR10, // use only static HDR nits
-  //    .scaling = PL_HDR_NITS,
-  //    .out_max = &p->icc_params.max_luma,
-  //  };
-  //  pl_color_space_nominal_luma_ex(p);
-  //}
-  //pl_icc_update(p->pllog, &p->icc_profile, NULL, &p->icc_params);
-  // 
-  //// Update again after possible max_luma change
-  //if (p->icc_profile)
-  //  hint = p->icc_profile->csp;
-  //external_params = set_colorspace_hint(p, &hint);
+  else if (!target_hint) 
+  {
+    if (!hint.hdr.min_luma)
+       hint.hdr.min_luma = target_csp.hdr.min_luma;
+    //external_params = set_colorspace_hint(p, NULL);
+  }
 
   //hint.primaries = PL_COLOR_PRIM_BT_709;
   //hint.transfer = PL_COLOR_TRC_SRGB;
@@ -790,6 +842,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
  
+  //cl test frameOut.icc = m_videoSettings.m_PlaceboIccProfile;
 
   //Without this recent version of libplacebo would spam the debug log like crazy
   //And its also set on an info level

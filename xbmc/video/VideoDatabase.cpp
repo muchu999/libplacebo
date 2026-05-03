@@ -5299,8 +5299,8 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
         if (list[i] == "PlaceboDebandThreshold") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDebandThreshold     float NOT NULL DEFAULT    %f", vs.m_PlaceboDebandThreshold); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboColorMapEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapEnabled             bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapEnabled); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboColorMapGamutMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapGamutMapping         VARCHAR(255) NOT NULL DEFAULT  '%s'", vs.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboColorMapGamutMapping]->description); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboColorMapToneMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapToneMapping          VARCHAR(255) NOT NULL DEFAULT  '%s'", vs.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_filter_configs[vs.m_PlaceboColorMapToneMapping]->description); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboColorMapGamutMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapGamutMapping         VARCHAR(255) NOT NULL DEFAULT  '%s'", vs.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping]->description); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboColorMapToneMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapToneMapping          VARCHAR(255) NOT NULL DEFAULT  '%s'", vs.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboColorMapContrastRecovery") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapContrastRecovery    float NOT NULL DEFAULT   %f", vs.m_PlaceboColorMapContrastRecovery); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboColorMapContrastSmoothness") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapContrastSmoothness  float NOT NULL DEFAULT   %f", vs.m_PlaceboColorMapContrastSmoothness); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboColorMapGamutExpansion") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapGamutExpansion      bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapGamutExpansion); m_pDS->exec(strSQL2); }
@@ -5700,8 +5700,8 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_PlaceboDebandRadius),
           static_cast<double>(settings.m_PlaceboDebandThreshold),
           settings.m_PlaceboColorMapEnabled,
-          settings.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboColorMapGamutMapping]->description,
-          settings.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboColorMapToneMapping]->description,
+          settings.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions[settings.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : ((std::string)pl_gamut_map_functions[settings.m_PlaceboColorMapGamutMapping]->description).c_str(),
+          settings.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions[settings.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_tone_map_functions[settings.m_PlaceboColorMapToneMapping]->description,
           static_cast<double>(settings.m_PlaceboColorMapContrastRecovery),
           static_cast<double>(settings.m_PlaceboColorMapContrastSmoothness),
           settings.m_PlaceboColorMapGamutExpansion,
@@ -5855,8 +5855,8 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_PlaceboDebandRadius),
           static_cast<double>(settings.m_PlaceboDebandThreshold),
           settings.m_PlaceboColorMapEnabled,
-          settings.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboColorMapGamutMapping]->description,
-          settings.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_filter_configs[settings.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_filter_configs[settings.m_PlaceboColorMapToneMapping]->description,
+          settings.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions[settings.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_gamut_map_functions[settings.m_PlaceboColorMapGamutMapping]->description,
+          settings.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions[settings.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_tone_map_functions[settings.m_PlaceboColorMapToneMapping]->description,
           static_cast<double>(settings.m_PlaceboColorMapContrastRecovery),
           static_cast<double>(settings.m_PlaceboColorMapContrastSmoothness),
           settings.m_PlaceboColorMapGamutExpansion,

@@ -328,6 +328,7 @@ public:
   float m_PlaceboGamutConstantsSoftclipDesat;
   float m_PlaceboGamutConstantsSoftclipKnee;
 
+  pl_icc_object m_PlaceboIccProfile = {};
   pl_custom_lut* m_PlaceboLut = nullptr;
   int m_PlaceboLutType;
   float m_PlaceboAntiringingStrength;

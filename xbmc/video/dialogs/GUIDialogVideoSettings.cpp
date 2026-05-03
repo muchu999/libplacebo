@@ -1310,8 +1310,8 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, c
     XMLUtils::SetFloat(lpNode, "placebocolormapcontrastrecovery", vs.m_PlaceboColorMapContrastRecovery);
     XMLUtils::SetFloat(lpNode, "placebocolormapcontrastsmoothness", vs.m_PlaceboColorMapContrastSmoothness);
     XMLUtils::SetBoolean(lpNode, "placebocolormapgamutexpansion", vs.m_PlaceboColorMapGamutExpansion);
-    XMLUtils::SetString(lpNode, "placebocolormapgamutmapping", vs.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboColorMapGamutMapping]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboColorMapGamutMapping]->description);
-    XMLUtils::SetString(lpNode, "placebocolormaptonemapping", vs.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboColorMapToneMapping]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboColorMapToneMapping]->description);
+    XMLUtils::SetString(lpNode, "placebocolormapgamutmapping", vs.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping]->description == nullptr ? "" : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping]->description);
+    XMLUtils::SetString(lpNode, "placebocolormaptonemapping", vs.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description == nullptr ? "" : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description);
     XMLUtils::SetBoolean(lpNode, "placebocolormapinversetonemapping", vs.m_PlaceboColorMapInverseToneMapping);
     XMLUtils::SetInt(lpNode, "placebocolormaplut3dsizei", vs.m_PlaceboColorMapLut3dSizeI);
     XMLUtils::SetInt(lpNode, "placebocolormaplut3dsizec", vs.m_PlaceboColorMapLut3dSizeC);
@@ -1424,8 +1424,8 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, T
     XMLUtils::SetFloat(settings, "placebocolormapcontrastrecovery", vs.m_PlaceboColorMapContrastRecovery);
     XMLUtils::SetFloat(settings, "placebocolormapcontrastsmoothness", vs.m_PlaceboColorMapContrastSmoothness);
     XMLUtils::SetBoolean(settings, "placebocolormapgamutexpansion", vs.m_PlaceboColorMapGamutExpansion);
-    XMLUtils::SetString(settings, "placebocolormapgamutmapping", vs.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboColorMapGamutMapping]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboColorMapGamutMapping]->description);
-    XMLUtils::SetString(settings, "placebocolormaptonemapping", vs.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboColorMapToneMapping]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboColorMapToneMapping]->description);
+    XMLUtils::SetString(settings, "placebocolormapgamutmapping", vs.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping]->description == nullptr ? "" : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping]->description);
+    XMLUtils::SetString(settings, "placebocolormaptonemapping", vs.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description == nullptr ? "" : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description);
     XMLUtils::SetBoolean(settings, "placebocolormapinversetonemapping", vs.m_PlaceboColorMapInverseToneMapping);
     XMLUtils::SetInt(settings, "placebocolormaplut3dsizei", vs.m_PlaceboColorMapLut3dSizeI);
     XMLUtils::SetInt(settings, "placebocolormaplut3dsizec", vs.m_PlaceboColorMapLut3dSizeC);
@@ -1496,10 +1496,10 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, T
 
 void CGUIDialogVideoSettings::LoadLutFile(CVideoSettings& vs, const std::string& path)
 {
+  //cl test vs.m_PlaceboIccProfile = CRendererPL::ReadIcc("C:/Users/Pooky/source/repos/kodi/kodi-build.x64/Debug/portable_data/userdata/small.icc");
   vs.m_PlaceboLut = CRendererPL::ReadLut(path);
   CLog::Log(LOGDEBUG, "CGUIDialogVideoSettings: loading LUT file from {}", path);
   vs.m_placeboOptions->getPlOptions()->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut;
-
 }
 
 void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings &vs)
@@ -2324,22 +2324,13 @@ void CGUIDialogVideoSettings::InitializeSettings()
     AddList(groupMisc,   SETTING_LIB_PLACEBO_ERROR_DIFFUSION,                 55306, SettingLevel::Basic, videoSettings.m_PlaceboErrorDiffusion, PlDiffusionKernelOptionFiller, 55306);
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_FORCE_DITHER,                    55307, SettingLevel::Basic, videoSettings.m_PlaceboForceDither);
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_FORCE_LOW_BIT_DEPTH_FBOS,        55308, SettingLevel::Basic, videoSettings.m_PlaceboForceLowBitDepthFbos);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_IGNORE_ICC_PROFILES,             55309, SettingLevel::Basic, videoSettings.m_PlaceboIgnoreIccProfiles);
+    // AddToggle(groupMisc, SETTING_LIB_PLACEBO_IGNORE_ICC_PROFILES,             55309, SettingLevel::Basic, videoSettings.m_PlaceboIgnoreIccProfiles); ignore_icc_profiles; // non-functional, just set pl_frame.icc to NULL
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_PRESERVE_MIXING_CACHE,           55310, SettingLevel::Basic, videoSettings.m_PlaceboPreserveMixingCache);
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING,              55311, SettingLevel::Basic, videoSettings.m_PlaceboSkipAntiAliasing);
     AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME,       55312, SettingLevel::Basic, videoSettings.m_PlaceboSkipCachingSingleFrame);
 
-
- 
-/* Available options leftover from structure
-
-// Need a way to input/read a big table....
-// videoSettings.m_placeboOptions->params.lut;
-// videoSettings.m_placeboOptions->params.lut_entries; //deprecated, set to 256
-// videoSettings.m_placeboOptions->params.lut_type;
-
-    
-// Deprecated, More for kodi integration, use pl_frame.icc
+  /*
+  // Deprecated, use pl_frame.icc
 videoSettings.m_placeboOptions->icc_params;
 videoSettings.m_placeboOptions->icc_params.cache->params;
 videoSettings.m_placeboOptions->icc_params.cache_load;
@@ -2351,6 +2342,67 @@ videoSettings.m_placeboOptions->icc_params.max_luma;
 videoSettings.m_placeboOptions->icc_params.size_b;
 videoSettings.m_placeboOptions->icc_params.size_g;
 videoSettings.m_placeboOptions->icc_params.size_r;
+
+pl_icc_params is included in pl_icc_object which can be included in every pl_frame.icc
+struct pl_icc_params {
+    // The rendering intent to use, for profiles with multiple intents. A
+    // recommended value is PL_INTENT_RELATIVE_COLORIMETRIC for color-accurate
+    // video reproduction, or PL_INTENT_PERCEPTUAL for profiles containing
+    // meaningful perceptual mapping tables for some more suitable color space
+    // like BT.709.
+    //
+    // If this is set to the special value PL_INTENT_AUTO, will use the
+    // preferred intent provided by the profile header.
+    enum pl_rendering_intent intent;
+
+    // The size of the 3DLUT to generate. If left as NULL, these individually
+    // default to values appropriate for the profile. (Based on internal
+    // precision heuristics)
+    //
+    // Note: Setting this manually is strongly discouraged, as it can result
+    // in excessively high 3DLUT sizes where a much smaller LUT would have
+    // sufficed.
+    int size_r, size_g, size_b;
+
+    // This field can be used to override the detected brightness level of the
+    // ICC profile. If you set this to the special value 0 (or a negative
+    // number), libplacebo will attempt reading the brightness value from the
+    // ICC profile's tagging (if available), falling back to PL_COLOR_SDR_WHITE
+    // if unavailable.
+    float max_luma;
+
+    // Force black point compensation. May help avoid crushed or raised black
+    // points on "improper" profiles containing e.g. colorimetric tables that
+    // do not round-trip. Should not be required on well-behaved profiles,
+    // or when using PL_INTENT_PERCEPTUAL, but YMMV.
+    bool force_bpc;
+
+    // If provided, this pl_cache instance will be used, instead of the
+    // GPU-internal cache, to cache the generated 3DLUTs. Note that these can
+    // get large, especially for large values of size_{r,g,b}, so the user may
+    // wish to split this cache off from the main shader cache. (Optional)
+    pl_cache cache;
+};
+ */
+ 
+/* Available options leftover from structure
+* 
+//upscaler/downscaler/frame_mixer/plane upscaler/plane downscaler have a list of preset filters but using the "custom" filter, the values can be set individiually
+videoSettings.m_placeboOptions->upscaler;
+videoSettings.m_placeboOptions->upscaler.allowed;
+videoSettings.m_placeboOptions->upscaler.antiring;
+videoSettings.m_placeboOptions->upscaler.blur;
+videoSettings.m_placeboOptions->upscaler.clamp;
+videoSettings.m_placeboOptions->upscaler.description;
+videoSettings.m_placeboOptions->upscaler.kernel; ///
+videoSettings.m_placeboOptions->upscaler.name;
+videoSettings.m_placeboOptions->upscaler.params;
+videoSettings.m_placeboOptions->upscaler.polar;
+videoSettings.m_placeboOptions->upscaler.radius;
+videoSettings.m_placeboOptions->upscaler.recommended;
+videoSettings.m_placeboOptions->upscaler.taper;
+videoSettings.m_placeboOptions->upscaler.window; ///
+videoSettings.m_placeboOptions->upscaler.wparams;
 
 // More for kodi integration
 videoSettings.m_placeboOptions->params.background;                  // no
@@ -2397,22 +2449,6 @@ videoSettings.m_placeboOptions->distort_params.transform.mat;
 videoSettings.m_placeboOptions->distort_params.unscaled;
 
 
-//upscaler/downscaler/frame_mixer/plane upscaler/plane downscaler have a list of preset filters but using the "custom" filter, the values can be set individiually
-videoSettings.m_placeboOptions->upscaler;
-videoSettings.m_placeboOptions->upscaler.allowed;
-videoSettings.m_placeboOptions->upscaler.antiring;
-videoSettings.m_placeboOptions->upscaler.blur;
-videoSettings.m_placeboOptions->upscaler.clamp;
-videoSettings.m_placeboOptions->upscaler.description;
-videoSettings.m_placeboOptions->upscaler.kernel; ///
-videoSettings.m_placeboOptions->upscaler.name;
-videoSettings.m_placeboOptions->upscaler.params;
-videoSettings.m_placeboOptions->upscaler.polar;
-videoSettings.m_placeboOptions->upscaler.radius;
-videoSettings.m_placeboOptions->upscaler.recommended;
-videoSettings.m_placeboOptions->upscaler.taper;
-videoSettings.m_placeboOptions->upscaler.window; ///
-videoSettings.m_placeboOptions->upscaler.wparams;
   */
 
   }
@@ -2545,10 +2581,7 @@ void CGUIDialogVideoSettings::PlLutOptionFiller(const std::shared_ptr<const CSet
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
   CVideoSettings vs = appPlayer->GetVideoSettings();
 
-    // list .cube files
   std::string currentLut = vs.m_PlaceboLutFilename;
-  //if (!currentLut.empty())
-  //  currentLut = URIUtils::GetDirectory(currentLut);
   XFILE::CDirectory::GetDirectory("special://masterprofile/", items, ".cube", DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_NO_FILE_INFO);
 
   for (int i = 0; i < items.Size(); i++)
