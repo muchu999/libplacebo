@@ -89,7 +89,10 @@ bool CMediaSettings::Load(const TiXmlNode *settings)
 
   CGUIDialogVideoSettings::LoadLibplaceboSettings(m_defaultVideoSettings, pElement);
   CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(m_defaultVideoSettings);
+<<<<<<< HEAD
   CGUIDialogVideoSettings::SetVideoSettings(m_defaultVideoSettings);
+=======
+>>>>>>> f22b4ecedc910164ce277c782dd5d4e34aef5461
 
   m_defaultGameSettings.Reset();
   pElement = settings->FirstChildElement("defaultgamesettings");
