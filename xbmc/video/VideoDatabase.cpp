@@ -5581,13 +5581,9 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         
         std::string data = m_pDS->fv("PlaceboShadersData").get_asString();
 
-		CGUIDialogVideoSettings::LoadShaderDataFromDatabase(settings, data);
-<<<<<<< HEAD
+		CGUIDialogVideoSettings::LoadShaderSettings(settings, data);
         CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(settings); 
         CGUIDialogVideoSettings::SetVideoSettings(settings);
-=======
-        CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(settings);      
->>>>>>> f22b4ecedc910164ce277c782dd5d4e34aef5461
 
         m_pDS->close();
         return true;

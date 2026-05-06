@@ -1433,6 +1433,7 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, T
     XMLUtils::SetBoolean(pNode, "placebopreservemixingcache", vs.m_PlaceboPreserveMixingCache);
     XMLUtils::SetBoolean(pNode, "placeboskipantialiasing", vs.m_PlaceboSkipAntiAliasing);
     XMLUtils::SetBoolean(pNode, "placeboskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
+    SerializeShaders(vs, pNode);
 }
 
 bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::string path)
@@ -1571,6 +1572,7 @@ bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, const T
   XMLUtils::GetBoolean(pElement, "placebopreservemixingcache", vs.m_PlaceboPreserveMixingCache);
   XMLUtils::GetBoolean(pElement, "placeboskipantialiasing", vs.m_PlaceboSkipAntiAliasing);
   XMLUtils::GetBoolean(pElement, "placeboskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
+  LoadShaderSettings(vs, pElement);
   return true;
 }
 
@@ -1605,7 +1607,7 @@ std::shared_ptr<const pl_custom_lut> CGUIDialogVideoSettings::ReadLut(const std:
   return lutPtr;
 }
 
-void CGUIDialogVideoSettings::LoadShaderDataFromDatabase(CVideoSettings& vs, const std::string& data)
+void CGUIDialogVideoSettings::LoadShaderSettings(CVideoSettings& vs, const std::string& data)
 {
   CXBMCTinyXML xmlDoc;
   std::string value;
@@ -1622,14 +1624,19 @@ void CGUIDialogVideoSettings::LoadShaderDataFromDatabase(CVideoSettings& vs, con
     return;
   }
 
+  LoadShaderSettings(vs, pElement);
+}
+
+void CGUIDialogVideoSettings::LoadShaderSettings(CVideoSettings& vs, const TiXmlElement* pElement)
+{
   int numShaders;
   XMLUtils::GetInt(pElement, "placeboShadersCount", numShaders);
   for (int i = 0; i < numShaders; i++)
   {
-	bool bValue;
-	std::string fileName;
+    bool bValue;
+    std::string fileName;
     XMLUtils::GetString(pElement, ("placeboShaderFilename" + StringUtils::Format("_{:02}", i)).c_str(), fileName);
-    XMLUtils::GetBoolean(pElement, ("placeboShaderEnabled" + StringUtils::Format("_{:02}", i)).c_str(), bValue); 
+    XMLUtils::GetBoolean(pElement, ("placeboShaderEnabled" + StringUtils::Format("_{:02}", i)).c_str(), bValue);
 
     vs.m_PlaceboShadersFilename.emplace_back(fileName);
     vs.m_PlaceboShadersEnabled.emplace_back(bValue);
@@ -1648,18 +1655,18 @@ void CGUIDialogVideoSettings::LoadShaderDataFromDatabase(CVideoSettings& vs, con
       std::string typeStr = valueStr.substr(0, valueStr.find(':'));
       pl_var_type type = typeStr == "float" ? PL_VAR_FLOAT : typeStr == "sint" ? PL_VAR_SINT : typeStr == "uint" ? PL_VAR_UINT : PL_VAR_INVALID;
 
-	  value = 0; 
+      value = 0;
       if (type == PL_VAR_FLOAT)
       {
-        value  = std::stof(valueStr.substr(valueStr.find(':') + 1));
+        value = std::stof(valueStr.substr(valueStr.find(':') + 1));
       }
       else if (type == PL_VAR_SINT)
       {
-        value  = std::stoi(valueStr.substr(valueStr.find(':') + 1));
+        value = std::stoi(valueStr.substr(valueStr.find(':') + 1));
       }
       if (type == PL_VAR_UINT)
       {
-        value  = std::stoul(valueStr.substr(valueStr.find(':') + 1));
+        value = std::stoul(valueStr.substr(valueStr.find(':') + 1));
       }
       else
       {
@@ -1667,10 +1674,11 @@ void CGUIDialogVideoSettings::LoadShaderDataFromDatabase(CVideoSettings& vs, con
         CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo shader parameter, unknown type: {}", valueStr);
       }
 
-	  vs.m_PlaceboShadersParams[i].emplace_back(name, type, value);
+      vs.m_PlaceboShadersParams[i].emplace_back(name, type, value);
     }
   }
 }
+
 
 void CGUIDialogVideoSettings::SerializeShaders(const CVideoSettings& vs, std::string& serializedData)
 {
@@ -1686,38 +1694,43 @@ void CGUIDialogVideoSettings::SerializeShaders(const CVideoSettings& vs, std::st
   }
   else
   {
-    XMLUtils::SetInt(pNode, "placeboShadersCount", vs.m_PlaceboShadersFilename.size());
-    for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); i++)
-    {
-      const pl_hook* hook = vs.m_Shaders.m_Hooks[i].get();
-      XMLUtils::SetString(pNode, ("placeboShaderFilename" + StringUtils::Format("_{:02}", i)).c_str(), vs.m_PlaceboShadersFilename[i]);
-      XMLUtils::SetBoolean(pNode, ("placeboShaderEnabled" + StringUtils::Format("_{:02}", i)).c_str(), vs.m_PlaceboShadersEnabled[i]);
-      XMLUtils::SetInt(pNode, ("placeboShadersParamsCount" + StringUtils::Format("_{:02}", i)).c_str(), hook->num_parameters);
-      for (int j = 0; j < hook->num_parameters; j++)
-      {
-        XMLUtils::SetString(pNode, ("placeboShaderParamName" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), hook->parameters[j].name==NULL ? "": hook->parameters[j].name);
-        if (hook->parameters[j].type == PL_VAR_FLOAT)
-        {
-          XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "float:" + std::to_string(hook->parameters[j].data->f));
-        }
-        else if (hook->parameters[j].type == PL_VAR_SINT)
-        {
-          XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "sint:" + std::to_string(hook->parameters[j].data->i));
-        }
-        if (hook->parameters[j].type == PL_VAR_UINT)
-        {
-          XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "uint:" + std::to_string(hook->parameters[j].data->u));
-        }
-        else
-        {
-          //cl 
-		  CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error serializing LipPlacebo shader parameter, unknown type: {}", hook->parameters[j].type);
-		}
-      }
-    }
+    SerializeShaders(vs, pNode);
   }
   xmlDoc.SaveString(serializedData);
 }
+
+void CGUIDialogVideoSettings::SerializeShaders(const CVideoSettings& vs, TiXmlNode* pNode)
+{
+  XMLUtils::SetInt(pNode, "placeboShadersCount", vs.m_PlaceboShadersFilename.size());
+  for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); i++)
+  {
+    XMLUtils::SetString(pNode, ("placeboShaderFilename" + StringUtils::Format("_{:02}", i)).c_str(), vs.m_PlaceboShadersFilename[i]);
+    XMLUtils::SetBoolean(pNode, ("placeboShaderEnabled" + StringUtils::Format("_{:02}", i)).c_str(), vs.m_PlaceboShadersEnabled[i]);
+    XMLUtils::SetInt(pNode, ("placeboShadersParamsCount" + StringUtils::Format("_{:02}", i)).c_str(), vs.m_PlaceboShadersParams[i].size());
+    for (int j = 0; j < vs.m_PlaceboShadersParams[i].size(); j++)
+    {
+      XMLUtils::SetString(pNode, ("placeboShaderParamName" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), vs.m_PlaceboShadersParams[i][j].m_Name);
+      if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_FLOAT)
+      {
+        XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "float:" + std::to_string(std::get<float>(vs.m_PlaceboShadersParams[i][j].m_Value)));
+      }
+      else if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_SINT)
+      {
+        XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "sint:" + std::to_string(std::get<int>(vs.m_PlaceboShadersParams[i][j].m_Value)));
+      }
+      if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_UINT)
+      {
+        XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "uint:" + std::to_string(std::get<unsigned int>(vs.m_PlaceboShadersParams[i][j].m_Value)));
+      }
+      else
+      {
+        //cl 
+        CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error serializing LipPlacebo shader parameter, unknown type: {}", vs.m_PlaceboShadersParams[i][j].m_Type);
+      }
+    }
+  }
+}
+
 
 void CGUIDialogVideoSettings::InitializeShaders(pl_gpu gpu)
 {

@@ -199,10 +199,6 @@ enum ViewMode
 class CPlaceboShaders
 {
 public:
-<<<<<<< HEAD
-=======
-  //std::vector<const pl_hook*> m_Hooks = {};
->>>>>>> f22b4ecedc910164ce277c782dd5d4e34aef5461
   std::vector<std::shared_ptr<const pl_hook>> m_Hooks = {};
   std::vector<std::string> m_FileNames = {};
   std::vector<bool> m_Valid = {};
@@ -215,11 +211,7 @@ public:
       m_Hooks = other.m_Hooks;
     }
     return *this;
-<<<<<<< HEAD
   }
-=======
-}
->>>>>>> f22b4ecedc910164ce277c782dd5d4e34aef5461
 
 
   size_t size() const { return m_FileNames.size(); }
@@ -249,7 +241,6 @@ class CShaderParam
 {
 
 public:
-<<<<<<< HEAD
   CShaderParam(std::string m_Name, pl_var_type m_Type, std::variant<float, int, unsigned int> m_Value) : m_Name(m_Name), m_Type(m_Type), m_Value(m_Value) {};
   CShaderParam(const CShaderParam& other) : m_Name(other.m_Name), m_Type(other.m_Type), m_Value(other.m_Value) {};
   CShaderParam() = default;
@@ -258,12 +249,6 @@ public:
   std::string m_Name = "";
   pl_var_type m_Type = PL_VAR_SINT;
   std::variant<float, int, unsigned int> m_Value = 0;
-=======
-  CShaderParam() = default;
-  ~CShaderParam() = default;
-  std::string m_Name = "";
-  pl_var_type m_Type = PL_VAR_SINT;
->>>>>>> f22b4ecedc910164ce277c782dd5d4e34aef5461
 
   bool operator == (const CShaderParam& other) const
   {
@@ -281,10 +266,6 @@ public:
     }
     return true;
   }
-<<<<<<< HEAD
-=======
-  std::variant<float, int, unsigned int> m_Value = 0;
->>>>>>> f22b4ecedc910164ce277c782dd5d4e34aef5461
   void emplace_back(std::string Name, pl_var_type Type, std::variant<float, int, unsigned int> Value)
   {
     m_Name = Name;
