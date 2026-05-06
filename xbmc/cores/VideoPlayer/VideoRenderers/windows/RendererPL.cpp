@@ -30,9 +30,7 @@ CRendererPL::~CRendererPL()
 
   m_plSwapchain = PL::PLInstance::Get()->GetSwapchain();
   pl_swapchain_destroy(&m_plSwapchain);
-
-  pl_queue_destroy(&queue);
-  
+ 
   //cl Force restore default color space on exit, non-hdr content messes up hdr color space, should save and restore instead
   if (DX::Windowing()->IsHDROutput())
     DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
@@ -60,81 +58,6 @@ void CRendererPL::UpdateVideoFilters()
     }
   }
 }
-
-pl_icc_object CRendererPL::ReadIcc(const std::string& fileName)
-{
-  pl_log_params log_param{};
-  log_param.log_cb = nullptr;;
-  log_param.log_level = PL_LOG_DEBUG;
-  pl_log plLog = pl_log_create(PL_API_VER, &log_param);
-  
-  pl_icc_object iccObject = {};
-  pl_icc_profile profile = {};
-
-  if (fileName.empty())
-    return iccObject;
-
-  CFile iccFile;
-  if (!iccFile.Open(fileName))
-  {
-    CLog::Log(LOGERROR, "{}: Could not open ICC file: {}", __FUNCTION__, fileName);
-    return iccObject;
-  }
-
-  // Read entire file to memory
-  ULONGLONG fileSize = iccFile.GetLength();
-  if (fileSize > 0)
-  {
-	BYTE* pBuffer = new BYTE[(size_t)fileSize]; //cl delete[] 
-    UINT bytesRead = iccFile.Read(pBuffer, (UINT)fileSize);
-
-	profile.data = pBuffer;
-	profile.len = (size_t)bytesRead;
-
-    iccObject = pl_icc_open(plLog, &profile, nullptr);
-
-  }
-  iccFile.Close();
-  pl_log_destroy(&plLog);
-  return iccObject;
-}
-
-pl_custom_lut* CRendererPL::ReadLut(const std::string& fileName)
-{
-  pl_custom_lut* lut = nullptr;
-  pl_log_params log_param{};
-  log_param.log_cb = nullptr;;
-  log_param.log_level = PL_LOG_NONE;
-  pl_log plLog = pl_log_create(PL_API_VER, &log_param);
-
-
-  if (fileName.empty())
-    return nullptr;
-
-  CFile lutFile;
-  if (!lutFile.Open(fileName))
-  {
-    CLog::Log(LOGERROR, "{}: Could not open 3DLUT file: {}", __FUNCTION__, fileName);
-    return nullptr;
-  }
-
-  // Read entire file to memory
-  ULONGLONG fileSize = lutFile.GetLength();
-  if (fileSize > 0) 
-  {
-    BYTE* pBuffer = new BYTE[(size_t)fileSize];
-    UINT bytesRead = lutFile.Read(pBuffer, (UINT)fileSize);
-
-    //cl free... PL_API void pl_lut_free(struct pl_custom_lut **lut);
-    lut = pl_lut_parse_cube(plLog, (const char*)pBuffer, (size_t)bytesRead);
-    delete[] pBuffer;
-  }
-  lutFile.Close();
-  pl_log_destroy(&plLog);
-  return lut;
-}
-
-
 
 bool CRendererPL::NeedBuffer(int idx)
 {
@@ -842,8 +765,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
  
-  //cl test frameOut.icc = m_videoSettings.m_PlaceboIccProfile;
-
   //Without this recent version of libplacebo would spam the debug log like crazy
   //And its also set on an info level
   params.skip_target_clearing = true;
@@ -853,6 +774,31 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   m_videoMatrix = frameIn.repr.sys;
   pl_frame_set_chroma_location(&frameIn, m_chromaLocation);
 
+  if(m_videoSettings.m_Shaders.size() > 0)
+  {
+    static std::vector<const pl_hook*> hooks;
+    
+    hooks = {};
+    for(int i=0; i< m_videoSettings.m_Shaders.size(); ++i)
+    {
+      if(m_videoSettings.m_PlaceboShadersEnabled[i] && m_videoSettings.m_Shaders.m_Valid[i])
+      {
+        hooks.push_back(CRendererPL::m_videoSettings.m_Shaders.m_Hooks[i].get());
+	  }
+    }
+    if(hooks.size() > 0)
+    {
+      params.hooks = hooks.data();
+      params.num_hooks = hooks.size();
+    }
+    else 
+    {
+      params.hooks = nullptr;
+      params.num_hooks = 0;
+	}
+  }
+
+  
   CLog::Log(LOGDEBUG, "RenderImpl: pl_render_image start");
   bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, &params);
   pl_swapchain_submit_frame(PL::PLInstance::Get()->GetSwapchain());

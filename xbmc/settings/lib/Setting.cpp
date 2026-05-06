@@ -678,6 +678,19 @@ CSettingBool::CSettingBool(const std::string& id,
     s_logger = CServiceBroker::GetLogging().GetLogger("CSettingBool");
 }
 
+CSettingBool::CSettingBool(const std::string& id,
+  const std::string& label,
+  bool value,
+  CSettingsManager* settingsManager /* = nullptr */)
+  : CTraitedSetting(id, settingsManager), m_value(value), m_default(value)
+{
+  SetLabel(label);
+
+  if (!s_logger)
+    s_logger = CServiceBroker::GetLogging().GetLogger("CSettingBool");
+}
+
+
 SettingPtr CSettingBool::Clone(const std::string &id) const
 {
   return std::make_shared<CSettingBool>(id, *this);
@@ -823,6 +836,15 @@ CSettingInt::CSettingInt(const std::string& id,
 }
 
 CSettingInt::CSettingInt(const std::string& id,
+  const std::string& label,
+  int value,
+  CSettingsManager* settingsManager /* = nullptr */)
+  : CSettingInt(id, label, value, DefaultMin, DefaultStep, DefaultMax, settingsManager)
+{
+  SetLabel(label);
+}
+
+CSettingInt::CSettingInt(const std::string& id,
                          int label,
                          int value,
                          int minimum,
@@ -841,6 +863,27 @@ CSettingInt::CSettingInt(const std::string& id,
   if (!s_logger)
     s_logger = CServiceBroker::GetLogging().GetLogger("CSettingInt");
 }
+
+CSettingInt::CSettingInt(const std::string& id,
+  const std::string& label,
+  int value,
+  int minimum,
+  int step,
+  int maximum,
+  CSettingsManager* settingsManager /* = nullptr */)
+  : CTraitedSetting(id, settingsManager),
+  m_value(value),
+  m_default(value),
+  m_min(minimum),
+  m_step(step),
+  m_max(maximum)
+{
+  SetLabel(label);
+
+  if (!s_logger)
+    s_logger = CServiceBroker::GetLogging().GetLogger("CSettingInt");
+}
+
 
 CSettingInt::CSettingInt(const std::string& id,
                          int label,
@@ -1172,6 +1215,15 @@ CSettingNumber::CSettingNumber(const std::string& id,
 }
 
 CSettingNumber::CSettingNumber(const std::string& id,
+  const std::string& label,
+  float value,
+  CSettingsManager* settingsManager /* = nullptr */)
+  : CSettingNumber(id, label, value, DefaultMin, DefaultStep, DefaultMax, settingsManager)
+{
+}
+
+
+CSettingNumber::CSettingNumber(const std::string& id,
                                int label,
                                float value,
                                float minimum,
@@ -1190,6 +1242,27 @@ CSettingNumber::CSettingNumber(const std::string& id,
   if (!s_logger)
     s_logger = CServiceBroker::GetLogging().GetLogger("CSettingNumber");
 }
+
+CSettingNumber::CSettingNumber(const std::string& id,
+  const std::string& label,
+  float value,
+  float minimum,
+  float step,
+  float maximum,
+  CSettingsManager* settingsManager /* = nullptr */)
+  : CTraitedSetting(id, settingsManager),
+  m_value(static_cast<double>(value)),
+  m_default(static_cast<double>(value)),
+  m_min(static_cast<double>(minimum)),
+  m_step(static_cast<double>(step)),
+  m_max(static_cast<double>(maximum))
+{
+  SetLabel(label);
+
+  if (!s_logger)
+    s_logger = CServiceBroker::GetLogging().GetLogger("CSettingNumber");
+}
+
 
 SettingPtr CSettingNumber::Clone(const std::string &id) const
 {

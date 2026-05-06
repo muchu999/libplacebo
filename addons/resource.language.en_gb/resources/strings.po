@@ -25388,6 +25388,26 @@ msgctxt "#55333"
 msgid "Video settings zoom"
 msgstr ""
 
+msgctxt "#55334"
+msgid "Load shader from file (.glsl or .hook)"
+msgstr ""
+
+msgctxt "#55335"
+msgid "Remove shader"
+msgstr ""
+
+msgctxt "#55336"
+msgid "Move shader up"
+msgstr ""
+
+msgctxt "#55337"
+msgid "Move shader down"
+msgstr ""
+
+msgctxt "#55338"
+msgid ""
+msgstr ""
+
 
 
 

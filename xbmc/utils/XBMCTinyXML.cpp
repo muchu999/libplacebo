@@ -51,6 +51,19 @@ bool CXBMCTinyXML::LoadFile(const char *_filename, TiXmlEncoding encoding)
   return LoadFile(std::string(_filename), encoding);
 }
 
+bool CXBMCTinyXML::LoadString(const std::string& buffer, TiXmlEncoding encoding)
+{
+  // Delete the existing data:
+  Clear();
+  location.Clear();
+
+  Parse(buffer, encoding);
+
+  if (Error())
+    return false;
+  return true;
+}
+
 bool CXBMCTinyXML::LoadFile(const std::string& _filename, TiXmlEncoding encoding)
 {
   value = _filename.c_str();
@@ -118,6 +131,15 @@ bool CXBMCTinyXML::SaveFile(const std::string& filename) const
   }
   return false;
 }
+
+bool CXBMCTinyXML::SaveString(std::string& out) const
+{
+    TiXmlPrinter printer;
+    Accept(&printer);
+    out = printer.CStr();
+    return true;
+}
+
 
 bool CXBMCTinyXML::Parse(const std::string& data, const std::string& dataCharset)
 {

@@ -233,6 +233,7 @@ public:
   CSettingBool(const std::string &id, CSettingsManager *settingsManager = nullptr);
   CSettingBool(const std::string &id, const CSettingBool &setting);
   CSettingBool(const std::string &id, int label, bool value, CSettingsManager *settingsManager = nullptr);
+  CSettingBool(const std::string& id, const std::string& label, bool value, CSettingsManager* settingsManager = nullptr);
   ~CSettingBool() override = default;
 
   std::shared_ptr<CSetting> Clone(const std::string &id) const override;
@@ -278,7 +279,9 @@ public:
   CSettingInt(const std::string &id, CSettingsManager *settingsManager = nullptr);
   CSettingInt(const std::string &id, const CSettingInt &setting);
   CSettingInt(const std::string &id, int label, int value, CSettingsManager *settingsManager = nullptr);
+  CSettingInt(const std::string& id, const std::string& label, int value, CSettingsManager* settingsManager = nullptr);
   CSettingInt(const std::string &id, int label, int value, int minimum, int step, int maximum, CSettingsManager *settingsManager = nullptr);
+  CSettingInt(const std::string& id, const std::string& label, int value, int minimum, int step, int maximum, CSettingsManager* settingsManager = nullptr);
   CSettingInt(const std::string &id, int label, int value, const TranslatableIntegerSettingOptions &options, CSettingsManager *settingsManager = nullptr);
   ~CSettingInt() override = default;
 
@@ -364,7 +367,9 @@ public:
   CSettingNumber(const std::string &id, CSettingsManager *settingsManager = nullptr);
   CSettingNumber(const std::string &id, const CSettingNumber &setting);
   CSettingNumber(const std::string &id, int label, float value, CSettingsManager *settingsManager = nullptr);
+  CSettingNumber(const std::string& id, const std::string& label, float value, CSettingsManager* settingsManager = nullptr);
   CSettingNumber(const std::string &id, int label, float value, float minimum, float step, float maximum, CSettingsManager *settingsManager = nullptr);
+  CSettingNumber(const std::string &id, const std::string& label, float value, float minimum, float step, float maximum, CSettingsManager* settingsManager = nullptr);
   ~CSettingNumber() override = default;
 
   std::shared_ptr<CSetting> Clone(const std::string &id) const override;

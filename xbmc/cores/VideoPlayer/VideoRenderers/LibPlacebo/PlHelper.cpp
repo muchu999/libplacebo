@@ -10,6 +10,7 @@
 #include <mfobjects.h>
 
 #include "rendering/dx/RenderContext.h"
+#include "video/dialogs/GUIDialogVideoSettings.h"
 
 
 static void pl_log_cb(void*, enum pl_log_level level, const char* msg)
@@ -90,6 +91,7 @@ bool PL::PLInstance::Init()
     return false;
 
   m_plRenderer = pl_renderer_create(m_plLog, m_plD3d11->gpu);
+  CGUIDialogVideoSettings::InitializeShaders(GetGpu());
 }
 void PL::PLInstance::Reset()
 { 
