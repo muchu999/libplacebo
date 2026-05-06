@@ -1932,8 +1932,7 @@ int MysqlDataset::exec(const std::string& sql)
         while ((row = mysql_fetch_row(res2)))
         {
           unsigned long* lengths = mysql_fetch_lengths(res2);
-          //std::unique_ptr<sql_record> r = std::make_unique<sql_record>();
-		  sql_record* r = new sql_record(); //cl check delete
+		  sql_record* r = new sql_record(); // Deleted on every call at the beginning of this function (exec_res.clear())
           field_value v;
           for (int i = 0; i < num_fields; i++)
           {

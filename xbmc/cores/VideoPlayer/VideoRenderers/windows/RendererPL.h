@@ -59,13 +59,8 @@ class CRendererPL : public CRendererHQ
     CRect ApplyTransforms(const CRect& destRect) const;
 	class CRenderBufferImpl;
 public:
-  //~CRendererPL() = default;
   ~CRendererPL();
 
-  pl_queue queue=NULL;
-
-  static pl_icc_object ReadIcc(const std::string& fileName);
-  static pl_custom_lut* ReadLut(const std::string& filename);
   void UpdateVideoFilters() override;
   bool NeedBuffer(int idx) override;
   CRenderInfo GetRenderInfo() override;

@@ -47,16 +47,25 @@ public:
   static void UpdateLibPLaceboParamsFromVideoSettings(CVideoSettings &vs);
   static void LoadLibplaceboSettings(CVideoSettings& vs);
   static bool LoadLibplaceboSettings(CVideoSettings& vs, std::string path);
-  static bool LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlNode* settings);
+  static bool LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* settings);
   static void SaveLibplaceboSettings(const CVideoSettings& vs, std::string path);
   static void SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* settings);
   static void LoadLutFile(CVideoSettings& vs, const std::string& path);
+  static void AddShaderFile(pl_gpu gpu, CVideoSettings& vs, const std::string& fileName);
+  static void InitializeShaders(pl_gpu gpu);
+  static void SerializeShaders(const CVideoSettings& vs, std::string& serializedData);
+  static void SaveShadersSettings(const CVideoSettings& vs, TiXmlNode* lpnode);
+  static void LoadShaderDataFromDatabase(CVideoSettings& vs, const std::string& data);
+  static void LoadShaderSettings(CVideoSettings& vs, const TiXmlElement* element);
+  static std::shared_ptr<const pl_custom_lut> ReadLut(const std::string& fileName);
+
 
 protected:
   // implementations of ISettingCallback
   void OnSettingChanged(const std::shared_ptr<const CSetting>& setting) override;
   void OnSettingAction(const std::shared_ptr<const CSetting>& setting) override;
-  
+
+  void InitializeShaderMenu(const std::shared_ptr<CSettingCategory>& category);
   static void SkinZoomUpdate(void);
   void AddVideoStreams(const std::shared_ptr<CSettingGroup>& group, const std::string& settingId);
   static void PlUpscalerOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
@@ -69,6 +78,7 @@ protected:
   static void PlDitherTransferOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void PlDitherMethodOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void PlColorMapIntentOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current); 
+  static void PlShaderOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<StringSettingOption>& list, std::string& current);
   static void PlLutOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<StringSettingOption>& list, std::string& current);
   static void PlLutTypeOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void PlDiffusionKernelOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);

@@ -68,12 +68,14 @@ public:
    \return Localizeable label ID of the setting group
    */
   int GetLabel() const { return m_label; }
+  std::string GetLabelStr() const { return m_labelStr; }
   /*!
    \brief Sets the localizeable label ID of the setting group.
 
    \param label Localizeable label ID of the setting group
    */
   void SetLabel(int label) { m_label = label; }
+  void SetLabel(const std::string& label) { m_labelStr = label; }
   /*!
    \brief Gets the localizeable help ID of the setting group.
 
@@ -132,6 +134,7 @@ protected:
 
 private:
   bool m_visible = true;
+  std::string m_labelStr;
   int m_label = DefaultLabel;
   int m_help = -1;
   bool m_meetsRequirements = true;

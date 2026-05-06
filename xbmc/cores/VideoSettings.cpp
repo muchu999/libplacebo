@@ -84,7 +84,12 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboTargetColorspaceHintMode = other.m_PlaceboTargetColorspaceHintMode;
   m_PlaceboLutFilename = other.m_PlaceboLutFilename;
   m_PlaceboLut = other.m_PlaceboLut;
-  
+  m_PlaceboShadersEnabled = other.m_PlaceboShadersEnabled;
+  m_PlaceboShadersFilename = other.m_PlaceboShadersFilename;
+  m_PlaceboShadersParams = other.m_PlaceboShadersParams; 
+
+  m_Shaders = other.m_Shaders;
+
   // Shallow copy and deep copy of m_placeboOptions content
   if (m_placeboOptions && other.m_placeboOptions)
   {
@@ -140,6 +145,10 @@ CVideoSettings::CVideoSettings()
   m_PlaceboLutFilename = "";
   m_PlaceboLut = nullptr;
 
+  m_PlaceboShadersEnabled = {}; 
+  m_PlaceboShadersFilename = {};
+  m_PlaceboShadersParams = {};
+
   // m_placeboOptions already reset in constructor, just update
   CGUIDialogVideoSettings::UpdateVideoSettingsFromLibPLaceboParams(*this);
 
@@ -147,7 +156,6 @@ CVideoSettings::CVideoSettings()
 
 bool CVideoSettings::operator!=(const CVideoSettings &right) const
 {
-  //cl 
   if (m_InterlaceMethod != right.m_InterlaceMethod) return true;
   if (m_ScalingMethod != right.m_ScalingMethod) return true;
   if (m_ViewMode != right.m_ViewMode) return true;
@@ -189,6 +197,10 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   if (m_PlaceboTargetColorspaceHint != right.m_PlaceboTargetColorspaceHint) return true;
   if (m_PlaceboTargetColorspaceHintMode != right.m_PlaceboTargetColorspaceHintMode) return true;
   if (m_PlaceboLutFilename != right.m_PlaceboLutFilename) return true;
+
+  if (m_PlaceboShadersEnabled != right.m_PlaceboShadersEnabled) return true;
+  if (m_PlaceboShadersFilename != right.m_PlaceboShadersFilename) return true;
+  if (m_PlaceboShadersParams != right.m_PlaceboShadersParams) return true;  
 
   if (m_PlaceboColorAdjustmentEnabled != right.m_PlaceboColorAdjustmentEnabled) return true;
   if (m_PlaceboSaturation != right.m_PlaceboSaturation) return true;

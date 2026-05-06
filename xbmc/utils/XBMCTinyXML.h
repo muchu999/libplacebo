@@ -40,10 +40,12 @@ public:
   bool LoadFile(TiXmlEncoding encoding = TIXML_DEFAULT_ENCODING);
   bool LoadFile(const char*, TiXmlEncoding encoding = TIXML_DEFAULT_ENCODING);
   bool LoadFile(const std::string& _filename, TiXmlEncoding encoding = TIXML_DEFAULT_ENCODING);
+  bool LoadString(const std::string& _string, TiXmlEncoding encoding = TIXML_DEFAULT_ENCODING);
   bool LoadFile(const std::string& _filename, const std::string& documentCharset);
   bool LoadFile(FILE*, TiXmlEncoding encoding = TIXML_DEFAULT_ENCODING);
   bool SaveFile(const char*) const;
   bool SaveFile(const std::string& filename) const;
+  bool SaveString(std::string& out) const;
   bool Parse(const std::string& data, TiXmlEncoding encoding = TIXML_DEFAULT_ENCODING);
   bool Parse(const std::string& data, const std::string& dataCharset);
   inline const std::string& GetSuggestedCharset() const { return m_SuggestedCharset; }

@@ -10,9 +10,12 @@
 
 #include "utils/Map.h"
 #include "libplacebo/options.h"
+#include "libplacebo/gpu.h"
 #include "..\VideoPlayer\VideoRenderers\LibPlacebo\PlOptionsWrapper.h"
 
 #include <string_view>
+#include <memory>
+#include <variant>
 
 #include <fmt/format.h>
 
@@ -193,6 +196,90 @@ enum ViewMode
   ViewModeZoom110Width
 };
 
+class CPlaceboShaders
+{
+public:
+  //std::vector<const pl_hook*> m_Hooks = {};
+  std::vector<std::shared_ptr<const pl_hook>> m_Hooks = {};
+  std::vector<std::string> m_FileNames = {};
+  std::vector<bool> m_Valid = {};
+  CPlaceboShaders& operator=(const CPlaceboShaders& other)
+  {
+    if (this != &other)
+    {
+      m_FileNames = other.m_FileNames;
+      m_Valid = other.m_Valid;
+      m_Hooks = other.m_Hooks;
+    }
+    return *this;
+}
+
+
+  size_t size() const { return m_FileNames.size(); }
+  void clear(void)
+  {
+    m_Hooks.clear();     
+    m_FileNames.clear();
+    m_Valid.clear();
+  };
+  //void emplace_back(const pl_hook* Hook, std::string FileName, bool Valid)
+  void emplace_back(const std::shared_ptr<const pl_hook>& Hook, std::string FileName, bool Valid)
+  {
+    m_Hooks.emplace_back(Hook);
+    m_FileNames.emplace_back(FileName);
+    m_Valid.emplace_back(Valid);
+  }
+  void erase(int index)
+  {
+    m_Hooks.erase(m_Hooks.begin() + index);
+    m_FileNames.erase(m_FileNames.begin() + index);
+	m_Valid.erase(m_Valid.begin() + index);
+  }
+};
+
+
+class CShaderParam
+{
+
+public:
+  CShaderParam() = default;
+  ~CShaderParam() = default;
+  std::string m_Name = "";
+  pl_var_type m_Type = PL_VAR_SINT;
+
+  bool operator == (const CShaderParam& other) const
+  {
+    if ((this->m_Name == other.m_Name) && ((int)this->m_Type == (int)other.m_Type) && (this->m_Value == other.m_Value))
+    {
+      return true;
+    }
+    return false;
+  }
+  bool operator != (const CShaderParam& other) const
+  {
+    if ((this->m_Name == other.m_Name) && ((int)this->m_Type == (int)other.m_Type) && (this->m_Value == other.m_Value))
+    {
+      return false;
+    }
+    return true;
+  }
+  std::variant<float, int, unsigned int> m_Value = 0;
+  void emplace_back(std::string Name, pl_var_type Type, std::variant<float, int, unsigned int> Value)
+  {
+    m_Name = Name;
+    m_Type = Type;
+    m_Value = Value;
+  }
+  void clear(void)
+  {
+    m_Name.clear();
+    m_Type = PL_VAR_SINT;
+    m_Value = 0;
+  }
+};
+
+
+
 class CVideoSettings
 {
 public:
@@ -235,7 +322,7 @@ public:
   float m_ToneMapParam;
   int m_Orientation;
   int m_CenterMixLevel; // relative to metadata or default
-  
+
   int m_PlaceboSkinZoom;
   int m_PlaceboSkinZoomHint;
 
@@ -331,8 +418,7 @@ public:
   float m_PlaceboGamutConstantsSoftclipDesat;
   float m_PlaceboGamutConstantsSoftclipKnee;
 
-  pl_icc_object m_PlaceboIccProfile = {};
-  pl_custom_lut* m_PlaceboLut = nullptr;
+  std::shared_ptr<const pl_custom_lut> m_PlaceboLut = nullptr;
   int m_PlaceboLutType;
   float m_PlaceboAntiringingStrength;
   bool m_PlaceboCorrectSubpixelOffset;
@@ -347,7 +433,13 @@ public:
   bool m_PlaceboPreserveMixingCache;
   bool m_PlaceboSkipAntiAliasing;
   bool m_PlaceboSkipCachingSingleFrame;
-  
+
+  static constexpr std::size_t MAX_NUMBER_OF_SHADERS = 16;
+  std::vector<bool> m_PlaceboShadersEnabled;
+  std::vector<std::string> m_PlaceboShadersFilename;
+  std::vector<std::vector<CShaderParam>> m_PlaceboShadersParams;
+  CPlaceboShaders m_Shaders;
+
   PlOptionsWrapper *m_placeboOptions;
 };
 

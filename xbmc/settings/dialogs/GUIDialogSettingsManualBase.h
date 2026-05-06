@@ -67,6 +67,14 @@ protected:
                                           bool delayed = false,
                                           bool visible = true,
                                           int help = -1);
+  std::shared_ptr<CSettingBool> AddToggle(const std::shared_ptr<CSettingGroup>& group,
+    const std::string& id,
+    const std::string& label,
+    SettingLevel level,
+    bool value,
+    bool delayed = false,
+    bool visible = true,
+    int help = -1);
   // edit controls
   std::shared_ptr<CSettingInt> AddEdit(const std::shared_ptr<CSettingGroup>& group,
                                        const std::string& id,
@@ -425,6 +433,20 @@ protected:
                                          bool delayed = false,
                                          bool visible = true,
                                          int help = -1);
+  std::shared_ptr<CSettingInt> AddSlider(const std::shared_ptr<CSettingGroup>& group,
+    const std::string& id,
+    const std::string& label,
+    SettingLevel level,
+    int value,
+    const std::string& formatString,
+    int minimum,
+    int step,
+    int maximum,
+    int heading = -1,
+    bool usePopup = false,
+    bool delayed = false,
+    bool visible = true,
+    int help = -1);
   std::shared_ptr<CSettingNumber> AddSlider(const std::shared_ptr<CSettingGroup>& group,
                                             const std::string& id,
                                             int label,
@@ -453,6 +475,20 @@ protected:
                                             bool delayed = false,
                                             bool visible = true,
                                             int help = -1);
+  std::shared_ptr<CSettingNumber> AddSlider(const std::shared_ptr<CSettingGroup>& group,
+    const std::string& id,
+    const std::string& label,
+    SettingLevel level,
+    float value,
+    const std::string& formatString,
+    float minimum,
+    float step,
+    float maximum,
+    int heading = -1,
+    bool usePopup = false,
+    bool delayed = false,
+    bool visible = true,
+    int help = -1);
 
   // range controls
   std::shared_ptr<CSettingList> AddPercentageRange(const std::shared_ptr<CSettingGroup>& group,

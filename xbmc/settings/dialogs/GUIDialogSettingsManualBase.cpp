@@ -138,6 +138,30 @@ std::shared_ptr<CSettingBool> CGUIDialogSettingsManualBase::AddToggle(const Sett
   return setting;
 }
 
+std::shared_ptr<CSettingBool> CGUIDialogSettingsManualBase::AddToggle(const SettingGroupPtr& group,
+  const std::string& id,
+  const std::string& label,
+  SettingLevel level,
+  bool value,
+  bool delayed /* = false */,
+  bool visible /* = true */,
+  int help /* = -1 */)
+{
+  if (!group || id.empty() || GetSetting(id))
+    return nullptr;
+
+  auto setting = std::make_shared<CSettingBool>(id, label, value, GetSettingsManager());
+  if (!setting)
+    return nullptr;
+
+  setting->SetControl(GetCheckmarkControl(delayed));
+  SetSettingDetails(setting, level, visible, help);
+
+  group->AddSetting(setting);
+  return setting;
+}
+
+
 std::shared_ptr<CSettingInt> CGUIDialogSettingsManualBase::AddEdit(
     const SettingGroupPtr& group,
     const std::string& id,
@@ -1101,6 +1125,39 @@ std::shared_ptr<CSettingInt> CGUIDialogSettingsManualBase::AddSlider(
   return setting;
 }
 
+std::shared_ptr<CSettingInt> CGUIDialogSettingsManualBase::AddSlider(
+  const SettingGroupPtr& group,
+  const std::string& id,
+  const std::string& label,
+  SettingLevel level,
+  int value,
+  const std::string& formatString,
+  int minimum,
+  int step,
+  int maximum,
+  int heading /* = -1 */,
+  bool usePopup /* = false */,
+  bool delayed /* = false */,
+  bool visible /* = true */,
+  int help /* = -1 */)
+{
+  if (!group || id.empty() || GetSetting(id))
+    return nullptr;
+
+  auto setting = std::make_shared<CSettingInt>(id, label, value, GetSettingsManager());
+  if (!setting)
+    return nullptr;
+
+  setting->SetControl(GetSliderControl("integer", delayed, heading, usePopup, -1, formatString));
+  setting->SetMinimum(minimum);
+  setting->SetStep(step);
+  setting->SetMaximum(maximum);
+  SetSettingDetails(setting, level, visible, help);
+
+  group->AddSetting(setting);
+  return setting;
+}
+
 std::shared_ptr<CSettingNumber> CGUIDialogSettingsManualBase::AddSlider(
     const SettingGroupPtr& group,
     const std::string& id,
@@ -1151,6 +1208,39 @@ std::shared_ptr<CSettingNumber> CGUIDialogSettingsManualBase::AddSlider(
     int help /* = -1 */)
 {
   if (!group || id.empty() || label < 0 || GetSetting(id))
+    return nullptr;
+
+  auto setting = std::make_shared<CSettingNumber>(id, label, value, GetSettingsManager());
+  if (!setting)
+    return nullptr;
+
+  setting->SetControl(GetSliderControl("number", delayed, heading, usePopup, -1, formatString));
+  setting->SetMinimum(static_cast<double>(minimum));
+  setting->SetStep(static_cast<double>(step));
+  setting->SetMaximum(static_cast<double>(maximum));
+  SetSettingDetails(setting, level, visible, help);
+
+  group->AddSetting(setting);
+  return setting;
+}
+
+std::shared_ptr<CSettingNumber> CGUIDialogSettingsManualBase::AddSlider(
+  const SettingGroupPtr& group,
+  const std::string& id,
+  const std::string& label,
+  SettingLevel level,
+  float value,
+  const std::string& formatString,
+  float minimum,
+  float step,
+  float maximum,
+  int heading /* = -1 */,
+  bool usePopup /* = false */,
+  bool delayed /* = false */,
+  bool visible /* = true */,
+  int help /* = -1 */)
+{
+  if (!group || id.empty() || GetSetting(id))
     return nullptr;
 
   auto setting = std::make_shared<CSettingNumber>(id, label, value, GetSettingsManager());

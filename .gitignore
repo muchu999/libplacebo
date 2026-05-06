@@ -305,3 +305,4 @@ exclude_dll.txt
 /DLLs/FreePsdVn.com_2010558_PRESET_3d_luts_duotone_5027770/CUBE/Duo - Warm Spring.cube
 /DLLs/FreePsdVn.com_2010558_PRESET_3d_luts_duotone_5027770/FreePsdVn.com for more concept.URL
 /DLLs/FreePsdVn.com_2010558_PRESET_3d_luts_duotone_5027770/Installing_and_Using_LUTs.pdf
+/xbmc/cores/VideoPlayer/VideoRenderers/windows/RendererDXVA.cpp

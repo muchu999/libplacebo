@@ -637,7 +637,9 @@ SettingsContainer CGUIDialogSettingsBase::CreateSettings()
 
 std::string CGUIDialogSettingsBase::GetSettingsLabel(const std::shared_ptr<ISetting>& pSetting)
 {
-  return GetLocalizedString(pSetting->GetLabel());
+  if(pSetting->GetLabelStr().empty())
+    return GetLocalizedString(pSetting->GetLabel());
+  return pSetting->GetLabelStr();
 }
 
 void CGUIDialogSettingsBase::UpdateSettings()
