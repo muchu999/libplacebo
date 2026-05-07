@@ -55,43 +55,43 @@ CMediaSettings& CMediaSettings::GetInstance()
   return sMediaSettings;
 }
 
-bool CMediaSettings::Load(const TiXmlNode* settings)
+bool CMediaSettings::Load(const TiXmlNode *settings)
 {
   if (!settings)
-	return false;
+    return false;
 
   std::unique_lock lock(m_critical);
-  const TiXmlElement* pElement = settings->FirstChildElement("defaultvideosettings");
+  const TiXmlElement *pElement = settings->FirstChildElement("defaultvideosettings");
   if (pElement)
   {
-	int interlaceMethod;
-	XMLUtils::GetInt(pElement, "interlacemethod", interlaceMethod, VS_INTERLACEMETHOD_NONE, VS_INTERLACEMETHOD_MAX); m_defaultVideoSettings.m_InterlaceMethod = (EINTERLACEMETHOD)interlaceMethod;
+    int interlaceMethod;
+    XMLUtils::GetInt(pElement, "interlacemethod", interlaceMethod, VS_INTERLACEMETHOD_NONE, VS_INTERLACEMETHOD_MAX); m_defaultVideoSettings.m_InterlaceMethod = (EINTERLACEMETHOD)interlaceMethod;
+    
+    int scalingMethod;
+    if (!XMLUtils::GetInt(pElement, "scalingmethod", scalingMethod, VS_SCALINGMETHOD_NEAREST, VS_SCALINGMETHOD_MAX)) scalingMethod = (int)VS_SCALINGMETHOD_LINEAR; m_defaultVideoSettings.m_ScalingMethod = (ESCALINGMETHOD)scalingMethod;
 
-	int scalingMethod;
-	if (!XMLUtils::GetInt(pElement, "scalingmethod", scalingMethod, VS_SCALINGMETHOD_NEAREST, VS_SCALINGMETHOD_MAX)) scalingMethod = (int)VS_SCALINGMETHOD_LINEAR; m_defaultVideoSettings.m_ScalingMethod = (ESCALINGMETHOD)scalingMethod;
+    XMLUtils::GetInt(pElement, "viewmode", m_defaultVideoSettings.m_ViewMode, ViewModeNormal, ViewModeZoom110Width);
+    if (!XMLUtils::GetFloat(pElement, "zoomamount", m_defaultVideoSettings.m_CustomZoomAmount, 0.5f, 2.0f))         m_defaultVideoSettings.m_CustomZoomAmount = 1.0f;
+    if (!XMLUtils::GetFloat(pElement, "pixelratio", m_defaultVideoSettings.m_CustomPixelRatio, 0.5f, 2.0f))         m_defaultVideoSettings.m_CustomPixelRatio = 1.0f;
+    if (!XMLUtils::GetFloat(pElement, "verticalshift", m_defaultVideoSettings.m_CustomVerticalShift, -2.0f, 2.0f))  m_defaultVideoSettings.m_CustomVerticalShift = 0.0f;
+    if (!XMLUtils::GetFloat(pElement, "volumeamplification", m_defaultVideoSettings.m_VolumeAmplification, VOLUME_DRC_MINIMUM * 0.01f, VOLUME_DRC_MAXIMUM * 0.01f))      m_defaultVideoSettings.m_VolumeAmplification = VOLUME_DRC_MINIMUM * 0.01f;
+    if (!XMLUtils::GetFloat(pElement, "noisereduction", m_defaultVideoSettings.m_NoiseReduction, 0.0f, 1.0f))       m_defaultVideoSettings.m_NoiseReduction = 0.0f;
+    XMLUtils::GetBoolean(pElement, "postprocess", m_defaultVideoSettings.m_PostProcess);
+    if (!XMLUtils::GetFloat(pElement, "sharpness", m_defaultVideoSettings.m_Sharpness, -1.0f, 1.0f))      m_defaultVideoSettings.m_Sharpness = 0.0f;
+    XMLUtils::GetBoolean(pElement, "showsubtitles", m_defaultVideoSettings.m_SubtitleOn);
+    if (!XMLUtils::GetFloat(pElement, "brightness", m_defaultVideoSettings.m_Brightness, 0, 100))      m_defaultVideoSettings.m_Brightness = 50;
+    if (!XMLUtils::GetFloat(pElement, "contrast", m_defaultVideoSettings.m_Contrast, 0, 100))      m_defaultVideoSettings.m_Contrast = 50;
+    if (!XMLUtils::GetFloat(pElement, "gamma", m_defaultVideoSettings.m_Gamma, 0, 100))      m_defaultVideoSettings.m_Gamma = 20;
+    if (!XMLUtils::GetFloat(pElement, "audiodelay", m_defaultVideoSettings.m_AudioDelay, -10.0f, 10.0f))      m_defaultVideoSettings.m_AudioDelay = 0.0f;
+    if (!XMLUtils::GetFloat(pElement, "subtitledelay", m_defaultVideoSettings.m_SubtitleDelay, -10.0f, 10.0f))      m_defaultVideoSettings.m_SubtitleDelay = 0.0f;
+    XMLUtils::GetBoolean(pElement, "nonlinstretch", m_defaultVideoSettings.m_CustomNonLinStretch);
+    if (!XMLUtils::GetInt(pElement, "stereomode", m_defaultVideoSettings.m_StereoMode))      m_defaultVideoSettings.m_StereoMode = 0;
+    if (!XMLUtils::GetInt(pElement, "centermixlevel", m_defaultVideoSettings.m_CenterMixLevel))      m_defaultVideoSettings.m_CenterMixLevel = 0;
 
-	XMLUtils::GetInt(pElement, "viewmode", m_defaultVideoSettings.m_ViewMode, ViewModeNormal, ViewModeZoom110Width);
-	if (!XMLUtils::GetFloat(pElement, "zoomamount", m_defaultVideoSettings.m_CustomZoomAmount, 0.5f, 2.0f))         m_defaultVideoSettings.m_CustomZoomAmount = 1.0f;
-	if (!XMLUtils::GetFloat(pElement, "pixelratio", m_defaultVideoSettings.m_CustomPixelRatio, 0.5f, 2.0f))         m_defaultVideoSettings.m_CustomPixelRatio = 1.0f;
-	if (!XMLUtils::GetFloat(pElement, "verticalshift", m_defaultVideoSettings.m_CustomVerticalShift, -2.0f, 2.0f))  m_defaultVideoSettings.m_CustomVerticalShift = 0.0f;
-	if (!XMLUtils::GetFloat(pElement, "volumeamplification", m_defaultVideoSettings.m_VolumeAmplification, VOLUME_DRC_MINIMUM * 0.01f, VOLUME_DRC_MAXIMUM * 0.01f))      m_defaultVideoSettings.m_VolumeAmplification = VOLUME_DRC_MINIMUM * 0.01f;
-	if (!XMLUtils::GetFloat(pElement, "noisereduction", m_defaultVideoSettings.m_NoiseReduction, 0.0f, 1.0f))       m_defaultVideoSettings.m_NoiseReduction = 0.0f;
-	XMLUtils::GetBoolean(pElement, "postprocess", m_defaultVideoSettings.m_PostProcess);
-	if (!XMLUtils::GetFloat(pElement, "sharpness", m_defaultVideoSettings.m_Sharpness, -1.0f, 1.0f))      m_defaultVideoSettings.m_Sharpness = 0.0f;
-	XMLUtils::GetBoolean(pElement, "showsubtitles", m_defaultVideoSettings.m_SubtitleOn);
-	if (!XMLUtils::GetFloat(pElement, "brightness", m_defaultVideoSettings.m_Brightness, 0, 100))      m_defaultVideoSettings.m_Brightness = 50;
-	if (!XMLUtils::GetFloat(pElement, "contrast", m_defaultVideoSettings.m_Contrast, 0, 100))      m_defaultVideoSettings.m_Contrast = 50;
-	if (!XMLUtils::GetFloat(pElement, "gamma", m_defaultVideoSettings.m_Gamma, 0, 100))      m_defaultVideoSettings.m_Gamma = 20;
-	if (!XMLUtils::GetFloat(pElement, "audiodelay", m_defaultVideoSettings.m_AudioDelay, -10.0f, 10.0f))      m_defaultVideoSettings.m_AudioDelay = 0.0f;
-	if (!XMLUtils::GetFloat(pElement, "subtitledelay", m_defaultVideoSettings.m_SubtitleDelay, -10.0f, 10.0f))      m_defaultVideoSettings.m_SubtitleDelay = 0.0f;
-	XMLUtils::GetBoolean(pElement, "nonlinstretch", m_defaultVideoSettings.m_CustomNonLinStretch);
-	if (!XMLUtils::GetInt(pElement, "stereomode", m_defaultVideoSettings.m_StereoMode))      m_defaultVideoSettings.m_StereoMode = 0;
-	if (!XMLUtils::GetInt(pElement, "centermixlevel", m_defaultVideoSettings.m_CenterMixLevel))      m_defaultVideoSettings.m_CenterMixLevel = 0;
-
-	int toneMapMethod;
-	if (!XMLUtils::GetInt(pElement, "tonemapmethod", toneMapMethod, VS_TONEMAPMETHOD_OFF, VS_TONEMAPMETHOD_MAX))  toneMapMethod = VS_TONEMAPMETHOD_HABLE;
-	m_defaultVideoSettings.m_ToneMapMethod = static_cast<ETONEMAPMETHOD>(toneMapMethod);
-	if (!XMLUtils::GetFloat(pElement, "tonemapparam", m_defaultVideoSettings.m_ToneMapParam, 0.1f, 5.0f))  m_defaultVideoSettings.m_ToneMapParam = 1.0f;
+    int toneMapMethod;
+    if (!XMLUtils::GetInt(pElement, "tonemapmethod", toneMapMethod, VS_TONEMAPMETHOD_OFF, VS_TONEMAPMETHOD_MAX))  toneMapMethod = VS_TONEMAPMETHOD_HABLE;
+    m_defaultVideoSettings.m_ToneMapMethod = static_cast<ETONEMAPMETHOD>(toneMapMethod);
+    if (!XMLUtils::GetFloat(pElement, "tonemapparam", m_defaultVideoSettings.m_ToneMapParam, 0.1f, 5.0f))  m_defaultVideoSettings.m_ToneMapParam = 1.0f;
   }
 
   CPLHelper::LoadLibplaceboSettings(m_defaultVideoSettings, pElement);
@@ -102,92 +102,92 @@ bool CMediaSettings::Load(const TiXmlNode* settings)
   pElement = settings->FirstChildElement("defaultgamesettings");
   if (pElement)
   {
-	std::string videoFilter;
-	if (XMLUtils::GetString(pElement, "videofilter", videoFilter))
-	  m_defaultGameSettings.SetVideoFilter(videoFilter);
+    std::string videoFilter;
+    if (XMLUtils::GetString(pElement, "videofilter", videoFilter))
+      m_defaultGameSettings.SetVideoFilter(videoFilter);
 
-	std::string stretchMode;
-	if (XMLUtils::GetString(pElement, "stretchmode", stretchMode))
-	{
-	  RETRO::STRETCHMODE sm = RETRO::CRetroPlayerUtils::IdentifierToStretchMode(stretchMode);
-	  m_defaultGameSettings.SetStretchMode(sm);
-	}
+    std::string stretchMode;
+    if (XMLUtils::GetString(pElement, "stretchmode", stretchMode))
+    {
+      RETRO::STRETCHMODE sm = RETRO::CRetroPlayerUtils::IdentifierToStretchMode(stretchMode);
+      m_defaultGameSettings.SetStretchMode(sm);
+    }
 
-	int rotation;
-	if (XMLUtils::GetInt(pElement, "rotation", rotation, 0, 270) && rotation >= 0)
-	  m_defaultGameSettings.SetRotationDegCCW(static_cast<unsigned int>(rotation));
+    int rotation;
+    if (XMLUtils::GetInt(pElement, "rotation", rotation, 0, 270) && rotation >= 0)
+      m_defaultGameSettings.SetRotationDegCCW(static_cast<unsigned int>(rotation));
   }
 
   // mymusic settings
   pElement = settings->FirstChildElement("mymusic");
   if (pElement)
   {
-	const TiXmlElement* pChild = pElement->FirstChildElement("playlist");
-	if (pChild)
-	{
-	  XMLUtils::GetBoolean(pChild, "repeat", m_musicPlaylistRepeat);
-	  XMLUtils::GetBoolean(pChild, "shuffle", m_musicPlaylistShuffle);
-	}
-	if (!XMLUtils::GetInt(pElement, "needsupdate", m_musicNeedsUpdate, 0, INT_MAX))
-	  m_musicNeedsUpdate = 0;
+    const TiXmlElement *pChild = pElement->FirstChildElement("playlist");
+    if (pChild)
+    {
+      XMLUtils::GetBoolean(pChild, "repeat", m_musicPlaylistRepeat);
+      XMLUtils::GetBoolean(pChild, "shuffle", m_musicPlaylistShuffle);
+    }
+    if (!XMLUtils::GetInt(pElement, "needsupdate", m_musicNeedsUpdate, 0, INT_MAX))
+      m_musicNeedsUpdate = 0;
   }
 
   // Set music playlist player repeat and shuffle from loaded settings
   if (m_musicPlaylistRepeat)
-	CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST::Id::TYPE_MUSIC,
-	  PLAYLIST::RepeatState::ALL);
+    CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST::Id::TYPE_MUSIC,
+                                                  PLAYLIST::RepeatState::ALL);
   else
-	CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST::Id::TYPE_MUSIC,
-	  PLAYLIST::RepeatState::NONE);
+    CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST::Id::TYPE_MUSIC,
+                                                  PLAYLIST::RepeatState::NONE);
   CServiceBroker::GetPlaylistPlayer().SetShuffle(PLAYLIST::Id::TYPE_MUSIC, m_musicPlaylistShuffle);
 
   // Read the watchmode settings for the various media views
   pElement = settings->FirstChildElement("myvideos");
   if (pElement)
   {
-	int tmp;
-	if (XMLUtils::GetInt(pElement, "watchmodemovies", tmp, (int)WatchedModeAll, (int)WatchedModeWatched))
-	  m_watchedModes["movies"] = (WatchedMode)tmp;
-	if (XMLUtils::GetInt(pElement, "watchmodetvshows", tmp, (int)WatchedModeAll, (int)WatchedModeWatched))
-	  m_watchedModes["tvshows"] = (WatchedMode)tmp;
-	if (XMLUtils::GetInt(pElement, "watchmodemusicvideos", tmp, (int)WatchedModeAll, (int)WatchedModeWatched))
-	  m_watchedModes["musicvideos"] = (WatchedMode)tmp;
-	if (XMLUtils::GetInt(pElement, "watchmoderecordings", tmp, static_cast<int>(WatchedModeAll), static_cast<int>(WatchedModeWatched)))
-	  m_watchedModes["recordings"] = static_cast<WatchedMode>(tmp);
+    int tmp;
+    if (XMLUtils::GetInt(pElement, "watchmodemovies", tmp, (int)WatchedModeAll, (int)WatchedModeWatched))
+      m_watchedModes["movies"] = (WatchedMode)tmp;
+    if (XMLUtils::GetInt(pElement, "watchmodetvshows", tmp, (int)WatchedModeAll, (int)WatchedModeWatched))
+      m_watchedModes["tvshows"] = (WatchedMode)tmp;
+    if (XMLUtils::GetInt(pElement, "watchmodemusicvideos", tmp, (int)WatchedModeAll, (int)WatchedModeWatched))
+      m_watchedModes["musicvideos"] = (WatchedMode)tmp;
+    if (XMLUtils::GetInt(pElement, "watchmoderecordings", tmp, static_cast<int>(WatchedModeAll), static_cast<int>(WatchedModeWatched)))
+      m_watchedModes["recordings"] = static_cast<WatchedMode>(tmp);
 
-	const TiXmlElement* pChild = pElement->FirstChildElement("playlist");
-	if (pChild)
-	{
-	  XMLUtils::GetBoolean(pChild, "repeat", m_videoPlaylistRepeat);
-	  XMLUtils::GetBoolean(pChild, "shuffle", m_videoPlaylistShuffle);
-	}
-	if (!XMLUtils::GetInt(pElement, "needsupdate", m_videoNeedsUpdate, 0, INT_MAX))
-	  m_videoNeedsUpdate = 0;
+    const TiXmlElement *pChild = pElement->FirstChildElement("playlist");
+    if (pChild)
+    {
+      XMLUtils::GetBoolean(pChild, "repeat", m_videoPlaylistRepeat);
+      XMLUtils::GetBoolean(pChild, "shuffle", m_videoPlaylistShuffle);
+    }
+    if (!XMLUtils::GetInt(pElement, "needsupdate", m_videoNeedsUpdate, 0, INT_MAX))
+      m_videoNeedsUpdate = 0;
   }
 
   // Set video playlist player repeat and shuffle from loaded settings
   if (m_videoPlaylistRepeat)
-	CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST::Id::TYPE_VIDEO,
-	  PLAYLIST::RepeatState::ALL);
+    CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST::Id::TYPE_VIDEO,
+                                                  PLAYLIST::RepeatState::ALL);
   else
-	CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST::Id::TYPE_VIDEO,
-	  PLAYLIST::RepeatState::NONE);
+    CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST::Id::TYPE_VIDEO,
+                                                  PLAYLIST::RepeatState::NONE);
   CServiceBroker::GetPlaylistPlayer().SetShuffle(PLAYLIST::Id::TYPE_VIDEO, m_videoPlaylistShuffle);
 
   return true;
 }
 
-bool CMediaSettings::Save(TiXmlNode* settings) const
+bool CMediaSettings::Save(TiXmlNode *settings) const
 {
   if (!settings)
-	return false;
+    return false;
 
   std::unique_lock lock(m_critical);
   // default video settings
   TiXmlElement videoSettingsNode("defaultvideosettings");
-  TiXmlNode* pNode = settings->InsertEndChild(videoSettingsNode);
+  TiXmlNode *pNode = settings->InsertEndChild(videoSettingsNode);
   if (!pNode)
-	return false;
+    return false;
 
   XMLUtils::SetInt(pNode, "interlacemethod", m_defaultVideoSettings.m_InterlaceMethod);
   XMLUtils::SetInt(pNode, "scalingmethod", m_defaultVideoSettings.m_ScalingMethod);
@@ -211,19 +211,19 @@ bool CMediaSettings::Save(TiXmlNode* settings) const
   XMLUtils::SetInt(pNode, "tonemapmethod", m_defaultVideoSettings.m_ToneMapMethod);
   XMLUtils::SetFloat(pNode, "tonemapparam", m_defaultVideoSettings.m_ToneMapParam);
 
-  CPLHelper::SaveLibplaceboSettings(m_defaultVideoSettings, pNode);
+  CGUIDialogVideoSettings::SaveLibplaceboSettings(m_defaultVideoSettings, pNode);
 
   // default audio settings for dsp addons
   TiXmlElement audioSettingsNode("defaultaudiosettings");
   pNode = settings->InsertEndChild(audioSettingsNode);
   if (!pNode)
-	return false;
+    return false;
 
   // Default game settings
   TiXmlElement gameSettingsNode("defaultgamesettings");
   pNode = settings->InsertEndChild(gameSettingsNode);
   if (!pNode)
-	return false;
+    return false;
 
   XMLUtils::SetString(pNode, "videofilter", m_defaultGameSettings.VideoFilter());
   std::string sm = RETRO::CRetroPlayerUtils::StretchModeToIdentifier(m_defaultGameSettings.StretchMode());
@@ -234,16 +234,16 @@ bool CMediaSettings::Save(TiXmlNode* settings) const
   pNode = settings->FirstChild("mymusic");
   if (!pNode)
   {
-	TiXmlElement videosNode("mymusic");
-	pNode = settings->InsertEndChild(videosNode);
-	if (!pNode)
-	  return false;
+    TiXmlElement videosNode("mymusic");
+    pNode = settings->InsertEndChild(videosNode);
+    if (!pNode)
+      return false;
   }
 
   TiXmlElement musicPlaylistNode("playlist");
-  TiXmlNode* playlistNode = pNode->InsertEndChild(musicPlaylistNode);
+  TiXmlNode *playlistNode = pNode->InsertEndChild(musicPlaylistNode);
   if (!playlistNode)
-	return false;
+    return false;
   XMLUtils::SetBoolean(playlistNode, "repeat", m_musicPlaylistRepeat);
   XMLUtils::SetBoolean(playlistNode, "shuffle", m_musicPlaylistShuffle);
 
@@ -253,10 +253,10 @@ bool CMediaSettings::Save(TiXmlNode* settings) const
   pNode = settings->FirstChild("myvideos");
   if (!pNode)
   {
-	TiXmlElement videosNode("myvideos");
-	pNode = settings->InsertEndChild(videosNode);
-	if (!pNode)
-	  return false;
+    TiXmlElement videosNode("myvideos");
+    pNode = settings->InsertEndChild(videosNode);
+    if (!pNode)
+      return false;
   }
 
   XMLUtils::SetInt(pNode, "watchmodemovies", m_watchedModes.find("movies")->second);
@@ -267,7 +267,7 @@ bool CMediaSettings::Save(TiXmlNode* settings) const
   TiXmlElement videoPlaylistNode("playlist");
   playlistNode = pNode->InsertEndChild(videoPlaylistNode);
   if (!playlistNode)
-	return false;
+    return false;
   XMLUtils::SetBoolean(playlistNode, "repeat", m_videoPlaylistRepeat);
   XMLUtils::SetBoolean(playlistNode, "shuffle", m_videoPlaylistShuffle);
 
@@ -279,120 +279,120 @@ bool CMediaSettings::Save(TiXmlNode* settings) const
 void CMediaSettings::OnSettingAction(const std::shared_ptr<const CSetting>& setting)
 {
   if (!setting)
-	return;
+    return;
 
-  const std::string& settingId = setting->GetId();
+  const std::string &settingId = setting->GetId();
   if (settingId == CSettings::SETTING_MUSICLIBRARY_CLEANUP)
   {
-	if (HELPERS::ShowYesNoDialogText(CVariant{ 313 }, CVariant{ 333 }) == DialogResponse::CHOICE_YES)
-	{
-	  if (CMusicLibraryQueue::GetInstance().IsRunning())
-		HELPERS::ShowOKDialogText(CVariant{ 700 }, CVariant{ 703 });
-	  else
-		CMusicLibraryQueue::GetInstance().CleanLibrary(true);
-	}
+    if (HELPERS::ShowYesNoDialogText(CVariant{313}, CVariant{333}) == DialogResponse::CHOICE_YES)
+    {
+      if (CMusicLibraryQueue::GetInstance().IsRunning())
+        HELPERS::ShowOKDialogText(CVariant{700}, CVariant{703});
+      else
+        CMusicLibraryQueue::GetInstance().CleanLibrary(true);
+    }
   }
   else if (settingId == CSettings::SETTING_MUSICLIBRARY_EXPORT)
   {
-	CLibExportSettings m_musicExportSettings;
-	if (CGUIDialogLibExportSettings::Show(m_musicExportSettings))
-	{
-	  // Export music library showing progress dialog
-	  CMusicLibraryQueue::GetInstance().ExportLibrary(m_musicExportSettings, true);
-	}
+    CLibExportSettings m_musicExportSettings;
+    if (CGUIDialogLibExportSettings::Show(m_musicExportSettings))
+    {
+      // Export music library showing progress dialog
+      CMusicLibraryQueue::GetInstance().ExportLibrary(m_musicExportSettings, true);
+    }
   }
   else if (settingId == CSettings::SETTING_MUSICLIBRARY_IMPORT)
   {
-	std::string path;
-	std::vector<CMediaSource> shares;
-	CServiceBroker::GetMediaManager().GetLocalDrives(shares);
-	CServiceBroker::GetMediaManager().GetNetworkLocations(shares);
-	CServiceBroker::GetMediaManager().GetRemovableDrives(shares);
+    std::string path;
+    std::vector<CMediaSource> shares;
+    CServiceBroker::GetMediaManager().GetLocalDrives(shares);
+    CServiceBroker::GetMediaManager().GetNetworkLocations(shares);
+    CServiceBroker::GetMediaManager().GetRemovableDrives(shares);
 
-	if (CGUIDialogFileBrowser::ShowAndGetFile(
-	  shares, "musicdb.xml",
-	  CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(651), path))
-	{
-	  // Import data to music library showing progress dialog
-	  CMusicLibraryQueue::GetInstance().ImportLibrary(path, true);
-	}
+    if (CGUIDialogFileBrowser::ShowAndGetFile(
+            shares, "musicdb.xml",
+            CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(651), path))
+    {
+      // Import data to music library showing progress dialog
+      CMusicLibraryQueue::GetInstance().ImportLibrary(path, true);
+    }
   }
   else if (settingId == CSettings::SETTING_VIDEOLIBRARY_CLEANUP)
   {
-	if (HELPERS::ShowYesNoDialogText(CVariant{ 313 }, CVariant{ 333 }) == DialogResponse::CHOICE_YES)
-	{
-	  if (!CVideoLibraryQueue::GetInstance().CleanLibraryModal())
-		HELPERS::ShowOKDialogText(CVariant{ 700 }, CVariant{ 703 });
-	}
+    if (HELPERS::ShowYesNoDialogText(CVariant{313}, CVariant{333}) == DialogResponse::CHOICE_YES)
+    {
+      if (!CVideoLibraryQueue::GetInstance().CleanLibraryModal())
+        HELPERS::ShowOKDialogText(CVariant{700}, CVariant{703});
+    }
   }
   else if (settingId == CSettings::SETTING_VIDEOLIBRARY_EXPORT)
-	CBuiltins::GetInstance().Execute("exportlibrary(video)");
+    CBuiltins::GetInstance().Execute("exportlibrary(video)");
   else if (settingId == CSettings::SETTING_VIDEOLIBRARY_IMPORT)
   {
-	std::string path;
-	std::vector<CMediaSource> shares;
-	CServiceBroker::GetMediaManager().GetLocalDrives(shares);
-	CServiceBroker::GetMediaManager().GetNetworkLocations(shares);
-	CServiceBroker::GetMediaManager().GetRemovableDrives(shares);
+    std::string path;
+    std::vector<CMediaSource> shares;
+    CServiceBroker::GetMediaManager().GetLocalDrives(shares);
+    CServiceBroker::GetMediaManager().GetNetworkLocations(shares);
+    CServiceBroker::GetMediaManager().GetRemovableDrives(shares);
 
-	if (CGUIDialogFileBrowser::ShowAndGetDirectory(
-	  shares, CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(651), path))
-	{
-	  CVideoDatabase videodatabase;
-	  videodatabase.Open();
-	  videodatabase.ImportFromXML(path);
-	  videodatabase.Close();
-	}
+    if (CGUIDialogFileBrowser::ShowAndGetDirectory(
+            shares, CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(651), path))
+    {
+      CVideoDatabase videodatabase;
+      videodatabase.Open();
+      videodatabase.ImportFromXML(path);
+      videodatabase.Close();
+    }
   }
   else if (settingId == CSettings::SETTING_MAINTENANCE_CLEANIMAGECACHE)
   {
-	CServiceBroker::GetTextureCache()->CleanAllUnusedImages();
+    CServiceBroker::GetTextureCache()->CleanAllUnusedImages();
   }
 }
 
 void CMediaSettings::OnSettingChanged(const std::shared_ptr<const CSetting>& setting)
 {
   if (!setting)
-	return;
+    return;
 
   if (setting->GetId() == CSettings::SETTING_VIDEOLIBRARY_SHOWUNWATCHEDPLOTS)
-	CServiceBroker::GetAnnouncementManager()->Announce(ANNOUNCEMENT::VideoLibrary, "OnRefresh");
+    CServiceBroker::GetAnnouncementManager()->Announce(ANNOUNCEMENT::VideoLibrary, "OnRefresh");
 }
 
-int CMediaSettings::GetWatchedMode(const std::string& content) const
+int CMediaSettings::GetWatchedMode(const std::string &content) const
 {
   std::unique_lock lock(m_critical);
   WatchedModes::const_iterator it = m_watchedModes.find(GetWatchedContent(content));
   if (it != m_watchedModes.end())
-	return it->second;
+    return it->second;
 
   return WatchedModeAll;
 }
 
-void CMediaSettings::SetWatchedMode(const std::string& content, WatchedMode mode)
+void CMediaSettings::SetWatchedMode(const std::string &content, WatchedMode mode)
 {
   std::unique_lock lock(m_critical);
   WatchedModes::iterator it = m_watchedModes.find(GetWatchedContent(content));
   if (it != m_watchedModes.end())
-	it->second = mode;
+    it->second = mode;
 }
 
-void CMediaSettings::CycleWatchedMode(const std::string& content)
+void CMediaSettings::CycleWatchedMode(const std::string &content)
 {
   std::unique_lock lock(m_critical);
   WatchedModes::iterator it = m_watchedModes.find(GetWatchedContent(content));
   if (it != m_watchedModes.end())
   {
-	it->second = (WatchedMode)((int)it->second + 1);
-	if (it->second > WatchedModeWatched)
-	  it->second = WatchedModeAll;
+    it->second = (WatchedMode)((int)it->second + 1);
+    if (it->second > WatchedModeWatched)
+      it->second = WatchedModeAll;
   }
 }
 
-std::string CMediaSettings::GetWatchedContent(const std::string& content)
+std::string CMediaSettings::GetWatchedContent(const std::string &content)
 {
   if (content == "seasons" || content == "episodes")
-	return "tvshows";
+    return "tvshows";
 
   return content;
 }
