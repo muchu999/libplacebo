@@ -5051,6 +5051,7 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboDisplayPeakLuminance") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHint") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHintMode") { list.push_back(str); continue; }
+        if ((str = a->records[i]->at(col).get_asString()) == "PlaceboShaderApply") { list.push_back(str); continue; }
 
         if (a->records[i]->at(col).get_asString() == "PlaceboColorAdjustmentEnabled") { list.push_back(str); continue; }
         if (a->records[i]->at(col).get_asString() == "PlaceboSaturation") { list.push_back(str); continue; }
@@ -5155,7 +5156,7 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
       std::string strSQL2;
       for (int i = 0; i < list.size(); i++)
       {
-        strSQL2 = PrepareSQL("ALTER TABLE settings DROP COLUMN `%s`",list[i].c_str()); m_pDS->exec(strSQL2);
+		strSQL2 = PrepareSQL("ALTER TABLE settings DROP COLUMN `%s`", list[i].c_str()); m_pDS->exec(strSQL2);
       }
     }
     return true;
@@ -5173,6 +5174,7 @@ static std::vector<std::string> LibplaceboColumnslist = {
                                    "PlaceboDisplayPeakLuminance",
                                    "PlaceboTargetColorspaceHint",
                                    "PlaceboTargetColorspaceHintMode",
+                                   "PlaceboShaderApply",
 
                                    "PlaceboColorAdjustmentEnabled",
                                    "PlaceboSaturation",
@@ -5316,6 +5318,7 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
         if (list[i] == "PlaceboDisplayPeakLuminance") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisplayPeakLuminance          float NOT NULL DEFAULT   %f", vs.m_PlaceboDisplayPeakLuminance); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboTargetColorspaceHint") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHint          integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHint); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboTargetColorspaceHintMode") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHintMode  integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHintMode); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboShaderApply") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboShaderApply                            bool NOT NULL DEFAULT  %i", vs.m_PlaceboShaderApply); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboColorAdjustmentEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorAdjustmentEnabled  bool NOT NULL DEFAULT  %i", vs.m_PlaceboColorAdjustmentEnabled); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboSaturation") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSaturation                         float NOT NULL DEFAULT %f", vs.m_PlaceboSaturation); m_pDS->exec(strSQL2); }
@@ -5512,6 +5515,7 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         settings.m_PlaceboDisplayPeakLuminance = m_pDS->fv("PlaceboDisplayPeakLuminance").get_asFloat();
         settings.m_PlaceboTargetColorspaceHint = m_pDS->fv("PlaceboTargetColorspaceHint").get_asInt();
         settings.m_PlaceboTargetColorspaceHintMode = m_pDS->fv("PlaceboTargetColorspaceHintMode").get_asInt();
+        settings.m_PlaceboShaderApply = m_pDS->fv("PlaceboShaderApply").get_asBool();
 
         settings.m_PlaceboColorAdjustmentEnabled = m_pDS->fv("PlaceboColorAdjustmentEnabled").get_asInt();
         settings.m_PlaceboSaturation = m_pDS->fv("PlaceboSaturation").get_asFloat();
@@ -5619,7 +5623,6 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
 
 		CGUIDialogVideoSettings::LoadShaderSettings(settings, data);
         CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(settings); 
-        CGUIDialogVideoSettings::SetVideoSettings(settings);
 
         m_pDS->close();
         return true;
@@ -5701,7 +5704,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
       {
         strSQL = PrepareSQL(
           "update settings set "
-          "PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "PlaceboShaderApply=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
@@ -5732,6 +5735,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
           settings.m_PlaceboTargetColorspaceHint,
           settings.m_PlaceboTargetColorspaceHintMode,
+          settings.m_PlaceboShaderApply,
           settings.m_PlaceboColorAdjustmentEnabled,
           static_cast<double>(settings.m_PlaceboSaturation),
           static_cast<double>(settings.m_PlaceboHue),
@@ -5863,7 +5867,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
         strSQL = PrepareSQL(
           "update settings set "
           "PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
-          "PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
+          "PlaceboShaderApply=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
           "PlaceboUpscaler='%s',PlaceboDownscaler='%s',PlaceboPlaneUpscaler='%s',PlaceboPlaneDownscaler='%s',"
@@ -5893,6 +5897,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
           settings.m_PlaceboTargetColorspaceHint,
           settings.m_PlaceboTargetColorspaceHintMode,
+          settings.m_PlaceboShaderApply,
           settings.m_PlaceboColorAdjustmentEnabled,
           static_cast<double>(settings.m_PlaceboSaturation),
           static_cast<double>(settings.m_PlaceboHue),
@@ -5918,7 +5923,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_PlaceboDebandRadius),
           static_cast<double>(settings.m_PlaceboDebandThreshold),
           settings.m_PlaceboColorMapEnabled,
-          settings.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions[settings.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : pl_gamut_map_functions[settings.m_PlaceboColorMapGamutMapping]->description,
+          settings.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions[settings.m_PlaceboColorMapGamutMapping]->description == nullptr ? "''" : ((std::string)pl_gamut_map_functions[settings.m_PlaceboColorMapGamutMapping]->description).c_str(),
           settings.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions[settings.m_PlaceboColorMapToneMapping]->description == nullptr ? "''" : pl_tone_map_functions[settings.m_PlaceboColorMapToneMapping]->description,
           static_cast<double>(settings.m_PlaceboColorMapContrastRecovery),
           static_cast<double>(settings.m_PlaceboColorMapContrastSmoothness),
