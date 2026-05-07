@@ -5051,6 +5051,7 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboDisplayPeakLuminance") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHint") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHintMode") { list.push_back(str); continue; }
+        if ((str = a->records[i]->at(col).get_asString()) == "PlaceboShaderApply") { list.push_back(str); continue; }
 
         if (a->records[i]->at(col).get_asString() == "PlaceboColorAdjustmentEnabled") { list.push_back(str); continue; }
         if (a->records[i]->at(col).get_asString() == "PlaceboSaturation") { list.push_back(str); continue; }
@@ -5173,6 +5174,7 @@ static std::vector<std::string> LibplaceboColumnslist = {
                                    "PlaceboDisplayPeakLuminance",
                                    "PlaceboTargetColorspaceHint",
                                    "PlaceboTargetColorspaceHintMode",
+                                   "PlaceboShaderApply",
 
                                    "PlaceboColorAdjustmentEnabled",
                                    "PlaceboSaturation",
@@ -5316,6 +5318,7 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
         if (list[i] == "PlaceboDisplayPeakLuminance") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisplayPeakLuminance          float NOT NULL DEFAULT   %f", vs.m_PlaceboDisplayPeakLuminance); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboTargetColorspaceHint") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHint          integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHint); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboTargetColorspaceHintMode") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHintMode  integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHintMode); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboShaderApply") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboShaderApply                            bool NOT NULL DEFAULT  %i", vs.m_PlaceboShaderApply); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboColorAdjustmentEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorAdjustmentEnabled  bool NOT NULL DEFAULT  %i", vs.m_PlaceboColorAdjustmentEnabled); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboSaturation") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSaturation                         float NOT NULL DEFAULT %f", vs.m_PlaceboSaturation); m_pDS->exec(strSQL2); }
@@ -5512,6 +5515,7 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings& settings)
         settings.m_PlaceboDisplayPeakLuminance = m_pDS->fv("PlaceboDisplayPeakLuminance").get_asFloat();
         settings.m_PlaceboTargetColorspaceHint = m_pDS->fv("PlaceboTargetColorspaceHint").get_asInt();
         settings.m_PlaceboTargetColorspaceHintMode = m_pDS->fv("PlaceboTargetColorspaceHintMode").get_asInt();
+        settings.m_PlaceboShaderApply = m_pDS->fv("PlaceboShaderApply").get_asBool();
 
         settings.m_PlaceboColorAdjustmentEnabled = m_pDS->fv("PlaceboColorAdjustmentEnabled").get_asInt();
         settings.m_PlaceboSaturation = m_pDS->fv("PlaceboSaturation").get_asFloat();
