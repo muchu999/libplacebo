@@ -238,7 +238,7 @@ bool CGUIDialogSubtitleSettings::Save()
   const auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
 
-  CMediaSettings::GetInstance().GetDefaultVideoSettings() = appPlayer->GetVideoSettings();
+  CMediaSettings::GetInstance().SetDefaultVideoSettings(appPlayer->GetVideoSettings());
   CMediaSettings::GetInstance().GetDefaultVideoSettings().m_SubtitleStream = -1;
   CServiceBroker::GetSettingsComponent()->GetSettings()->Save();
 
