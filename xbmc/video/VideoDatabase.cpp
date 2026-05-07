@@ -5361,11 +5361,11 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
         if (list[i] == "PlaceboColorMapLut3dTricubic") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapLut3dTricubic       bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapLut3dTricubic); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboColorMapLutSize") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapLutSize             integer NOT NULL DEFAULT %i", vs.m_PlaceboColorMapLutSize); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboColorMapShowClipping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapShowClipping        bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapShowClipping); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboColorMapIntent") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapIntent               text NOT NULL DEFAULT '%s'", CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(vs.m_PlaceboColorMapIntent).c_str()); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboColorMapIntent") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapIntent               text NOT NULL DEFAULT '%s'", CPLHelper::getColorMapIntentDescriptionFromIndex(vs.m_PlaceboColorMapIntent).c_str()); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboColorMapForceToneMappingLut") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapForceToneMappingLut bool NOT NULL DEFAULT    %i", vs.m_PlaceboColorMapForceToneMappingLut); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboDeinterlaceEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDeinterlaceEnabled          bool NOT NULL DEFAULT    %i", vs.m_PlaceboDeinterlaceEnabled); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboDeinterlaceAlgo") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDeinterlaceAlgo              text NOT NULL DEFAULT '%s'", CGUIDialogVideoSettings::getDeinterlaceAlgoDescriptionFromIndex(vs.m_PlaceboDeinterlaceAlgo).c_str()); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboDeinterlaceAlgo") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDeinterlaceAlgo              text NOT NULL DEFAULT '%s'", CPLHelper::getDeinterlaceAlgoDescriptionFromIndex(vs.m_PlaceboDeinterlaceAlgo).c_str()); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboDeinterlaceSkipSpatialCheck") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDeinterlaceSkipSpatialCheck bool NOT NULL DEFAULT    %i", vs.m_PlaceboDeinterlaceSkipSpatialCheck); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboSigmoidEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSigmoidEnabled bool NOT NULL DEFAULT    %i", vs.m_PlaceboSigmoidEnabled); m_pDS->exec(strSQL2); }
@@ -5373,14 +5373,14 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
         if (list[i] == "PlaceboSigmoidSlope") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSigmoidSlope   float NOT NULL DEFAULT   %f", vs.m_PlaceboSigmoidSlope); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboConeEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboConeEnabled    bool NOT NULL DEFAULT     %i", vs.m_PlaceboConeEnabled); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboConeCones") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboConeCones       text NOT NULL DEFAULT   '%s'", CGUIDialogVideoSettings::getConeConesDescriptionFromIndex(vs.m_PlaceboConeCones).c_str()); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboConeCones") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboConeCones       text NOT NULL DEFAULT   '%s'", CPLHelper::getConeConesDescriptionFromIndex(vs.m_PlaceboConeCones).c_str()); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboConeStrength") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboConeStrength   float NOT NULL DEFAULT    %f", vs.m_PlaceboConeStrength); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboDitherEnabled") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherEnabled  bool NOT NULL DEFAULT     %i", vs.m_PlaceboDitherEnabled); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboDitherMethod") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherMethod    text NOT NULL DEFAULT   '%s'", CGUIDialogVideoSettings::getDitherMethodDescriptionFromIndex(vs.m_PlaceboDitherMethod).c_str()); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboDitherMethod") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherMethod    text NOT NULL DEFAULT   '%s'", CPLHelper::getDitherMethodDescriptionFromIndex(vs.m_PlaceboDitherMethod).c_str()); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboDitherLutSize") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherLutSize  integer NOT NULL DEFAULT  %i", vs.m_PlaceboDitherLutSize); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboDitherTemporal") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherTemporal bool NOT NULL DEFAULT     %i", vs.m_PlaceboDitherTemporal); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboDitherTransfer") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherTransfer  text NOT NULL DEFAULT   '%s'", CGUIDialogVideoSettings::getDitherTransferDescriptionFromIndex(vs.m_PlaceboDitherTransfer).c_str()); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboDitherTransfer") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDitherTransfer  text NOT NULL DEFAULT   '%s'", CPLHelper::getDitherTransferDescriptionFromIndex(vs.m_PlaceboDitherTransfer).c_str()); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboToneConstantExposure") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantExposure         float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantExposure); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboToneConstantKneeAdaptation") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboToneConstantKneeAdaptation   float NOT NULL DEFAULT %f", vs.m_PlaceboToneConstantKneeAdaptation); m_pDS->exec(strSQL2); }
@@ -5407,14 +5407,14 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
         if (list[i] == "PlaceboColorMapVisualizeHue") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeHue    float NOT NULL DEFAULT %f", vs.m_PlaceboColorMapVisualizeHue); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboColorMapVisualizeTheta") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboColorMapVisualizeTheta  float NOT NULL DEFAULT %f", vs.m_PlaceboColorMapVisualizeTheta); m_pDS->exec(strSQL2); }
 
-        if (list[i] == "PlaceboLutType") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboLutType                      text NOT NULL DEFAULT '%s'", CGUIDialogVideoSettings::getLutTypeDescriptionFromIndex(vs.m_PlaceboLutType).c_str()); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboLutType") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboLutType                      text NOT NULL DEFAULT '%s'", CPLHelper::getLutTypeDescriptionFromIndex(vs.m_PlaceboLutType).c_str()); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboAntiringingStrength") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboAntiringingStrength          float NOT NULL DEFAULT   %f", vs.m_PlaceboAntiringingStrength); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboCorrectSubpixelOffset") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboCorrectSubpixelOffset        bool NOT NULL DEFAULT    %i", vs.m_PlaceboCorrectSubpixelOffset); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboDisableBuiltinScalers") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisableBuiltinScalers        bool NOT NULL DEFAULT    %i", vs.m_PlaceboDisableBuiltinScalers); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboDisableDitherGammaCorrection") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisableDitherGammaCorrection bool NOT NULL DEFAULT    %i", vs.m_PlaceboDisableDitherGammaCorrection); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboDisableLinearScaling") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisableLinearScaling         bool NOT NULL DEFAULT    %i", vs.m_PlaceboDisableLinearScaling); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboDynamicConstant") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDynamicConstant              bool NOT NULL DEFAULT    %i", vs.m_PlaceboDynamicConstant); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboErrorDiffusion") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboErrorDiffusion               text NOT NULL DEFAULT '%s'", CGUIDialogVideoSettings::getDiffusionKernelDescriptionFromIndex(vs.m_PlaceboErrorDiffusion).c_str()); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboErrorDiffusion") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboErrorDiffusion               text NOT NULL DEFAULT '%s'", CPLHelper::getDiffusionKernelDescriptionFromIndex(vs.m_PlaceboErrorDiffusion).c_str()); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboForceDither") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboForceDither                  bool NOT NULL DEFAULT    %i", vs.m_PlaceboForceDither); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboForceLowBitDepthFbos") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboForceLowBitDepthFbos         bool NOT NULL DEFAULT    %i", vs.m_PlaceboForceLowBitDepthFbos); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboIgnoreIccProfiles") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboIgnoreIccProfiles            bool NOT NULL DEFAULT    %i", vs.m_PlaceboIgnoreIccProfiles); m_pDS->exec(strSQL2); }
@@ -5511,7 +5511,7 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
       {
         std::string str;
         settings.m_PlaceboSkinZoom = m_pDS->fv("PlaceboSkinZoom").get_asInt();
-        settings.m_PlaceboLutFilename = m_pDS->fv("PlaceboLutFilename").get_asString(); CGUIDialogVideoSettings::LoadLutFile(settings, settings.m_PlaceboLutFilename); //cl load depends on type...
+        settings.m_PlaceboLutFilename = m_pDS->fv("PlaceboLutFilename").get_asString(); CPLHelper::LoadLutFile(settings, settings.m_PlaceboLutFilename); //cl load depends on type...
         settings.m_PlaceboDisplayPeakLuminance = m_pDS->fv("PlaceboDisplayPeakLuminance").get_asFloat();
         settings.m_PlaceboTargetColorspaceHint = m_pDS->fv("PlaceboTargetColorspaceHint").get_asInt();
         settings.m_PlaceboTargetColorspaceHintMode = m_pDS->fv("PlaceboTargetColorspaceHintMode").get_asInt();
@@ -5530,11 +5530,11 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         settings.m_PlaceboPeakDetectBlackCutoff = m_pDS->fv("PlaceboPeakDetectBlackCutoff").get_asFloat();
         settings.m_PlaceboPeakDetectAllowDelayed = m_pDS->fv("PlaceboPeakDetectAllowDelayed").get_asInt();
 
-        settings.m_PlaceboUpscaler = (str=(m_pDS->fv("PlaceboUpscaler").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
-        settings.m_PlaceboDownscaler = (str = (m_pDS->fv("PlaceboDownscaler").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
-        settings.m_PlaceboPlaneUpscaler = (str = (m_pDS->fv("PlaceboPlaneUpscaler").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
-        settings.m_PlaceboPlaneDownscaler = (str = (m_pDS->fv("PlaceboPlaneDownscaler").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
-        settings.m_PlaceboFrameMixer = (str = (m_pDS->fv("PlaceboFrameMixer").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getFilterIndexFromDescription(str);
+        settings.m_PlaceboUpscaler = (str=(m_pDS->fv("PlaceboUpscaler").get_asString())) == "" ? -1 : CPLHelper::getFilterIndexFromDescription(str);
+        settings.m_PlaceboDownscaler = (str = (m_pDS->fv("PlaceboDownscaler").get_asString())) == "" ? -1 : CPLHelper::getFilterIndexFromDescription(str);
+        settings.m_PlaceboPlaneUpscaler = (str = (m_pDS->fv("PlaceboPlaneUpscaler").get_asString())) == "" ? -1 : CPLHelper::getFilterIndexFromDescription(str);
+        settings.m_PlaceboPlaneDownscaler = (str = (m_pDS->fv("PlaceboPlaneDownscaler").get_asString())) == "" ? -1 : CPLHelper::getFilterIndexFromDescription(str);
+        settings.m_PlaceboFrameMixer = (str = (m_pDS->fv("PlaceboFrameMixer").get_asString())) == "" ? -1 : CPLHelper::getFilterIndexFromDescription(str);
 
         settings.m_PlaceboDebandEnabled = m_pDS->fv("PlaceboDebandEnabled").get_asInt();
         settings.m_PlaceboDebandGrain = m_pDS->fv("PlaceboDebandGrain").get_asFloat();
@@ -5546,8 +5546,8 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         settings.m_PlaceboDebandThreshold = m_pDS->fv("PlaceboDebandThreshold").get_asFloat();
 
         settings.m_PlaceboColorMapEnabled = m_pDS->fv("PlaceboColorMapEnabled").get_asInt();
-        settings.m_PlaceboColorMapGamutMapping = (str = (m_pDS->fv("PlaceboColorMapGamutMapping").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getGamutMapIndexFromDescription(str);
-        settings.m_PlaceboColorMapToneMapping = (str = (m_pDS->fv("PlaceboColorMapToneMapping").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getToneMapIndexFromDescription(str);
+        settings.m_PlaceboColorMapGamutMapping = (str = (m_pDS->fv("PlaceboColorMapGamutMapping").get_asString())) == "" ? -1 : CPLHelper::getGamutMapIndexFromDescription(str);
+        settings.m_PlaceboColorMapToneMapping = (str = (m_pDS->fv("PlaceboColorMapToneMapping").get_asString())) == "" ? -1 : CPLHelper::getToneMapIndexFromDescription(str);
         settings.m_PlaceboColorMapContrastRecovery = m_pDS->fv("PlaceboColorMapContrastRecovery").get_asFloat();
         settings.m_PlaceboColorMapContrastSmoothness = m_pDS->fv("PlaceboColorMapContrastSmoothness").get_asFloat();
         settings.m_PlaceboColorMapGamutExpansion = m_pDS->fv("PlaceboColorMapGamutExpansion").get_asInt();
@@ -5558,11 +5558,11 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         settings.m_PlaceboColorMapLut3dTricubic = m_pDS->fv("PlaceboColorMapLut3dTricubic").get_asInt();
         settings.m_PlaceboColorMapLutSize = m_pDS->fv("PlaceboColorMapLutSize").get_asInt();
         settings.m_PlaceboColorMapShowClipping = m_pDS->fv("PlaceboColorMapShowClipping").get_asInt();
-        settings.m_PlaceboColorMapIntent = (str = (m_pDS->fv("PlaceboColorMapIntent").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getColorMapIntentIndexFromDescription(str);
+        settings.m_PlaceboColorMapIntent = (str = (m_pDS->fv("PlaceboColorMapIntent").get_asString())) == "" ? -1 : CPLHelper::getColorMapIntentIndexFromDescription(str);
         settings.m_PlaceboColorMapForceToneMappingLut = m_pDS->fv("PlaceboColorMapForceToneMappingLut").get_asInt();
 
         settings.m_PlaceboDeinterlaceEnabled = m_pDS->fv("PlaceboDeinterlaceEnabled").get_asInt();
-        settings.m_PlaceboDeinterlaceAlgo = (str = (m_pDS->fv("PlaceboDeinterlaceAlgo").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getDeinterlaceAlgoIndexFromDescription(str);
+        settings.m_PlaceboDeinterlaceAlgo = (str = (m_pDS->fv("PlaceboDeinterlaceAlgo").get_asString())) == "" ? -1 : CPLHelper::getDeinterlaceAlgoIndexFromDescription(str);
         settings.m_PlaceboDeinterlaceSkipSpatialCheck = m_pDS->fv("PlaceboDeinterlaceSkipSpatialCheck").get_asInt();
 
         settings.m_PlaceboSigmoidEnabled = m_pDS->fv("PlaceboSigmoidEnabled").get_asInt();
@@ -5570,14 +5570,14 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         settings.m_PlaceboSigmoidSlope = m_pDS->fv("PlaceboSigmoidSlope").get_asFloat();
 
         settings.m_PlaceboConeEnabled = m_pDS->fv("PlaceboConeEnabled").get_asInt();
-        settings.m_PlaceboConeCones = (str = (m_pDS->fv("PlaceboConeCones").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getConeConesIndexFromDescription(str);
+        settings.m_PlaceboConeCones = (str = (m_pDS->fv("PlaceboConeCones").get_asString())) == "" ? -1 : CPLHelper::getConeConesIndexFromDescription(str);
         settings.m_PlaceboConeStrength = m_pDS->fv("PlaceboConeStrength").get_asFloat();
 
         settings.m_PlaceboDitherEnabled = m_pDS->fv("PlaceboDitherEnabled").get_asInt();
-        settings.m_PlaceboDitherMethod = (str = (m_pDS->fv("PlaceboDitherMethod").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getDitherMethodIndexFromDescription(str);
+        settings.m_PlaceboDitherMethod = (str = (m_pDS->fv("PlaceboDitherMethod").get_asString())) == "" ? -1 : CPLHelper::getDitherMethodIndexFromDescription(str);
         settings.m_PlaceboDitherLutSize = m_pDS->fv("PlaceboDitherLutSize").get_asInt();
         settings.m_PlaceboDitherTemporal = m_pDS->fv("PlaceboDitherTemporal").get_asInt();
-        settings.m_PlaceboDitherTransfer = (str = (m_pDS->fv("PlaceboDitherTransfer").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getDitherTransferIndexFromDescription(str);
+        settings.m_PlaceboDitherTransfer = (str = (m_pDS->fv("PlaceboDitherTransfer").get_asString())) == "" ? -1 : CPLHelper::getDitherTransferIndexFromDescription(str);
 
         settings.m_PlaceboToneConstantExposure = m_pDS->fv("PlaceboToneConstantExposure").get_asFloat();
         settings.m_PlaceboToneConstantKneeAdaptation = m_pDS->fv("PlaceboToneConstantKneeAdaptation").get_asFloat();
@@ -5604,14 +5604,14 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         settings.m_PlaceboColorMapVisualizeHue = m_pDS->fv("PlaceboColorMapVisualizeHue").get_asFloat();
         settings.m_PlaceboColorMapVisualizeTheta = m_pDS->fv("PlaceboColorMapVisualizeTheta").get_asFloat();
 
-        settings.m_PlaceboLutType = (str = (m_pDS->fv("PlaceboLutType").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getLutTypeIndexFromDescription(str); settings.m_placeboOptions->getPlOptions()->params.lut = settings.m_PlaceboLutType == -1 ? nullptr: settings.m_PlaceboLut.get();
+        settings.m_PlaceboLutType = (str = (m_pDS->fv("PlaceboLutType").get_asString())) == "" ? -1 : CPLHelper::getLutTypeIndexFromDescription(str); settings.m_placeboOptions->getPlOptions()->params.lut = settings.m_PlaceboLutType == -1 ? nullptr: settings.m_PlaceboLut.get();
         settings.m_PlaceboAntiringingStrength = m_pDS->fv("PlaceboAntiringingStrength").get_asFloat();
         settings.m_PlaceboCorrectSubpixelOffset = m_pDS->fv("PlaceboCorrectSubpixelOffset").get_asInt();
         settings.m_PlaceboDisableBuiltinScalers = m_pDS->fv("PlaceboDisableBuiltinScalers").get_asInt();
         settings.m_PlaceboDisableDitherGammaCorrection = m_pDS->fv("PlaceboDisableDitherGammaCorrection").get_asInt();
         settings.m_PlaceboDisableLinearScaling = m_pDS->fv("PlaceboDisableLinearScaling").get_asInt();
         settings.m_PlaceboDynamicConstant = m_pDS->fv("PlaceboDynamicConstant").get_asInt();
-        settings.m_PlaceboErrorDiffusion = (str = (m_pDS->fv("PlaceboErrorDiffusion").get_asString())) == "" ? -1 : CGUIDialogVideoSettings::getErrorDiffusionIndexFromDescription(str);
+        settings.m_PlaceboErrorDiffusion = (str = (m_pDS->fv("PlaceboErrorDiffusion").get_asString())) == "" ? -1 : CPLHelper::getErrorDiffusionIndexFromDescription(str);
         settings.m_PlaceboForceDither = m_pDS->fv("PlaceboForceDither").get_asInt();
         settings.m_PlaceboForceLowBitDepthFbos = m_pDS->fv("PlaceboForceLowBitDepthFbos").get_asInt();
         settings.m_PlaceboIgnoreIccProfiles = m_pDS->fv("PlaceboIgnoreIccProfiles").get_asInt();
@@ -5621,8 +5621,8 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         
         std::string data = m_pDS->fv("PlaceboShadersData").get_asString();
 
-		CGUIDialogVideoSettings::LoadShaderSettings(settings, data);
-        CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(settings); 
+        CPLHelper::LoadShaderSettings(settings, data);
+        CPLHelper::UpdateLibPLaceboParamsFromVideoSettings(settings);
 
         m_pDS->close();
         return true;
@@ -5773,22 +5773,22 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           settings.m_PlaceboColorMapLut3dTricubic,
           settings.m_PlaceboColorMapLutSize,
           settings.m_PlaceboColorMapShowClipping,
-          CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(settings.m_PlaceboColorMapIntent).c_str(),
+          CPLHelper::getColorMapIntentDescriptionFromIndex(settings.m_PlaceboColorMapIntent).c_str(),
           settings.m_PlaceboColorMapForceToneMappingLut,
           settings.m_PlaceboDeinterlaceEnabled,
-          CGUIDialogVideoSettings::getDeinterlaceAlgoDescriptionFromIndex(settings.m_PlaceboDeinterlaceAlgo).c_str(),
+          CPLHelper::getDeinterlaceAlgoDescriptionFromIndex(settings.m_PlaceboDeinterlaceAlgo).c_str(),
           settings.m_PlaceboDeinterlaceSkipSpatialCheck,
           settings.m_PlaceboSigmoidEnabled,
           static_cast<double>(settings.m_PlaceboSigmoidCenter),
           static_cast<double>(settings.m_PlaceboSigmoidSlope),
           settings.m_PlaceboConeEnabled,
-          CGUIDialogVideoSettings::getConeConesDescriptionFromIndex(settings.m_PlaceboConeCones).c_str(),
+          CPLHelper::getConeConesDescriptionFromIndex(settings.m_PlaceboConeCones).c_str(),
           static_cast<double>(settings.m_PlaceboConeStrength),
           settings.m_PlaceboDitherEnabled,
-          CGUIDialogVideoSettings::getDitherMethodDescriptionFromIndex(settings.m_PlaceboDitherMethod).c_str(),
+          CPLHelper::getDitherMethodDescriptionFromIndex(settings.m_PlaceboDitherMethod).c_str(),
           settings.m_PlaceboDitherLutSize,
           settings.m_PlaceboDitherTemporal,
-          CGUIDialogVideoSettings::getDitherTransferDescriptionFromIndex(settings.m_PlaceboDitherTransfer).c_str(),
+          CPLHelper::getDitherTransferDescriptionFromIndex(settings.m_PlaceboDitherTransfer).c_str(),
           static_cast<double>(settings.m_PlaceboToneConstantExposure),
           static_cast<double>(settings.m_PlaceboToneConstantKneeAdaptation),
           static_cast<double>(settings.m_PlaceboToneConstantKneeDefault),
@@ -5811,14 +5811,14 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_PlaceboColorMapVisualizeRectY1),
           static_cast<double>(settings.m_PlaceboColorMapVisualizeHue),
           static_cast<double>(settings.m_PlaceboColorMapVisualizeTheta),
-          CGUIDialogVideoSettings::getLutTypeDescriptionFromIndex(settings.m_PlaceboLutType).c_str(),
+          CPLHelper::getLutTypeDescriptionFromIndex(settings.m_PlaceboLutType).c_str(),
           static_cast<double>(settings.m_PlaceboAntiringingStrength),
           settings.m_PlaceboCorrectSubpixelOffset,
           settings.m_PlaceboDisableBuiltinScalers,
           settings.m_PlaceboDisableDitherGammaCorrection,
           settings.m_PlaceboDisableLinearScaling,
           settings.m_PlaceboDynamicConstant,
-          CGUIDialogVideoSettings::getDiffusionKernelDescriptionFromIndex(settings.m_PlaceboErrorDiffusion).c_str(),
+          CPLHelper::getDiffusionKernelDescriptionFromIndex(settings.m_PlaceboErrorDiffusion).c_str(),
           settings.m_PlaceboForceDither,
           settings.m_PlaceboForceLowBitDepthFbos,
           settings.m_PlaceboIgnoreIccProfiles,
@@ -5830,7 +5830,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
         m_pDS->close();
 
         std::string serializedShadersData;
-        CGUIDialogVideoSettings::SerializeShaders(settings, serializedShadersData);
+        CPLHelper::SerializeShaders(settings, serializedShadersData);
         strSQL = PrepareSQL("update settings set PlaceboShadersData='%s' where idFile=%i\n", serializedShadersData.c_str(), idFile);
         m_pDS->exec(strSQL);
         m_pDS->close();
@@ -5935,22 +5935,22 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           settings.m_PlaceboColorMapLut3dTricubic,
           settings.m_PlaceboColorMapLutSize,
           settings.m_PlaceboColorMapShowClipping,
-          CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(settings.m_PlaceboColorMapIntent).c_str(),
+          CPLHelper::getColorMapIntentDescriptionFromIndex(settings.m_PlaceboColorMapIntent).c_str(),
           settings.m_PlaceboColorMapForceToneMappingLut,
           settings.m_PlaceboDeinterlaceEnabled,
-          CGUIDialogVideoSettings::getDeinterlaceAlgoDescriptionFromIndex(settings.m_PlaceboDeinterlaceAlgo).c_str(),
+          CPLHelper::getDeinterlaceAlgoDescriptionFromIndex(settings.m_PlaceboDeinterlaceAlgo).c_str(),
           settings.m_PlaceboDeinterlaceSkipSpatialCheck,
           settings.m_PlaceboSigmoidEnabled,
           static_cast<double>(settings.m_PlaceboSigmoidCenter),
           static_cast<double>(settings.m_PlaceboSigmoidSlope),
           settings.m_PlaceboConeEnabled,
-          CGUIDialogVideoSettings::getConeConesDescriptionFromIndex(settings.m_PlaceboConeCones).c_str(),
+          CPLHelper::getConeConesDescriptionFromIndex(settings.m_PlaceboConeCones).c_str(),
           static_cast<double>(settings.m_PlaceboConeStrength),
           settings.m_PlaceboDitherEnabled,
-          CGUIDialogVideoSettings::getDitherMethodDescriptionFromIndex(settings.m_PlaceboDitherMethod).c_str(),
+          CPLHelper::getDitherMethodDescriptionFromIndex(settings.m_PlaceboDitherMethod).c_str(),
           settings.m_PlaceboDitherLutSize,
           settings.m_PlaceboDitherTemporal,
-          CGUIDialogVideoSettings::getDitherTransferDescriptionFromIndex(settings.m_PlaceboDitherTransfer).c_str(),
+          CPLHelper::getDitherTransferDescriptionFromIndex(settings.m_PlaceboDitherTransfer).c_str(),
           static_cast<double>(settings.m_PlaceboToneConstantExposure),
           static_cast<double>(settings.m_PlaceboToneConstantKneeAdaptation),
           static_cast<double>(settings.m_PlaceboToneConstantKneeDefault),
@@ -5973,14 +5973,14 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_PlaceboColorMapVisualizeRectY1),
           static_cast<double>(settings.m_PlaceboColorMapVisualizeHue),
           static_cast<double>(settings.m_PlaceboColorMapVisualizeTheta),
-          CGUIDialogVideoSettings::getLutTypeDescriptionFromIndex(settings.m_PlaceboLutType).c_str(),
+          CPLHelper::getLutTypeDescriptionFromIndex(settings.m_PlaceboLutType).c_str(),
           static_cast<double>(settings.m_PlaceboAntiringingStrength),
           settings.m_PlaceboCorrectSubpixelOffset,
           settings.m_PlaceboDisableBuiltinScalers,
           settings.m_PlaceboDisableDitherGammaCorrection,
           settings.m_PlaceboDisableLinearScaling,
           settings.m_PlaceboDynamicConstant,
-          CGUIDialogVideoSettings::getDiffusionKernelDescriptionFromIndex(settings.m_PlaceboErrorDiffusion).c_str(),
+          CPLHelper::getDiffusionKernelDescriptionFromIndex(settings.m_PlaceboErrorDiffusion).c_str(),
           settings.m_PlaceboForceDither,
           settings.m_PlaceboForceLowBitDepthFbos,
           settings.m_PlaceboIgnoreIccProfiles,
@@ -5992,7 +5992,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           m_pDS->close();
 
           std::string serializedShadersData;
-          CGUIDialogVideoSettings::SerializeShaders(settings, serializedShadersData);
+          CPLHelper::SerializeShaders(settings, serializedShadersData);
           strSQL = PrepareSQL("update settings set PlaceboShadersData='%s' where idFile=%i\n", serializedShadersData.c_str(), idFile);
           m_pDS->exec(strSQL);
           m_pDS->close();
