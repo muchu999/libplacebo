@@ -5704,8 +5704,8 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
       {
         strSQL = PrepareSQL(
           "update settings set "
+          "PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
           "PlaceboShaderApply=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
-          "PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
           "PlaceboUpscaler='%s',PlaceboDownscaler='%s',PlaceboPlaneUpscaler='%s',PlaceboPlaneDownscaler='%s',"
