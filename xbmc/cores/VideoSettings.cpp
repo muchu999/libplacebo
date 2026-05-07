@@ -8,36 +8,37 @@
 
 #include "VideoSettings.h"
 
-#include "threads/CriticalSection.h"
-#include "video/dialogs/GUIDialogVideoSettings.h"
 #include "..\VideoPlayer\VideoRenderers\windows\RendererPL.h"
+#include "threads/CriticalSection.h"
 
 
+#include "VideoRenderers/LibPlacebo/PlHelper.h"
+#include "VideoRenderers/LibPlacebo/PlOptionsWrapper.h"
 #include <mutex>
 
 CVideoSettings::~CVideoSettings()
-{ 
+{
   delete m_placeboOptions;
   m_placeboOptions = nullptr;
 }
 
 //Copy constructor
-CVideoSettings::CVideoSettings(const CVideoSettings& other) 
+CVideoSettings::CVideoSettings(const CVideoSettings& other)
 {
   m_placeboOptions = new PlOptionsWrapper();
   copy(other);
 }
 
 //Copy assignment operator
-CVideoSettings& CVideoSettings::operator=(const CVideoSettings& other) 
+CVideoSettings& CVideoSettings::operator=(const CVideoSettings& other)
 {
-  if (this != &other) { 
-    if (m_placeboOptions)
-    {
-      delete m_placeboOptions; // cl needed? destructor doesn't change on content...
-    }
-    m_placeboOptions = new PlOptionsWrapper();
-    copy(other);
+  if (this != &other) {
+	if (m_placeboOptions)
+	{
+	  delete m_placeboOptions; // cl needed? destructor doesn't change on content...
+	}
+	m_placeboOptions = new PlOptionsWrapper();
+	copy(other);
   }
   return *this;
 }
@@ -79,6 +80,7 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboSkinZoomHint = other.m_PlaceboSkinZoomHint;
 
   // LibPLacebo specific CVideoSettings only video settings
+  m_PlaceboShaderApply = other.m_PlaceboShaderApply;
   m_PlaceboDisplayPeakLuminance = other.m_PlaceboDisplayPeakLuminance;
   m_PlaceboTargetColorspaceHint = other.m_PlaceboTargetColorspaceHint;
   m_PlaceboTargetColorspaceHintMode = other.m_PlaceboTargetColorspaceHintMode;
@@ -86,17 +88,17 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboLut = other.m_PlaceboLut;
   m_PlaceboShadersEnabled = other.m_PlaceboShadersEnabled;
   m_PlaceboShadersFilename = other.m_PlaceboShadersFilename;
-  m_PlaceboShadersParams = other.m_PlaceboShadersParams; 
+  m_PlaceboShadersParams = other.m_PlaceboShadersParams;
 
-  m_Shaders = other.m_Shaders;
+  m_PlaceboShadersHooks = other.m_PlaceboShadersHooks;
 
   // Shallow copy and deep copy of m_placeboOptions content
   if (m_placeboOptions && other.m_placeboOptions)
   {
-    m_placeboOptions->DeepCopy(*other.m_placeboOptions);
+	m_placeboOptions->DeepCopy(*other.m_placeboOptions);
   }
 
-  CGUIDialogVideoSettings::UpdateVideoSettingsFromLibPLaceboParams(*this);
+  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(*this);
 }
 
 
@@ -140,21 +142,22 @@ CVideoSettings::CVideoSettings()
 
   // LibPLacebo specific video settings
   m_PlaceboDisplayPeakLuminance = 0;
+  m_PlaceboShaderApply = true;
   m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::YES;
   m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC;
   m_PlaceboLutFilename = "";
   m_PlaceboLut = nullptr;
 
-  m_PlaceboShadersEnabled = {}; 
+  m_PlaceboShadersEnabled = {};
   m_PlaceboShadersFilename = {};
   m_PlaceboShadersParams = {};
 
   // m_placeboOptions already reset in constructor, just update
-  CGUIDialogVideoSettings::UpdateVideoSettingsFromLibPLaceboParams(*this);
+  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(*this);
 
 }
 
-bool CVideoSettings::operator!=(const CVideoSettings &right) const
+bool CVideoSettings::operator!=(const CVideoSettings& right) const
 {
   if (m_InterlaceMethod != right.m_InterlaceMethod) return true;
   if (m_ScalingMethod != right.m_ScalingMethod) return true;
@@ -169,8 +172,8 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   //cl m_subtitleVerticalPosition+save used here in comparison but not stored in database, which means every file that 
   // eventually displays subtitles will change these value and result in unchanged settings being stored in the database, 
   // without the changed fields...To investigate further
-  if(m_subtitleVerticalPositionSave == true)
-    if (m_subtitleVerticalPosition != right.m_subtitleVerticalPosition) return true;          
+  if (m_subtitleVerticalPositionSave == true)
+	if (m_subtitleVerticalPosition != right.m_subtitleVerticalPosition) return true;
   //if (m_subtitleVerticalPositionSave != right.m_subtitleVerticalPositionSave) return true;
   if (m_SubtitleOn != right.m_SubtitleOn) return true;
   if (m_Brightness != right.m_Brightness) return true;
@@ -190,9 +193,9 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   if (m_Orientation != right.m_Orientation) return true;
   if (m_CenterMixLevel != right.m_CenterMixLevel) return true;
 
-  if (m_PlaceboSkinZoom != right.m_PlaceboSkinZoom) return true; 
+  if (m_PlaceboSkinZoom != right.m_PlaceboSkinZoom) return true;
   //if (m_PlaceboSkinZoomHint != right.m_PlaceboSkinZoomHint) return true; //No!
-
+  if (m_PlaceboShaderApply != right.m_PlaceboShaderApply) return true;
   if (m_PlaceboDisplayPeakLuminance != right.m_PlaceboDisplayPeakLuminance) return true;
   if (m_PlaceboTargetColorspaceHint != right.m_PlaceboTargetColorspaceHint) return true;
   if (m_PlaceboTargetColorspaceHintMode != right.m_PlaceboTargetColorspaceHintMode) return true;
@@ -200,7 +203,7 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
 
   if (m_PlaceboShadersEnabled != right.m_PlaceboShadersEnabled) return true;
   if (m_PlaceboShadersFilename != right.m_PlaceboShadersFilename) return true;
-  if (m_PlaceboShadersParams != right.m_PlaceboShadersParams) return true;  
+  if (m_PlaceboShadersParams != right.m_PlaceboShadersParams) return true;
 
   if (m_PlaceboColorAdjustmentEnabled != right.m_PlaceboColorAdjustmentEnabled) return true;
   if (m_PlaceboSaturation != right.m_PlaceboSaturation) return true;
@@ -229,7 +232,7 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   if (m_PlaceboDebandIterations != right.m_PlaceboDebandIterations) return true;
   if (m_PlaceboDebandRadius != right.m_PlaceboDebandRadius) return true;
   if (m_PlaceboDebandThreshold != right.m_PlaceboDebandThreshold) return true;
-  
+
   if (m_PlaceboColorMapEnabled != right.m_PlaceboColorMapEnabled) return true;
   if (m_PlaceboColorMapGamutMapping != right.m_PlaceboColorMapGamutMapping) return true;
   if (m_PlaceboColorMapToneMapping != right.m_PlaceboColorMapToneMapping) return true;
@@ -288,7 +291,7 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
   if (m_PlaceboColorMapVisualizeRectY1 != right.m_PlaceboColorMapVisualizeRectY1) return true;
   if (m_PlaceboColorMapVisualizeHue != right.m_PlaceboColorMapVisualizeHue) return true;
   if (m_PlaceboColorMapVisualizeTheta != right.m_PlaceboColorMapVisualizeTheta) return true;
-  
+
   if (m_PlaceboLutType != right.m_PlaceboLutType) return true;
   if (m_PlaceboAntiringingStrength != right.m_PlaceboAntiringingStrength) return true;
   if (m_PlaceboCorrectSubpixelOffset != right.m_PlaceboCorrectSubpixelOffset) return true;
@@ -310,7 +313,7 @@ bool CVideoSettings::operator!=(const CVideoSettings &right) const
 //------------------------------------------------------------------------------
 // CVideoSettingsLocked
 //------------------------------------------------------------------------------
-CVideoSettingsLocked::CVideoSettingsLocked(CVideoSettings &vs, CCriticalSection &critSection) :
+CVideoSettingsLocked::CVideoSettingsLocked(CVideoSettings& vs, CCriticalSection& critSection) :
   m_videoSettings(vs), m_critSection(critSection)
 {
 }

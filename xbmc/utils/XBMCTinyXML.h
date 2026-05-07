@@ -9,7 +9,7 @@
 #pragma once
 
 #ifndef TARGET_WINDOWS
-//compile fix for TinyXml < 2.6.0
+ //compile fix for TinyXml < 2.6.0
 #define DOCUMENT    TINYXML_DOCUMENT
 #define ELEMENT     TINYXML_ELEMENT
 #define COMMENT     TINYXML_COMMENT
@@ -21,6 +21,8 @@
 
 #include <tinyxml.h>
 #include <string>
+#include <cstdio>
+#include <Windows.h>
 
 #undef DOCUMENT
 #undef ELEMENT

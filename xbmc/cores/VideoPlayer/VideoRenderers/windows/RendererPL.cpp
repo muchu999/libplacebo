@@ -774,16 +774,16 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   m_videoMatrix = frameIn.repr.sys;
   pl_frame_set_chroma_location(&frameIn, m_chromaLocation);
 
-  if(m_videoSettings.m_Shaders.size() > 0)
+  if((m_videoSettings.m_PlaceboShadersHooks.size() > 0) && (m_videoSettings.m_PlaceboShaderApply))
   {
     static std::vector<const pl_hook*> hooks;
     
-    hooks = {};
-    for(int i=0; i< m_videoSettings.m_Shaders.size(); ++i)
+    hooks.clear();
+    for(int i=0; i< m_videoSettings.m_PlaceboShadersHooks.size(); ++i)
     {
-      if(m_videoSettings.m_PlaceboShadersEnabled[i] && m_videoSettings.m_Shaders.m_Valid[i])
+      if(m_videoSettings.m_PlaceboShadersEnabled[i] && m_videoSettings.m_PlaceboShadersHooks.m_Valid[i])
       {
-        hooks.push_back(CRendererPL::m_videoSettings.m_Shaders.m_Hooks[i].get());
+        hooks.push_back(CRendererPL::m_videoSettings.m_PlaceboShadersHooks.m_Hooks[i].get());
 	  }
     }
     if(hooks.size() > 0)
@@ -796,6 +796,11 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
       params.hooks = nullptr;
       params.num_hooks = 0;
 	}
+  }
+  else
+  {	
+    params.hooks = nullptr;
+    params.num_hooks = 0;
   }
 
   

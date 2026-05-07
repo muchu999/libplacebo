@@ -25081,7 +25081,7 @@ msgid "Cone distortion"
 msgstr ""
 
 msgctxt "#55257"
-msgid "Load default preset"
+msgid ""
 msgstr ""
 
 msgctxt "#55258"
@@ -25405,9 +25405,16 @@ msgid "Move shader down"
 msgstr ""
 
 msgctxt "#55338"
-msgid ""
+msgid "Apply shaders"
 msgstr ""
 
+msgctxt "#55339"
+msgid "This will reset all current values. Are you sure?"
+msgstr ""
+
+msgctxt "#55340"
+msgid "This will overwrite the existing file, Are you sure?"
+msgstr ""
 
 
 

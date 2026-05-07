@@ -8,48 +8,76 @@
 
 #include "GUIDialogVideoSettings.h"
 
-#include "filesystem/Directory.h"
-#include "filesystem/file.h"
-#include "FileItem.h"
-#include "FileItemList.h"
 #include "GUIPassword.h"
 #include "ServiceBroker.h"
 #include "addons/Skin.h"
-#include "application/ApplicationComponents.h"
 #include "application/ApplicationPlayer.h"
 #include "cores/VideoPlayer/VideoRenderers/BaseRenderer.h"
+#include "cores\VideoPlayer\VideoRenderers\windows\RendererPL.h"
 #include "dialogs/GUIDialogFileBrowser.h"
 #include "dialogs/GUIDialogYesNo.h"
+#include "filesystem/file.h"
 #include "guilib/GUIComponent.h"
-#include "guilib/GUIKeyboardFactory.h"
 #include "guilib/GUIWindowManager.h"
+#include "libplacebo/options.h"
 #include "profiles/ProfileManager.h"
 #include "resources/LocalizeStrings.h"
 #include "resources/ResourcesComponent.h"
 #include "settings/MediaSettings.h"
-#include "settings/MediaSourceSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "settings/lib/Setting.h"
 #include "settings/lib/SettingDefinitions.h"
 #include "settings/lib/SettingsManager.h"
-#include "storage/MediaManager.h"
-#include "utils/FileExtensionProvider.h"
-#include "utils/FileUtils.h"
+#include "utils/ComponentContainer.h"
 #include "utils/LangCodeExpander.h"
 #include "utils/StringUtils.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
-#include "utils/XMLUtils.h"
 #include "video/VideoDatabase.h"
 #include "video/ViewModeSettings.h"
 #include "windowing/WinSystem.h"
-#include "libplacebo/options.h"
-
-#include "..\VideoPlayer\VideoRenderers\windows\RendererPL.h"
-
-#include <utility>
+#include <guilib/GUIWindow.h>
 #include <utils/URIUtils.h>
+#include <utils/XBMCtinyxml.h>
+
+#include <GUIPassword.cpp>
+#include <Interface/StreamInfo.h>
+#include <LockMode.h>
+#include <VideoRenderers/LibPlacebo/PlHelper.h>
+#include <VideoRenderers/LibPlacebo/PlOptionsWrapper.h>
+#include <Windows.h>
+#include <cmath>
+#include <commons/ilog.h>
+#include <cores/IPlayer.h>
+#include <cores/VideoSettings.h>
+#include <cstdlib>
+#include <guilib/GUIKeyboardFactory.h>
+#include <guilib/GUIMacros.h>
+#include <guilib/GUIMessage.h>
+#include <guilib/GUIMessageIDs.h>
+#include <guilib/WindowIDs.h>
+#include <libavutil/mathematics.h>
+#include <libplacebo/colorspace.h>
+#include <libplacebo/dither.h>
+#include <libplacebo/filters.h>
+#include <libplacebo/gamut_mapping.h>
+#include <libplacebo/gpu.h>
+#include <libplacebo/renderer.h>
+#include <libplacebo/shaders/colorspace.h>
+#include <libplacebo/shaders/custom.h>
+#include <libplacebo/shaders/deinterlacing.h>
+#include <libplacebo/shaders/dithering.h>
+#include <libplacebo/shaders/sampling.h>
+#include <libplacebo/tone_mapping.h>
+#include <memory>
+#include <rendering/RenderSystemTypes.h>
+#include <settings/dialogs/GUIDialogSettingsBase.h>
+#include <settings/dialogs/GUIDialogSettingsManualBase.h>
+#include <settings/lib/SettingLevel.h>
+#include <string>
+#include <string.h>
+#include <vector>
 using namespace XFILE;
 
 #define SETTING_VIDEO_VIEW_MODE           "video.viewmode"
@@ -192,14 +220,15 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_SHADER_MOVE_DOWN                    "video.libplacebo.shader_move_down"
 #define SETTING_LIB_PLACEBO_SHADER_ENABLED                      "video.libplacebo.shader_enabled"
 #define SETTING_LIB_PLACEBO_SHADER_PARAM                        "video.libplacebo.shader_param"
+#define SETTING_LIB_PLACEBO_SHADER_APPLY                        "video.libplacebo.shader_apply"
 
 
 #define CreateGroup(thegroup,thecategory) std::shared_ptr<CSettingGroup> thegroup = AddGroup(thecategory); if (thegroup == NULL) {CLog::Log(LOGERROR, "CGUIDialogLibplacebo: unable to setup settings");  return; }
 
 
 CGUIDialogVideoSettings::CGUIDialogVideoSettings()
-    : CGUIDialogSettingsManualBase(WINDOW_DIALOG_VIDEO_OSD_SETTINGS, "DialogSettings.xml")
-{ 
+  : CGUIDialogSettingsManualBase(WINDOW_DIALOG_VIDEO_OSD_SETTINGS, "DialogSettings.xml")
+{
 }
 
 CGUIDialogVideoSettings::~CGUIDialogVideoSettings() = default;
@@ -208,1651 +237,981 @@ CGUIDialogVideoSettings::~CGUIDialogVideoSettings() = default;
 void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSetting>& setting)
 {
   if (setting == NULL)
-    return;
+	return;
 
   CGUIDialogSettingsManualBase::OnSettingChanged(setting);
 
   auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
 
-  const std::string &settingId = setting->GetId();
+  const std::string& settingId = setting->GetId();
   CVideoSettings vs = appPlayer->GetVideoSettings();
   pl_options m_placeboOptions = vs.m_placeboOptions->getPlOptions();
   if (settingId == SETTING_VIDEO_INTERLACEMETHOD)
   {
-    vs.m_InterlaceMethod = static_cast<EINTERLACEMETHOD>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	vs.m_InterlaceMethod = static_cast<EINTERLACEMETHOD>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
   }
   else if (settingId == SETTING_VIDEO_SCALINGMETHOD)
   {
-    vs.m_ScalingMethod = static_cast<ESCALINGMETHOD>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	vs.m_ScalingMethod = static_cast<ESCALINGMETHOD>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
   }
   else if (settingId == SETTING_VIDEO_STREAM)
   {
-    m_videoStream = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    // only change the video stream if a different one has been asked for
-    if (appPlayer->GetVideoStream() != m_videoStream)
-    {
-      appPlayer->SetVideoStream(m_videoStream); // Set the video stream to the one selected
-    }
+	m_videoStream = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	// only change the video stream if a different one has been asked for
+	if (appPlayer->GetVideoStream() != m_videoStream)
+	{
+	  appPlayer->SetVideoStream(m_videoStream); // Set the video stream to the one selected
+	}
   }
   else if (settingId == SETTING_VIDEO_VIEW_MODE)
   {
-    int value = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	int value = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
 
-    appPlayer->SetRenderViewMode(value, vs.m_CustomZoomAmount, vs.m_CustomPixelRatio,
-                                 vs.m_CustomVerticalShift, vs.m_CustomNonLinStretch);
+	appPlayer->SetRenderViewMode(value, vs.m_CustomZoomAmount, vs.m_CustomPixelRatio,
+	  vs.m_CustomVerticalShift, vs.m_CustomNonLinStretch);
 
-    m_viewModeChanged = true;
-    GetSettingsManager()->SetNumber(SETTING_VIDEO_ZOOM, static_cast<double>(vs.m_CustomZoomAmount));
-    GetSettingsManager()->SetNumber(SETTING_VIDEO_PIXEL_RATIO,
-                                    static_cast<double>(vs.m_CustomPixelRatio));
-    GetSettingsManager()->SetNumber(SETTING_VIDEO_VERTICAL_SHIFT,
-                                    static_cast<double>(vs.m_CustomVerticalShift));
-    GetSettingsManager()->SetBool(SETTING_VIDEO_NONLIN_STRETCH, vs.m_CustomNonLinStretch);
-    m_viewModeChanged = false;
+	m_viewModeChanged = true;
+	GetSettingsManager()->SetNumber(SETTING_VIDEO_ZOOM, static_cast<double>(vs.m_CustomZoomAmount));
+	GetSettingsManager()->SetNumber(SETTING_VIDEO_PIXEL_RATIO,
+	  static_cast<double>(vs.m_CustomPixelRatio));
+	GetSettingsManager()->SetNumber(SETTING_VIDEO_VERTICAL_SHIFT,
+	  static_cast<double>(vs.m_CustomVerticalShift));
+	GetSettingsManager()->SetBool(SETTING_VIDEO_NONLIN_STRETCH, vs.m_CustomNonLinStretch);
+	m_viewModeChanged = false;
   }
   else if (settingId == SETTING_VIDEO_ZOOM ||
-           settingId == SETTING_VIDEO_VERTICAL_SHIFT ||
-           settingId == SETTING_VIDEO_PIXEL_RATIO ||
-           settingId == SETTING_VIDEO_NONLIN_STRETCH)
+	settingId == SETTING_VIDEO_VERTICAL_SHIFT ||
+	settingId == SETTING_VIDEO_PIXEL_RATIO ||
+	settingId == SETTING_VIDEO_NONLIN_STRETCH)
   {
-    if (settingId == SETTING_VIDEO_ZOOM)
-      vs.m_CustomZoomAmount = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    else if (settingId == SETTING_VIDEO_VERTICAL_SHIFT)
-      vs.m_CustomVerticalShift = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    else if (settingId == SETTING_VIDEO_PIXEL_RATIO)
-      vs.m_CustomPixelRatio = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    else if (settingId == SETTING_VIDEO_NONLIN_STRETCH)
-      vs.m_CustomNonLinStretch = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	if (settingId == SETTING_VIDEO_ZOOM)
+	  vs.m_CustomZoomAmount = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	else if (settingId == SETTING_VIDEO_VERTICAL_SHIFT)
+	  vs.m_CustomVerticalShift = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	else if (settingId == SETTING_VIDEO_PIXEL_RATIO)
+	  vs.m_CustomPixelRatio = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	else if (settingId == SETTING_VIDEO_NONLIN_STRETCH)
+	  vs.m_CustomNonLinStretch = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
 
-    // try changing the view mode to custom. If it already is set to custom
-    // manually call the render manager
-    if (GetSettingsManager()->GetInt(SETTING_VIDEO_VIEW_MODE) != ViewModeCustom)
-      GetSettingsManager()->SetInt(SETTING_VIDEO_VIEW_MODE, ViewModeCustom);
-    else
-      appPlayer->SetRenderViewMode(vs.m_ViewMode, vs.m_CustomZoomAmount, vs.m_CustomPixelRatio,
-                                   vs.m_CustomVerticalShift, vs.m_CustomNonLinStretch);
+	// try changing the view mode to custom. If it already is set to custom
+	// manually call the render manager
+	if (GetSettingsManager()->GetInt(SETTING_VIDEO_VIEW_MODE) != ViewModeCustom)
+	  GetSettingsManager()->SetInt(SETTING_VIDEO_VIEW_MODE, ViewModeCustom);
+	else
+	  appPlayer->SetRenderViewMode(vs.m_ViewMode, vs.m_CustomZoomAmount, vs.m_CustomPixelRatio,
+		vs.m_CustomVerticalShift, vs.m_CustomNonLinStretch);
   }
   else if (settingId == SETTING_VIDEO_POSTPROCESS)
   {
-    vs.m_PostProcess = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PostProcess = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_BRIGHTNESS)
   {
-    vs.m_Brightness = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->color_adjustment.brightness = vs.m_Brightness / 50.0 - 1.0;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_Brightness = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->color_adjustment.brightness = vs.m_Brightness / 50.0 - 1.0;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_CONTRAST)
   {
-    vs.m_Contrast = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.0;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_Contrast = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.0;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_GAMMA)
   {
-    vs.m_Gamma = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->color_adjustment.gamma = (pow(10.0, (vs.m_Gamma - 20.0) / 40.0) - pow(10,-0.5)) * 1.0/(1.0-pow(10,-0.5));
-    appPlayer->SetVideoSettings(vs);
+	vs.m_Gamma = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->color_adjustment.gamma = (pow(10.0, (vs.m_Gamma - 20.0) / 40.0) - pow(10, -0.5)) * 1.0 / (1.0 - pow(10, -0.5));
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_VDPAU_NOISE)
   {
-    vs.m_NoiseReduction = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    appPlayer->SetVideoSettings(vs);
+	vs.m_NoiseReduction = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_VDPAU_SHARPNESS)
   {
-    vs.m_Sharpness = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    appPlayer->SetVideoSettings(vs);
+	vs.m_Sharpness = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_TONEMAP_METHOD)
   {
-    vs.m_ToneMapMethod = static_cast<ETONEMAPMETHOD>(
-    std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    appPlayer->SetVideoSettings(vs);
+	vs.m_ToneMapMethod = static_cast<ETONEMAPMETHOD>(
+	  std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_TONEMAP_PARAM)
   {
-    vs.m_ToneMapParam = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    appPlayer->SetVideoSettings(vs);
+	vs.m_ToneMapParam = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_ORIENTATION)
   {
-    vs.m_Orientation = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    appPlayer->SetVideoSettings(vs);
-    }
+	vs.m_Orientation = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_VIDEO_STEREOSCOPICMODE)
   {
-    vs.m_StereoMode = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    appPlayer->SetVideoSettings(vs);
+	vs.m_StereoMode = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_STEREOSCOPICINVERT)
   {
-    vs.m_StereoInvert = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    appPlayer->SetVideoSettings(vs);
+	vs.m_StereoInvert = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SATURATION)
   {
-    vs.m_PlaceboSaturation = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_adjustment.saturation = vs.m_PlaceboSaturation;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboSaturation = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_adjustment.saturation = vs.m_PlaceboSaturation;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_HUE)
   {
-    vs.m_PlaceboHue = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_adjustment.hue = fmod(vs.m_PlaceboHue, 360.0) * M_PI / 180.0;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboHue = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_adjustment.hue = fmod(vs.m_PlaceboHue, 360.0) * M_PI / 180.0;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TEMPERATURE)
   {
-    vs.m_PlaceboTemperature = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_adjustment.temperature= (vs.m_PlaceboTemperature-6500.0)/3500.0;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboTemperature = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_adjustment.temperature = (vs.m_PlaceboTemperature - 6500.0) / 3500.0;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_ENABLED)
   {
-    vs.m_PlaceboPeakDetectEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.peak_detect_params = vs.m_PlaceboPeakDetectEnabled ? &m_placeboOptions->peak_detect_params : NULL;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPeakDetectEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.peak_detect_params = vs.m_PlaceboPeakDetectEnabled ? &m_placeboOptions->peak_detect_params : NULL;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_ADJUSTMENT_ENABLED)
   {
-    vs.m_PlaceboColorAdjustmentEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.color_adjustment = vs.m_PlaceboColorAdjustmentEnabled ? &m_placeboOptions->color_adjustment : NULL;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorAdjustmentEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.color_adjustment = vs.m_PlaceboColorAdjustmentEnabled ? &m_placeboOptions->color_adjustment : NULL;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SMOOTHING_PERIOD)
   {
-    vs.m_PlaceboPeakDetectSmoothingPeriod = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->peak_detect_params.smoothing_period = vs.m_PlaceboPeakDetectSmoothingPeriod;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPeakDetectSmoothingPeriod = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->peak_detect_params.smoothing_period = vs.m_PlaceboPeakDetectSmoothingPeriod;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SCENE_THRESHOLD_LOW)
   {
-    vs.m_PlaceboPeakDetectSceneThresholdLow = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->peak_detect_params.scene_threshold_low = vs.m_PlaceboPeakDetectSceneThresholdLow;
-    appPlayer->SetVideoSettings(vs);
-    }
+	vs.m_PlaceboPeakDetectSceneThresholdLow = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->peak_detect_params.scene_threshold_low = vs.m_PlaceboPeakDetectSceneThresholdLow;
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SCENE_THRESHOLD_HIGH)
   {
-    vs.m_PlaceboPeakDetectSceneThresholdHigh = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->peak_detect_params.scene_threshold_high = vs.m_PlaceboPeakDetectSceneThresholdHigh;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPeakDetectSceneThresholdHigh = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->peak_detect_params.scene_threshold_high = vs.m_PlaceboPeakDetectSceneThresholdHigh;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_PERCENTILE)
   {
-    vs.m_PlaceboPeakDetectPercentile = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->peak_detect_params.percentile = vs.m_PlaceboPeakDetectPercentile;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPeakDetectPercentile = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->peak_detect_params.percentile = vs.m_PlaceboPeakDetectPercentile;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_BLACK_CUTOFF)
   {
-    vs.m_PlaceboPeakDetectBlackCutoff = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->peak_detect_params.black_cutoff = vs.m_PlaceboPeakDetectBlackCutoff;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPeakDetectBlackCutoff = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->peak_detect_params.black_cutoff = vs.m_PlaceboPeakDetectBlackCutoff;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_ALLOW_DELAYED)
   {
-    vs.m_PlaceboPeakDetectAllowDelayed = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->peak_detect_params.allow_delayed = vs.m_PlaceboPeakDetectAllowDelayed;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPeakDetectAllowDelayed = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->peak_detect_params.allow_delayed = vs.m_PlaceboPeakDetectAllowDelayed;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_UPSCALER)
   {
 
-    vs.m_PlaceboUpscaler = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    m_placeboOptions->params.upscaler = vs.m_PlaceboUpscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboUpscaler];
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboUpscaler = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	m_placeboOptions->params.upscaler = vs.m_PlaceboUpscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboUpscaler];
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DOWNSCALER)
   {
-    vs.m_PlaceboDownscaler = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    m_placeboOptions->params.downscaler = vs.m_PlaceboDownscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboDownscaler];
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDownscaler = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	m_placeboOptions->params.downscaler = vs.m_PlaceboDownscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboDownscaler];
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PLANE_UPSCALER)
   {
-    vs.m_PlaceboPlaneUpscaler = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    m_placeboOptions->params.plane_upscaler = vs.m_PlaceboPlaneUpscaler == -1 ? NULL: pl_filter_configs[vs.m_PlaceboPlaneUpscaler];
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPlaneUpscaler = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	m_placeboOptions->params.plane_upscaler = vs.m_PlaceboPlaneUpscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboPlaneUpscaler];
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PLANE_DOWNSCALER)
   {
-    vs.m_PlaceboPlaneDownscaler = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    m_placeboOptions->params.plane_downscaler = vs.m_PlaceboPlaneDownscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboPlaneDownscaler];
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPlaneDownscaler = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	m_placeboOptions->params.plane_downscaler = vs.m_PlaceboPlaneDownscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboPlaneDownscaler];
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_FRAME_MIXER)
   {
-    vs.m_PlaceboFrameMixer = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    m_placeboOptions->params.frame_mixer = vs.m_PlaceboFrameMixer == -1 ? NULL : pl_filter_configs[vs.m_PlaceboFrameMixer];
-    appPlayer->SetVideoSettings(vs);
-    }
+	vs.m_PlaceboFrameMixer = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	m_placeboOptions->params.frame_mixer = vs.m_PlaceboFrameMixer == -1 ? NULL : pl_filter_configs[vs.m_PlaceboFrameMixer];
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING)
   {
-    vs.m_PlaceboColorMapGamutMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    m_placeboOptions->color_map_params.gamut_mapping = vs.m_PlaceboColorMapGamutMapping == -1 ? NULL : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping];
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapGamutMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	m_placeboOptions->color_map_params.gamut_mapping = vs.m_PlaceboColorMapGamutMapping == -1 ? NULL : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping];
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING)
   {
-    vs.m_PlaceboColorMapToneMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
-    m_placeboOptions->color_map_params.tone_mapping_function = vs.m_PlaceboColorMapToneMapping == -1 ? NULL : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping];
-    appPlayer->SetVideoSettings(vs);
-    }
+	vs.m_PlaceboColorMapToneMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	m_placeboOptions->color_map_params.tone_mapping_function = vs.m_PlaceboColorMapToneMapping == -1 ? NULL : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping];
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_ENABLED)
   {
-    vs.m_PlaceboDebandEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.deband_params = vs.m_PlaceboDebandEnabled ? &m_placeboOptions->deband_params : NULL;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDebandEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.deband_params = vs.m_PlaceboDebandEnabled ? &m_placeboOptions->deband_params : NULL;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_GRAIN)
   {
-    vs.m_PlaceboDebandGrain = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->deband_params.grain = vs.m_PlaceboDebandGrain;
-    appPlayer->SetVideoSettings(vs);
-    }
+	vs.m_PlaceboDebandGrain = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->deband_params.grain = vs.m_PlaceboDebandGrain;
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL0)
   {
-    vs.m_PlaceboDebandGrainNeutral0 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->deband_params.grain_neutral[0] = vs.m_PlaceboDebandGrainNeutral0;
-    appPlayer->SetVideoSettings(vs);
-    }
+	vs.m_PlaceboDebandGrainNeutral0 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->deband_params.grain_neutral[0] = vs.m_PlaceboDebandGrainNeutral0;
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL1)
   {
-    vs.m_PlaceboDebandGrainNeutral1 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->deband_params.grain_neutral[1] = vs.m_PlaceboDebandGrainNeutral1;
-    appPlayer->SetVideoSettings(vs);
-    }
+	vs.m_PlaceboDebandGrainNeutral1 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->deband_params.grain_neutral[1] = vs.m_PlaceboDebandGrainNeutral1;
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL2)
   {
-    vs.m_PlaceboDebandGrainNeutral2 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->deband_params.grain_neutral[2] = vs.m_PlaceboDebandGrainNeutral2;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDebandGrainNeutral2 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->deband_params.grain_neutral[2] = vs.m_PlaceboDebandGrainNeutral2;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_ITERATIONS)
   {
-    vs.m_PlaceboDebandIterations = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->deband_params.iterations = vs.m_PlaceboDebandIterations;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDebandIterations = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->deband_params.iterations = vs.m_PlaceboDebandIterations;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_RADIUS)
   {
-    vs.m_PlaceboDebandRadius = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->deband_params.radius = vs.m_PlaceboDebandRadius;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDebandRadius = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->deband_params.radius = vs.m_PlaceboDebandRadius;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_THRESHOLD)
   {
-    vs.m_PlaceboDebandThreshold = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->deband_params.threshold = vs.m_PlaceboDebandThreshold;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDebandThreshold = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->deband_params.threshold = vs.m_PlaceboDebandThreshold;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_ENABLED)
   {
-    vs.m_PlaceboColorMapEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.color_map_params = vs.m_PlaceboColorMapEnabled ? &m_placeboOptions->color_map_params : NULL;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.color_map_params = vs.m_PlaceboColorMapEnabled ? &m_placeboOptions->color_map_params : NULL;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SKIN_ZOOM)
   {
-    vs.m_PlaceboSkinZoom = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    vs.m_PlaceboSkinZoomHint = vs.m_PlaceboSkinZoom;
-    appPlayer->SetVideoSettings(vs);
-    CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
-    CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+	vs.m_PlaceboSkinZoom = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	vs.m_PlaceboSkinZoomHint = vs.m_PlaceboSkinZoom;
+	appPlayer->SetVideoSettings(vs);
+	CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+	CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE)
   {
-    vs.m_PlaceboDisplayPeakLuminance = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDisplayPeakLuminance = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_SHADER_APPLY)
+  {
+	vs.m_PlaceboShaderApply = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT)
   {
-    vs.m_PlaceboTargetColorspaceHint = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboTargetColorspaceHint = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT_MODE)
   {
-    vs.m_PlaceboTargetColorspaceHintMode = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboTargetColorspaceHintMode = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED)
   {
-    vs.m_PlaceboDeinterlaceEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.deinterlace_params = vs.m_PlaceboDeinterlaceEnabled ? &m_placeboOptions->deinterlace_params : NULL;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDeinterlaceEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.deinterlace_params = vs.m_PlaceboDeinterlaceEnabled ? &m_placeboOptions->deinterlace_params : NULL;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ALGO)
   {
-    vs.m_PlaceboDeinterlaceAlgo = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->deinterlace_params.algo = (enum pl_deinterlace_algorithm) vs.m_PlaceboDeinterlaceAlgo;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDeinterlaceAlgo = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->deinterlace_params.algo = (enum pl_deinterlace_algorithm)vs.m_PlaceboDeinterlaceAlgo;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_SKIP_SPATIAL_CHECK)
   {
-    vs.m_PlaceboDeinterlaceSkipSpatialCheck = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->deinterlace_params.skip_spatial_check = vs.m_PlaceboDeinterlaceSkipSpatialCheck;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDeinterlaceSkipSpatialCheck = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->deinterlace_params.skip_spatial_check = vs.m_PlaceboDeinterlaceSkipSpatialCheck;
+	appPlayer->SetVideoSettings(vs);
   }
-    else if (settingId == SETTING_LIB_PLACEBO_SIGMOID_ENABLED)
+  else if (settingId == SETTING_LIB_PLACEBO_SIGMOID_ENABLED)
   {
-    vs.m_PlaceboSigmoidEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.sigmoid_params = vs.m_PlaceboSigmoidEnabled ? &m_placeboOptions->sigmoid_params : NULL;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboSigmoidEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.sigmoid_params = vs.m_PlaceboSigmoidEnabled ? &m_placeboOptions->sigmoid_params : NULL;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SIGMOID_CENTER)
   {
-    vs.m_PlaceboSigmoidCenter = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->sigmoid_params.center = vs.m_PlaceboSigmoidCenter;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboSigmoidCenter = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->sigmoid_params.center = vs.m_PlaceboSigmoidCenter;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SIGMOID_SLOPE)
   {
-    vs.m_PlaceboSigmoidSlope = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    appPlayer->SetVideoSettings(vs);
-    m_placeboOptions->sigmoid_params.slope = vs.m_PlaceboSigmoidSlope;
+	vs.m_PlaceboSigmoidSlope = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	m_placeboOptions->sigmoid_params.slope = vs.m_PlaceboSigmoidSlope;
   }
   else if (settingId == SETTING_LIB_PLACEBO_CONE_ENABLED)
   {
-    vs.m_PlaceboConeEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.cone_params = vs.m_PlaceboConeEnabled ? &m_placeboOptions->cone_params : NULL;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboConeEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.cone_params = vs.m_PlaceboConeEnabled ? &m_placeboOptions->cone_params : NULL;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_CONE_CONES)
   {
-    vs.m_PlaceboConeCones = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->cone_params.cones = (enum pl_cone)vs.m_PlaceboConeCones; 
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboConeCones = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->cone_params.cones = (enum pl_cone)vs.m_PlaceboConeCones;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_CONE_STRENGTH)
   {
-    vs.m_PlaceboConeStrength = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->cone_params.strength = vs.m_PlaceboConeStrength;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboConeStrength = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->cone_params.strength = vs.m_PlaceboConeStrength;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DITHER_ENABLED)
   {
-    vs.m_PlaceboDitherEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.dither_params = vs.m_PlaceboDitherEnabled ? &m_placeboOptions->dither_params : NULL;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDitherEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.dither_params = vs.m_PlaceboDitherEnabled ? &m_placeboOptions->dither_params : NULL;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DITHER_METHOD)
   {
-    vs.m_PlaceboDitherMethod = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->dither_params.method = (enum pl_dither_method)vs.m_PlaceboDitherMethod; 
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDitherMethod = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->dither_params.method = (enum pl_dither_method)vs.m_PlaceboDitherMethod;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DITHER_LUT_SIZE)
   {
-    vs.m_PlaceboDitherLutSize = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->dither_params.lut_size = vs.m_PlaceboDitherLutSize;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDitherLutSize = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->dither_params.lut_size = vs.m_PlaceboDitherLutSize;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DITHER_TEMPORAL)
   {
-    vs.m_PlaceboDitherTemporal = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->dither_params.temporal = vs.m_PlaceboDitherTemporal;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDitherTemporal = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->dither_params.temporal = vs.m_PlaceboDitherTemporal;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DITHER_TRANSFER)
   {
-    vs.m_PlaceboDitherTransfer = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->dither_params.transfer = (enum pl_color_transfer) vs.m_PlaceboDitherTransfer;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDitherTransfer = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->dither_params.transfer = (enum pl_color_transfer)vs.m_PlaceboDitherTransfer;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_EXPOSURE)
   {
-    vs.m_PlaceboToneConstantExposure = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.exposure = vs.m_PlaceboToneConstantExposure;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantExposure = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.exposure = vs.m_PlaceboToneConstantExposure;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_ADAPTATION)
   {
-    vs.m_PlaceboToneConstantKneeAdaptation = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.knee_adaptation = vs.m_PlaceboToneConstantKneeAdaptation;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantKneeAdaptation = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.knee_adaptation = vs.m_PlaceboToneConstantKneeAdaptation;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_DEFAULT)
   {
-    vs.m_PlaceboToneConstantKneeDefault = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.knee_default = vs.m_PlaceboToneConstantKneeDefault;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantKneeDefault = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.knee_default = vs.m_PlaceboToneConstantKneeDefault;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MAXIMUM)
   {
-    vs.m_PlaceboToneConstantKneeMaximum = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.knee_maximum = vs.m_PlaceboToneConstantKneeMaximum;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantKneeMaximum = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.knee_maximum = vs.m_PlaceboToneConstantKneeMaximum;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MINIMUM)
   {
-    vs.m_PlaceboToneConstantKneeMinimum = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.knee_minimum = vs.m_PlaceboToneConstantKneeMinimum;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantKneeMinimum = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.knee_minimum = vs.m_PlaceboToneConstantKneeMinimum;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_OFFSET)
   {
-    vs.m_PlaceboToneConstantKneeOffset = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.knee_offset = vs.m_PlaceboToneConstantKneeOffset;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantKneeOffset = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.knee_offset = vs.m_PlaceboToneConstantKneeOffset;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_LINEAR_KNEE)
   {
-    vs.m_PlaceboToneConstantLinearKnee = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.linear_knee = vs.m_PlaceboToneConstantLinearKnee;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantLinearKnee = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.linear_knee = vs.m_PlaceboToneConstantLinearKnee;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_REINHARD_CONTRAST)
   {
-    vs.m_PlaceboToneConstantReinhardContrast = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.reinhard_contrast = vs.m_PlaceboToneConstantReinhardContrast;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantReinhardContrast = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.reinhard_contrast = vs.m_PlaceboToneConstantReinhardContrast;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_OFFSET)
   {
-    vs.m_PlaceboToneConstantSlopeOffset = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.slope_offset = vs.m_PlaceboToneConstantSlopeOffset;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantSlopeOffset = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.slope_offset = vs.m_PlaceboToneConstantSlopeOffset;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING)
   {
-    vs.m_PlaceboToneConstantSlopeTuning = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.slope_tuning = vs.m_PlaceboToneConstantSlopeTuning;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantSlopeTuning = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.slope_tuning = vs.m_PlaceboToneConstantSlopeTuning;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST)
   {
-    vs.m_PlaceboToneConstantSplineContrast = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.tone_constants.spline_contrast = vs.m_PlaceboToneConstantSplineContrast;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboToneConstantSplineContrast = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.tone_constants.spline_contrast = vs.m_PlaceboToneConstantSplineContrast;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_LUT)
   {
-    vs.m_PlaceboColorMapVisualizeLut = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->color_map_params.visualize_lut = vs.m_PlaceboColorMapVisualizeLut;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapVisualizeLut = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->color_map_params.visualize_lut = vs.m_PlaceboColorMapVisualizeLut;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X0)
   {
-    vs.m_PlaceboColorMapVisualizeRectX0 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.visualize_rect.x0 = vs.m_PlaceboColorMapVisualizeRectX0;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapVisualizeRectX0 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.visualize_rect.x0 = vs.m_PlaceboColorMapVisualizeRectX0;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X1)
   {
-    vs.m_PlaceboColorMapVisualizeRectX1 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.visualize_rect.x1 = vs.m_PlaceboColorMapVisualizeRectX1;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapVisualizeRectX1 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.visualize_rect.x1 = vs.m_PlaceboColorMapVisualizeRectX1;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y0)
   {
-    vs.m_PlaceboColorMapVisualizeRectY0 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.visualize_rect.y0 = vs.m_PlaceboColorMapVisualizeRectY0;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapVisualizeRectY0 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.visualize_rect.y0 = vs.m_PlaceboColorMapVisualizeRectY0;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y1)
   {
-    vs.m_PlaceboColorMapVisualizeRectY1 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.visualize_rect.y1 = vs.m_PlaceboColorMapVisualizeRectY1;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapVisualizeRectY1 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.visualize_rect.y1 = vs.m_PlaceboColorMapVisualizeRectY1;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_HUE)
   {
-    vs.m_PlaceboColorMapVisualizeHue = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.visualize_hue = fmod(vs.m_PlaceboColorMapVisualizeHue, 360.0) * M_PI / 180.0;;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapVisualizeHue = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.visualize_hue = fmod(vs.m_PlaceboColorMapVisualizeHue, 360.0) * M_PI / 180.0;;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_THETA)
   {
-    vs.m_PlaceboColorMapVisualizeTheta = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.visualize_theta = fmod(vs.m_PlaceboColorMapVisualizeTheta,360.0)* M_PI / 180.0;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapVisualizeTheta = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.visualize_theta = fmod(vs.m_PlaceboColorMapVisualizeTheta, 360.0) * M_PI / 180.0;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY)
   {
-    vs.m_PlaceboColorMapContrastRecovery = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.contrast_recovery = vs.m_PlaceboColorMapContrastRecovery;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapContrastRecovery = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.contrast_recovery = vs.m_PlaceboColorMapContrastRecovery;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS)
   {
-    vs.m_PlaceboColorMapContrastSmoothness = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.contrast_smoothness = vs.m_PlaceboColorMapContrastSmoothness;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapContrastSmoothness = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.contrast_smoothness = vs.m_PlaceboColorMapContrastSmoothness;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_EXPANSION)
   {
-    vs.m_PlaceboColorMapGamutExpansion = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->color_map_params.gamut_expansion = vs.m_PlaceboColorMapGamutExpansion;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapGamutExpansion = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->color_map_params.gamut_expansion = vs.m_PlaceboColorMapGamutExpansion;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA)
   {
-    vs.m_PlaceboGamutConstantsColorimetricGamma = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.gamut_constants.colorimetric_gamma = vs.m_PlaceboGamutConstantsColorimetricGamma;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboGamutConstantsColorimetricGamma = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.gamut_constants.colorimetric_gamma = vs.m_PlaceboGamutConstantsColorimetricGamma;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE)
   {
-    vs.m_PlaceboGamutConstantsPerceptualDeadzone = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.gamut_constants.perceptual_deadzone = vs.m_PlaceboGamutConstantsPerceptualDeadzone;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboGamutConstantsPerceptualDeadzone = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.gamut_constants.perceptual_deadzone = vs.m_PlaceboGamutConstantsPerceptualDeadzone;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT)
   {
-    vs.m_PlaceboGamutConstantsSoftclipDesat = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.gamut_constants.softclip_desat = vs.m_PlaceboGamutConstantsSoftclipDesat;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboGamutConstantsSoftclipDesat = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.gamut_constants.softclip_desat = vs.m_PlaceboGamutConstantsSoftclipDesat;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_KNEE)
   {
-    vs.m_PlaceboGamutConstantsSoftclipKnee = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->color_map_params.gamut_constants.softclip_knee = vs.m_PlaceboGamutConstantsSoftclipKnee;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboGamutConstantsSoftclipKnee = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.gamut_constants.softclip_knee = vs.m_PlaceboGamutConstantsSoftclipKnee;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_INVERSE_TONE_MAPPING)
   {
-    vs.m_PlaceboColorMapInverseToneMapping = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->color_map_params.inverse_tone_mapping = vs.m_PlaceboColorMapInverseToneMapping;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapInverseToneMapping = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->color_map_params.inverse_tone_mapping = vs.m_PlaceboColorMapInverseToneMapping;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_I)
   {
-    vs.m_PlaceboColorMapLut3dSizeI = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->color_map_params.lut3d_size[0] = vs.m_PlaceboColorMapLut3dSizeI;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapLut3dSizeI = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->color_map_params.lut3d_size[0] = vs.m_PlaceboColorMapLut3dSizeI;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_C)
   {
-    vs.m_PlaceboColorMapLut3dSizeC = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->color_map_params.lut3d_size[1] = vs.m_PlaceboColorMapLut3dSizeC;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapLut3dSizeC = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->color_map_params.lut3d_size[1] = vs.m_PlaceboColorMapLut3dSizeC;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_H)
   {
-    vs.m_PlaceboColorMapLut3dSizeH = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->color_map_params.lut3d_size[2] = vs.m_PlaceboColorMapLut3dSizeH;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapLut3dSizeH = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->color_map_params.lut3d_size[2] = vs.m_PlaceboColorMapLut3dSizeH;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_TRICUBIC)
   {
-    vs.m_PlaceboColorMapLut3dTricubic = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->color_map_params.lut3d_tricubic = vs.m_PlaceboColorMapLut3dTricubic;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapLut3dTricubic = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->color_map_params.lut3d_tricubic = vs.m_PlaceboColorMapLut3dTricubic;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LUT_SIZE)
   {
-    vs.m_PlaceboColorMapLutSize = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->color_map_params.lut_size = vs.m_PlaceboColorMapLutSize;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapLutSize = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->color_map_params.lut_size = vs.m_PlaceboColorMapLutSize;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_SHOW_CLIPPING)
   {
-    vs.m_PlaceboColorMapShowClipping = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->color_map_params.show_clipping = vs.m_PlaceboColorMapShowClipping;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapShowClipping = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->color_map_params.show_clipping = vs.m_PlaceboColorMapShowClipping;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_INTENT)
   {
-    vs.m_PlaceboColorMapIntent = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->color_map_params.intent = (pl_rendering_intent)vs.m_PlaceboColorMapIntent;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapIntent = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->color_map_params.intent = (pl_rendering_intent)vs.m_PlaceboColorMapIntent;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_FORCE_TONE_MAPPING_LUT)
   {
-    vs.m_PlaceboColorMapForceToneMappingLut = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->color_map_params.force_tone_mapping_lut = vs.m_PlaceboColorMapForceToneMappingLut;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboColorMapForceToneMappingLut = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->color_map_params.force_tone_mapping_lut = vs.m_PlaceboColorMapForceToneMappingLut;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_LUT_FILENAME)
   {
-    vs.m_PlaceboLutFilename = std::static_pointer_cast<const CSettingString>(setting)->GetValue();
-    LoadLutFile(vs, vs.m_PlaceboLutFilename);
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboLutFilename = std::static_pointer_cast<const CSettingString>(setting)->GetValue();
+	CPLHelper::LoadLutFile(vs, vs.m_PlaceboLutFilename);
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_LUT_TYPE)
   {
-    vs.m_PlaceboLutType = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->params.lut_type =  (pl_lut_type) vs.m_PlaceboLutType;
+	vs.m_PlaceboLutType = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->params.lut_type = (pl_lut_type)vs.m_PlaceboLutType;
 	m_placeboOptions->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut.get();
-    appPlayer->SetVideoSettings(vs);
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH)
   {
-    vs.m_PlaceboAntiringingStrength = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-    m_placeboOptions->params.antiringing_strength = vs.m_PlaceboAntiringingStrength;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboAntiringingStrength = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->params.antiringing_strength = vs.m_PlaceboAntiringingStrength;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_CORRECT_SUBPIXEL_OFFSET)
   {
-    vs.m_PlaceboCorrectSubpixelOffset = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.correct_subpixel_offsets = vs.m_PlaceboCorrectSubpixelOffset;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboCorrectSubpixelOffset = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.correct_subpixel_offsets = vs.m_PlaceboCorrectSubpixelOffset;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DISABLE_BUILTIN_SCALERS)
   {
-    vs.m_PlaceboDisableBuiltinScalers = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.disable_builtin_scalers = vs.m_PlaceboDisableBuiltinScalers;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDisableBuiltinScalers = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.disable_builtin_scalers = vs.m_PlaceboDisableBuiltinScalers;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DISABLE_DITHER_GAMMA_CORRECTION)
   {
-    vs.m_PlaceboDisableDitherGammaCorrection = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.disable_dither_gamma_correction = vs.m_PlaceboDisableDitherGammaCorrection;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDisableDitherGammaCorrection = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.disable_dither_gamma_correction = vs.m_PlaceboDisableDitherGammaCorrection;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DISABLE_LINEAR_SCALING)
   {
-    vs.m_PlaceboDisableLinearScaling = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.disable_linear_scaling = vs.m_PlaceboDisableLinearScaling;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDisableLinearScaling = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.disable_linear_scaling = vs.m_PlaceboDisableLinearScaling;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DYNAMIC_CONSTANTS)
   {
-    vs.m_PlaceboDynamicConstant = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.dynamic_constants = vs.m_PlaceboDynamicConstant;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboDynamicConstant = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.dynamic_constants = vs.m_PlaceboDynamicConstant;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_ERROR_DIFFUSION)
   {
-    vs.m_PlaceboErrorDiffusion = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-    m_placeboOptions->params.error_diffusion = vs.m_PlaceboErrorDiffusion == -1 ? NULL : pl_error_diffusion_kernels[vs.m_PlaceboErrorDiffusion];
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboErrorDiffusion = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	m_placeboOptions->params.error_diffusion = vs.m_PlaceboErrorDiffusion == -1 ? NULL : pl_error_diffusion_kernels[vs.m_PlaceboErrorDiffusion];
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_FORCE_DITHER)
   {
-    vs.m_PlaceboForceDither = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.force_dither = vs.m_PlaceboForceDither;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboForceDither = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.force_dither = vs.m_PlaceboForceDither;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_FORCE_LOW_BIT_DEPTH_FBOS)
   {
-    vs.m_PlaceboForceLowBitDepthFbos = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.force_low_bit_depth_fbos = vs.m_PlaceboForceLowBitDepthFbos;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboForceLowBitDepthFbos = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.force_low_bit_depth_fbos = vs.m_PlaceboForceLowBitDepthFbos;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_IGNORE_ICC_PROFILES)
   {
-    vs.m_PlaceboIgnoreIccProfiles = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.ignore_icc_profiles = vs.m_PlaceboIgnoreIccProfiles;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboIgnoreIccProfiles = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.ignore_icc_profiles = vs.m_PlaceboIgnoreIccProfiles;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_PRESERVE_MIXING_CACHE)
   {
-    vs.m_PlaceboPreserveMixingCache = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.preserve_mixing_cache = vs.m_PlaceboPreserveMixingCache;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboPreserveMixingCache = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.preserve_mixing_cache = vs.m_PlaceboPreserveMixingCache;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING)
   {
-    vs.m_PlaceboSkipAntiAliasing = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.skip_anti_aliasing = vs.m_PlaceboSkipAntiAliasing;
-    appPlayer->SetVideoSettings(vs);
+	vs.m_PlaceboSkipAntiAliasing = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.skip_anti_aliasing = vs.m_PlaceboSkipAntiAliasing;
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME)
   {
-    vs.m_PlaceboSkipCachingSingleFrame = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    m_placeboOptions->params.skip_caching_single_frame = vs.m_PlaceboSkipCachingSingleFrame;
-    appPlayer->SetVideoSettings(vs);
-    }
+	vs.m_PlaceboSkipCachingSingleFrame = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.skip_caching_single_frame = vs.m_PlaceboSkipCachingSingleFrame;
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_ENABLED))
   {
-	int shaderNumber = std::stoi(settingId.substr(std::strlen(SETTING_LIB_PLACEBO_SHADER_ENABLED)+1,2));
-    vs.m_PlaceboShadersEnabled[shaderNumber] = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
-    appPlayer->SetVideoSettings(vs);
+	int shaderNumber = std::stoi(settingId.substr(std::strlen(SETTING_LIB_PLACEBO_SHADER_ENABLED) + 1, 2));
+	vs.m_PlaceboShadersEnabled[shaderNumber] = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_PARAM))
   {
 	int shaderNumber = std::stoi(settingId.substr(std::strlen(SETTING_LIB_PLACEBO_SHADER_PARAM) + 1, 2));
 	int parameterNumber = std::stoi(settingId.substr(std::strlen(SETTING_LIB_PLACEBO_SHADER_PARAM) + 4, 2));
-    const pl_hook* hook = vs.m_Shaders.m_Hooks[shaderNumber].get();
-    if(hook->parameters[parameterNumber].type == PL_VAR_FLOAT)
-    {
-      float value = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-      hook->parameters[parameterNumber].data->f = value;
-      vs.m_PlaceboShadersParams[shaderNumber][parameterNumber].m_Value = value;
+	const pl_hook* hook = vs.m_PlaceboShadersHooks.m_Hooks[shaderNumber].get();
+	if (hook->parameters[parameterNumber].type == PL_VAR_FLOAT)
+	{
+	  float value = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	  hook->parameters[parameterNumber].data->f = value;
+	  vs.m_PlaceboShadersParams[shaderNumber][parameterNumber].m_Value = value;
 
 	}
-    else if (hook->parameters[parameterNumber].type == PL_VAR_SINT)
-    {
-      int value = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-      hook->parameters[parameterNumber].data->i = value;
+	else if (hook->parameters[parameterNumber].type == PL_VAR_SINT)
+	{
+	  int value = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	  hook->parameters[parameterNumber].data->i = value;
 	  vs.m_PlaceboShadersParams[shaderNumber][parameterNumber].m_Value = value;
-    }
-    else if (hook->parameters[parameterNumber].type == PL_VAR_UINT)
-    {
-      unsigned int value = static_cast<unsigned int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue()); //cl CSettingUint not supported
-      hook->parameters[parameterNumber].data->u = value;
-      vs.m_PlaceboShadersParams[shaderNumber][parameterNumber].m_Value = value;
-    }
-    appPlayer->SetVideoSettings(vs);
+	}
+	else if (hook->parameters[parameterNumber].type == PL_VAR_UINT)
+	{
+	  unsigned int value = static_cast<unsigned int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue()); //cl CSettingUint not supported
+	  hook->parameters[parameterNumber].data->u = value;
+	  vs.m_PlaceboShadersParams[shaderNumber][parameterNumber].m_Value = value;
+	}
+	appPlayer->SetVideoSettings(vs);
   }
 }
 
-void CGUIDialogVideoSettings::SetVideoSettings(CVideoSettings& vs)
+
+
+
+void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetting>& setting)
 {
   auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-  appPlayer->SetVideoSettings(vs);
-}
 
-int CGUIDialogVideoSettings::getErrorDiffusionIndexFromDescription(std::string description)
-{
-  const struct pl_error_diffusion_kernel* f;
-  for (int i = 0; i < pl_num_error_diffusion_kernels; i++)
-  {
-    f = pl_error_diffusion_kernels[i];
-    if (f->description != nullptr)
-      if (description == std::string(f->description))
-        return i;
-  }
-  return -1;
-}
+  if (setting == NULL)
+	return;
 
-int CGUIDialogVideoSettings::getColorMapIntentIndexFromDescription(std::string description)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-  PlColorMapIntentOptionFiller(asetting, alist, value);
-  if (description == "")
-    return -1;
+  CGUIDialogSettingsManualBase::OnSettingChanged(setting);
 
-  for (int i = 0; i < alist.size(); i++)
-  {
-    if (alist[i].label == description)
-      return i;
-  }
-  return -1;
-}
-
-int CGUIDialogVideoSettings::getDitherMethodIndexFromDescription(std::string description)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-  PlDitherMethodOptionFiller(asetting, alist, value);
-  if (description == "")
-    return -1;
-
-  for (int i = 0; i < alist.size(); i++)
-  {
-    if (alist[i].label == description)
-      return i;
-  }
-  return -1;
-}
-
-int CGUIDialogVideoSettings::getDitherTransferIndexFromDescription(std::string description)
-{
-  for (int i = 0; i < PL_COLOR_TRC_COUNT; i++)
-  {
-    if (pl_color_transfer_name(static_cast<pl_color_transfer>(i)) == description)
-      return i;
-  }
-  return -1;
-}
-
-int CGUIDialogVideoSettings::getConeConesIndexFromDescription(std::string description)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-  PlConeConesOptionFiller(asetting, alist, value);
-  if (description == "")
-    return -1;
-
-  for (int i = 0; i < alist.size(); i++)
-  {
-    if (alist[i].label == description)
-      return i;
-  }
-  return -1;
-}
-
-
-int CGUIDialogVideoSettings::getFilterIndexFromDescription(std::string description)
-{
-  const struct pl_filter_config* f;
-  for (int i = 0; i < pl_num_filter_configs; i++)
-  {
-    f = pl_filter_configs[i];
-    if(f->description != nullptr)
-      if (description == std::string(f->description))
-        return i;
-  }
-  return -1;
-}
-
-int CGUIDialogVideoSettings::getToneMapIndexFromDescription(std::string description)
-{
-  const struct pl_tone_map_function* f;
-  for (int i = 0; i < pl_num_tone_map_functions; i++)
-  {
-    f = pl_tone_map_functions[i];
-    if (f->description != nullptr)
-      if (description == f->description)
-        return i;
-  }
-  return -1;
-}
-
-int CGUIDialogVideoSettings::getGamutMapIndexFromDescription(std::string description)
-{
-  const struct pl_gamut_map_function* f;
-  for (int i = 0; i < pl_num_gamut_map_functions; i++)
-  {
-    f = pl_gamut_map_functions[i];
-    if (f->description != nullptr)
-      if (description == f->description)
-        return i;
-  }
-  return -1;
-}
-
-int CGUIDialogVideoSettings::getLutTypeIndexFromDescription(std::string description)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-  PlLutTypeOptionFiller(asetting, alist, value);
-  if (description == "")
-    return -1; 
-
-  for (int i = 0; i < alist.size(); i++)
-  {
-    if (alist[i].label == description)
-      return i;
-  }
-  return -1; // auto
-}
-
-int CGUIDialogVideoSettings::getDeinterlaceAlgoIndexFromDescription(std::string description)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-  PlDeinterlaceAlgoOptionFiller(asetting, alist, value);
-  if (description == "")
-    return -1;
-
-  for (int i = 0; i < alist.size(); i++)
-  {
-    if (alist[i].label == description)
-      return i;
-  }
-  return -1;
-}
-
-void CGUIDialogVideoSettings::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings &vs)
-{
-  pl_options m_placeboOptions = vs.m_placeboOptions->getPlOptions();
-  
-  vs.m_Brightness = (m_placeboOptions->color_adjustment.brightness + 1.0) * 50.0;
-  vs.m_Contrast = log10f(m_placeboOptions->color_adjustment.contrast * 99.0/100.0 + 0.01)*25.0+50.0;
-  vs.m_Gamma = log10f(m_placeboOptions->color_adjustment.gamma *(1.0-pow(10,-0.5)) + pow(10,-0.5)) * 40.0 + 20.0;
-  
-  vs.m_PlaceboColorAdjustmentEnabled = m_placeboOptions->params.color_adjustment != NULL;
-  vs.m_PlaceboSaturation = m_placeboOptions->color_adjustment.saturation;
-  vs.m_PlaceboHue         = fmod(m_placeboOptions->color_adjustment.hue * 180.0 / M_PI, 360.0);
-  vs.m_PlaceboTemperature = m_placeboOptions->color_adjustment.temperature * 3500.0 + 6500.0;
-
-  vs.m_PlaceboPeakDetectEnabled            = m_placeboOptions->params.peak_detect_params != NULL;
-  vs.m_PlaceboPeakDetectSmoothingPeriod = m_placeboOptions->peak_detect_params.smoothing_period;
-  vs.m_PlaceboPeakDetectSceneThresholdLow = m_placeboOptions->peak_detect_params.scene_threshold_low;
-  vs.m_PlaceboPeakDetectSceneThresholdHigh = m_placeboOptions->peak_detect_params.scene_threshold_high;
-  vs.m_PlaceboPeakDetectPercentile = m_placeboOptions->peak_detect_params.percentile;
-  vs.m_PlaceboPeakDetectBlackCutoff = m_placeboOptions->peak_detect_params.black_cutoff;
-  vs.m_PlaceboPeakDetectAllowDelayed = m_placeboOptions->peak_detect_params.allow_delayed;
-
-  vs.m_PlaceboUpscaler =        m_placeboOptions->params.upscaler         == NULL ? -1 : getFilterIndexFromDescription(m_placeboOptions->params.upscaler->description);
-  vs.m_PlaceboDownscaler =      m_placeboOptions->params.downscaler       == NULL ? -1 : getFilterIndexFromDescription(m_placeboOptions->params.downscaler->description);
-  vs.m_PlaceboPlaneUpscaler =   m_placeboOptions->params.plane_upscaler   == NULL ? -1 : getFilterIndexFromDescription(m_placeboOptions->params.plane_upscaler->description);
-  vs.m_PlaceboPlaneDownscaler = m_placeboOptions->params.plane_downscaler == NULL ? -1 : getFilterIndexFromDescription(m_placeboOptions->params.plane_downscaler->description);
-  vs.m_PlaceboFrameMixer =      m_placeboOptions->params.frame_mixer      == NULL ? -1 : getFilterIndexFromDescription(m_placeboOptions->params.frame_mixer->description);
-
-  vs.m_PlaceboDebandEnabled = m_placeboOptions->params.deband_params != NULL;
-  vs.m_PlaceboDebandGrain = m_placeboOptions->deband_params.grain;
-  vs.m_PlaceboDebandGrainNeutral0 = m_placeboOptions->deband_params.grain_neutral[0];
-  vs.m_PlaceboDebandGrainNeutral1 = m_placeboOptions->deband_params.grain_neutral[1];
-  vs.m_PlaceboDebandGrainNeutral2 = m_placeboOptions->deband_params.grain_neutral[2];
-  vs.m_PlaceboDebandIterations = m_placeboOptions->deband_params.iterations;
-  vs.m_PlaceboDebandRadius = m_placeboOptions->deband_params.radius;
-  vs.m_PlaceboDebandThreshold = m_placeboOptions->deband_params.threshold;
-
-  vs.m_PlaceboColorMapEnabled = m_placeboOptions->params.color_map_params != NULL;
-  vs.m_PlaceboColorMapGamutMapping = m_placeboOptions->color_map_params.gamut_mapping == NULL ? -1 : getGamutMapIndexFromDescription(m_placeboOptions->color_map_params.gamut_mapping->description); 
-  vs.m_PlaceboColorMapToneMapping = m_placeboOptions->color_map_params.tone_mapping_function == NULL ? -1 : getGamutMapIndexFromDescription(m_placeboOptions->color_map_params.tone_mapping_function->description);
-  vs.m_PlaceboColorMapContrastRecovery = m_placeboOptions->color_map_params.contrast_recovery;
-  vs.m_PlaceboColorMapContrastSmoothness = m_placeboOptions->color_map_params.contrast_smoothness;
-  vs.m_PlaceboColorMapGamutExpansion = m_placeboOptions->color_map_params.gamut_expansion;
-  vs.m_PlaceboColorMapInverseToneMapping = m_placeboOptions->color_map_params.inverse_tone_mapping;
-  vs.m_PlaceboColorMapLut3dSizeI = m_placeboOptions->color_map_params.lut3d_size[0];
-  vs.m_PlaceboColorMapLut3dSizeC = m_placeboOptions->color_map_params.lut3d_size[1];
-  vs.m_PlaceboColorMapLut3dSizeH = m_placeboOptions->color_map_params.lut3d_size[2];
-  vs.m_PlaceboColorMapLut3dTricubic = m_placeboOptions->color_map_params.lut3d_tricubic;
-  vs.m_PlaceboColorMapLutSize = m_placeboOptions->color_map_params.lut_size;
-  vs.m_PlaceboColorMapShowClipping = m_placeboOptions->color_map_params.show_clipping;
-  vs.m_PlaceboColorMapIntent = m_placeboOptions->color_map_params.intent;
-  vs.m_PlaceboColorMapForceToneMappingLut = m_placeboOptions->color_map_params.force_tone_mapping_lut;
-
-  vs.m_PlaceboDeinterlaceEnabled = m_placeboOptions->params.deinterlace_params != NULL;
-  vs.m_PlaceboDeinterlaceAlgo = (int)m_placeboOptions->deinterlace_params.algo; 
-  vs.m_PlaceboDeinterlaceSkipSpatialCheck = m_placeboOptions->deinterlace_params.skip_spatial_check;
-
-  vs.m_PlaceboSigmoidEnabled = m_placeboOptions->params.sigmoid_params != NULL;
-  vs.m_PlaceboSigmoidCenter = m_placeboOptions->sigmoid_params.center;
-  vs.m_PlaceboSigmoidSlope = m_placeboOptions->sigmoid_params.slope;
-
-  vs.m_PlaceboConeEnabled = m_placeboOptions->params.cone_params != NULL;
-  vs.m_PlaceboConeCones = (int)m_placeboOptions->cone_params.cones;
-  vs.m_PlaceboConeStrength = m_placeboOptions->cone_params.strength;
-
-  vs.m_PlaceboDitherEnabled = m_placeboOptions->params.dither_params != NULL;
-  vs.m_PlaceboDitherMethod = (int)m_placeboOptions->dither_params.method;
-  vs.m_PlaceboDitherLutSize = m_placeboOptions->dither_params.lut_size;
-  vs.m_PlaceboDitherTemporal = m_placeboOptions->dither_params.temporal;
-  vs.m_PlaceboDitherTransfer = (int)m_placeboOptions->dither_params.transfer;
-
-  vs.m_PlaceboToneConstantExposure = m_placeboOptions->color_map_params.tone_constants.exposure;
-  vs.m_PlaceboToneConstantKneeAdaptation = m_placeboOptions->color_map_params.tone_constants.knee_adaptation;
-  vs.m_PlaceboToneConstantKneeDefault = m_placeboOptions->color_map_params.tone_constants.knee_default;
-  vs.m_PlaceboToneConstantKneeMaximum = m_placeboOptions->color_map_params.tone_constants.knee_maximum;
-  vs.m_PlaceboToneConstantKneeMinimum = m_placeboOptions->color_map_params.tone_constants.knee_minimum;
-  vs.m_PlaceboToneConstantKneeOffset = m_placeboOptions->color_map_params.tone_constants.knee_offset;
-  vs.m_PlaceboToneConstantLinearKnee = m_placeboOptions->color_map_params.tone_constants.linear_knee;
-  vs.m_PlaceboToneConstantReinhardContrast = m_placeboOptions->color_map_params.tone_constants.reinhard_contrast;
-  vs.m_PlaceboToneConstantSlopeOffset = m_placeboOptions->color_map_params.tone_constants.slope_offset;
-  vs.m_PlaceboToneConstantSlopeTuning = m_placeboOptions->color_map_params.tone_constants.slope_tuning;
-  vs.m_PlaceboToneConstantSplineContrast = m_placeboOptions->color_map_params.tone_constants.spline_contrast;
-
-  vs.m_PlaceboColorMapVisualizeLut    = m_placeboOptions->color_map_params.visualize_lut;
-  vs.m_PlaceboColorMapVisualizeRectX0 = m_placeboOptions->color_map_params.visualize_rect.x0;
-  vs.m_PlaceboColorMapVisualizeRectX1 = m_placeboOptions->color_map_params.visualize_rect.x1;
-  vs.m_PlaceboColorMapVisualizeRectY0 = m_placeboOptions->color_map_params.visualize_rect.y0;
-  vs.m_PlaceboColorMapVisualizeRectY1 = m_placeboOptions->color_map_params.visualize_rect.y1;
-  vs.m_PlaceboColorMapVisualizeHue    = fmod(m_placeboOptions->color_map_params.visualize_hue * 180.0 / M_PI, 360.0);
-  vs.m_PlaceboColorMapVisualizeTheta  = fmod(m_placeboOptions->color_map_params.visualize_theta * 180.0 / M_PI, 360.0);
-
-  vs.m_PlaceboGamutConstantsColorimetricGamma = m_placeboOptions->color_map_params.gamut_constants.colorimetric_gamma;
-  vs.m_PlaceboGamutConstantsPerceptualDeadzone = m_placeboOptions->color_map_params.gamut_constants.perceptual_deadzone;
-  vs.m_PlaceboGamutConstantsSoftclipDesat = m_placeboOptions->color_map_params.gamut_constants.softclip_desat;
-  vs.m_PlaceboGamutConstantsSoftclipKnee = m_placeboOptions->color_map_params.gamut_constants.softclip_knee;
-
-  vs.m_PlaceboLutType = m_placeboOptions->params.lut_type; //check logic with params.lut in case of reset
-  vs.m_PlaceboAntiringingStrength = m_placeboOptions->params.antiringing_strength;
-  vs.m_PlaceboCorrectSubpixelOffset = m_placeboOptions->params.correct_subpixel_offsets;
-  vs.m_PlaceboDisableBuiltinScalers = m_placeboOptions->params.disable_builtin_scalers;
-  vs.m_PlaceboDisableDitherGammaCorrection = m_placeboOptions->params.disable_dither_gamma_correction;
-  vs.m_PlaceboDisableLinearScaling = m_placeboOptions->params.disable_linear_scaling;
-  vs.m_PlaceboDynamicConstant = m_placeboOptions->params.dynamic_constants;
-
-  vs.m_PlaceboErrorDiffusion = m_placeboOptions->params.error_diffusion == NULL ? -1 : getErrorDiffusionIndexFromDescription(m_placeboOptions->params.error_diffusion->description);
-  vs.m_PlaceboForceDither = m_placeboOptions->params.force_dither;
-  vs.m_PlaceboForceLowBitDepthFbos = m_placeboOptions->params.force_low_bit_depth_fbos;
-  vs.m_PlaceboIgnoreIccProfiles = m_placeboOptions->params.ignore_icc_profiles;
-  vs.m_PlaceboPreserveMixingCache = m_placeboOptions->params.preserve_mixing_cache;
-  vs.m_PlaceboSkipAntiAliasing = m_placeboOptions->params.skip_anti_aliasing;
-  vs.m_PlaceboSkipCachingSingleFrame = m_placeboOptions->params.skip_caching_single_frame;
-  
-}
-
-void CGUIDialogVideoSettings::UpdateLibPLaceboParamsFromVideoSettings(CVideoSettings& vs)
-{
-  pl_options m_placeboOptions = vs.m_placeboOptions->getPlOptions();
-  
-  m_placeboOptions->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut.get();
-
-  m_placeboOptions->params.color_adjustment = vs.m_PlaceboColorAdjustmentEnabled ? &m_placeboOptions->color_adjustment : NULL;
-  m_placeboOptions->color_adjustment.brightness = vs.m_Brightness / 50.0 - 1.0;
-  m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.0;
-  m_placeboOptions->color_adjustment.gamma = (pow(10.0, (vs.m_Gamma - 20.0) / 40.0) - pow(10, -0.5)) * 1.0 / (1.0 - pow(10, -0.5));
-  m_placeboOptions->color_adjustment.saturation = vs.m_PlaceboSaturation;
-  m_placeboOptions->color_adjustment.hue = fmod(vs.m_PlaceboHue, 360.0) * M_PI / 180.0;
-  m_placeboOptions->color_adjustment.temperature = (vs.m_PlaceboTemperature - 6500.0) / 3500.0;
-
-  m_placeboOptions->params.peak_detect_params = vs.m_PlaceboPeakDetectEnabled ? &m_placeboOptions->peak_detect_params : NULL;
-  m_placeboOptions->peak_detect_params.smoothing_period = vs.m_PlaceboPeakDetectSmoothingPeriod;
-  m_placeboOptions->peak_detect_params.scene_threshold_low = vs.m_PlaceboPeakDetectSceneThresholdLow;
-  m_placeboOptions->peak_detect_params.scene_threshold_high = vs.m_PlaceboPeakDetectSceneThresholdHigh;
-  m_placeboOptions->peak_detect_params.percentile = vs.m_PlaceboPeakDetectPercentile;
-  m_placeboOptions->peak_detect_params.black_cutoff = vs.m_PlaceboPeakDetectBlackCutoff;
-  m_placeboOptions->peak_detect_params.allow_delayed = vs.m_PlaceboPeakDetectAllowDelayed;
-
-  m_placeboOptions->params.upscaler = vs.m_PlaceboUpscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboUpscaler];
-  m_placeboOptions->params.downscaler = vs.m_PlaceboDownscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboDownscaler];
-  m_placeboOptions->params.plane_upscaler = vs.m_PlaceboPlaneUpscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboPlaneUpscaler];
-  m_placeboOptions->params.plane_downscaler = vs.m_PlaceboPlaneDownscaler == -1 ? NULL : pl_filter_configs[vs.m_PlaceboPlaneDownscaler];
-  m_placeboOptions->params.frame_mixer = vs.m_PlaceboFrameMixer == -1 ? NULL : pl_filter_configs[vs.m_PlaceboFrameMixer];
-
-  m_placeboOptions->params.deband_params = vs.m_PlaceboDebandEnabled ? &m_placeboOptions->deband_params : NULL;
-  m_placeboOptions->deband_params.grain = vs.m_PlaceboDebandGrain;
-  m_placeboOptions->deband_params.grain_neutral[0] = vs.m_PlaceboDebandGrainNeutral0;
-  m_placeboOptions->deband_params.grain_neutral[1] = vs.m_PlaceboDebandGrainNeutral1;
-  m_placeboOptions->deband_params.grain_neutral[2] = vs.m_PlaceboDebandGrainNeutral2;
-  m_placeboOptions->deband_params.iterations = vs.m_PlaceboDebandIterations;
-  m_placeboOptions->deband_params.radius = vs.m_PlaceboDebandRadius;
-  m_placeboOptions->deband_params.threshold = vs.m_PlaceboDebandThreshold;
-
-  m_placeboOptions->params.color_map_params = vs.m_PlaceboColorMapEnabled ? &m_placeboOptions->color_map_params : NULL;
-  m_placeboOptions->color_map_params.contrast_recovery = vs.m_PlaceboColorMapContrastRecovery;
-  m_placeboOptions->color_map_params.contrast_smoothness = vs.m_PlaceboColorMapContrastSmoothness;
-  m_placeboOptions->color_map_params.gamut_expansion = vs.m_PlaceboColorMapGamutExpansion;
-  m_placeboOptions->color_map_params.gamut_mapping = vs.m_PlaceboColorMapGamutMapping == -1 ? NULL : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping];
-  m_placeboOptions->color_map_params.tone_mapping_function = vs.m_PlaceboColorMapToneMapping == -1 ? NULL : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping];
-  m_placeboOptions->color_map_params.inverse_tone_mapping = vs.m_PlaceboColorMapInverseToneMapping;
-  m_placeboOptions->color_map_params.lut3d_size[0] = vs.m_PlaceboColorMapLut3dSizeI;
-  m_placeboOptions->color_map_params.lut3d_size[1] = vs.m_PlaceboColorMapLut3dSizeC;
-  m_placeboOptions->color_map_params.lut3d_size[2] = vs.m_PlaceboColorMapLut3dSizeH;
-  m_placeboOptions->color_map_params.lut3d_tricubic = vs.m_PlaceboColorMapLut3dTricubic;
-  m_placeboOptions->color_map_params.lut_size = vs.m_PlaceboColorMapLutSize;
-  m_placeboOptions->color_map_params.show_clipping = vs.m_PlaceboColorMapShowClipping;
-  m_placeboOptions->color_map_params.intent = (pl_rendering_intent)vs.m_PlaceboColorMapIntent;
-  m_placeboOptions->color_map_params.force_tone_mapping_lut = vs.m_PlaceboColorMapForceToneMappingLut;
-  m_placeboOptions->color_map_params.visualize_lut = vs.m_PlaceboColorMapVisualizeLut;
-  m_placeboOptions->color_map_params.visualize_rect.x0 = vs.m_PlaceboColorMapVisualizeRectX0;
-  m_placeboOptions->color_map_params.visualize_rect.x1 = vs.m_PlaceboColorMapVisualizeRectX1;
-  m_placeboOptions->color_map_params.visualize_rect.y0 = vs.m_PlaceboColorMapVisualizeRectY0;
-  m_placeboOptions->color_map_params.visualize_rect.y1 = vs.m_PlaceboColorMapVisualizeRectY1;
-  m_placeboOptions->color_map_params.visualize_hue = fmod(vs.m_PlaceboColorMapVisualizeHue, 360.0) * M_PI / 180.0;;
-  m_placeboOptions->color_map_params.visualize_theta = fmod(vs.m_PlaceboColorMapVisualizeTheta, 360.0) * M_PI / 180.0;
-
-  m_placeboOptions->params.deinterlace_params = vs.m_PlaceboDeinterlaceEnabled ? &m_placeboOptions->deinterlace_params : NULL;
-  m_placeboOptions->deinterlace_params.algo = (enum pl_deinterlace_algorithm)vs.m_PlaceboDeinterlaceAlgo;
-  m_placeboOptions->deinterlace_params.skip_spatial_check = vs.m_PlaceboDeinterlaceSkipSpatialCheck;
-  m_placeboOptions->params.sigmoid_params = vs.m_PlaceboSigmoidEnabled ? &m_placeboOptions->sigmoid_params : NULL;
-  m_placeboOptions->sigmoid_params.center = vs.m_PlaceboSigmoidCenter;
-  m_placeboOptions->sigmoid_params.slope = vs.m_PlaceboSigmoidSlope;
-  m_placeboOptions->params.cone_params = vs.m_PlaceboConeEnabled ? &m_placeboOptions->cone_params : NULL;
-  m_placeboOptions->cone_params.cones = (enum pl_cone)vs.m_PlaceboConeCones;
-  m_placeboOptions->cone_params.strength = vs.m_PlaceboConeStrength;
-
-  m_placeboOptions->params.dither_params = vs.m_PlaceboDitherEnabled ? &m_placeboOptions->dither_params : NULL;
-  m_placeboOptions->dither_params.method = (enum pl_dither_method)vs.m_PlaceboDitherMethod;
-  m_placeboOptions->dither_params.lut_size = vs.m_PlaceboDitherLutSize;
-  m_placeboOptions->dither_params.temporal = vs.m_PlaceboDitherTemporal;
-  m_placeboOptions->dither_params.transfer = (enum pl_color_transfer)vs.m_PlaceboDitherTransfer;
-
-  m_placeboOptions->color_map_params.tone_constants.exposure = vs.m_PlaceboToneConstantExposure;
-  m_placeboOptions->color_map_params.tone_constants.knee_adaptation = vs.m_PlaceboToneConstantKneeAdaptation;
-  m_placeboOptions->color_map_params.tone_constants.knee_default = vs.m_PlaceboToneConstantKneeDefault;
-  m_placeboOptions->color_map_params.tone_constants.knee_maximum = vs.m_PlaceboToneConstantKneeMaximum;
-  m_placeboOptions->color_map_params.tone_constants.knee_minimum = vs.m_PlaceboToneConstantKneeMinimum;
-  m_placeboOptions->color_map_params.tone_constants.knee_offset = vs.m_PlaceboToneConstantKneeOffset;
-  m_placeboOptions->color_map_params.tone_constants.linear_knee = vs.m_PlaceboToneConstantLinearKnee;
-  m_placeboOptions->color_map_params.tone_constants.reinhard_contrast = vs.m_PlaceboToneConstantReinhardContrast;
-  m_placeboOptions->color_map_params.tone_constants.slope_offset = vs.m_PlaceboToneConstantSlopeOffset;
-  m_placeboOptions->color_map_params.tone_constants.slope_tuning = vs.m_PlaceboToneConstantSlopeTuning;
-  m_placeboOptions->color_map_params.tone_constants.spline_contrast = vs.m_PlaceboToneConstantSplineContrast;
-
-  m_placeboOptions->color_map_params.gamut_constants.colorimetric_gamma = vs.m_PlaceboGamutConstantsColorimetricGamma;
-  m_placeboOptions->color_map_params.gamut_constants.perceptual_deadzone = vs.m_PlaceboGamutConstantsPerceptualDeadzone;
-  m_placeboOptions->color_map_params.gamut_constants.softclip_desat = vs.m_PlaceboGamutConstantsSoftclipDesat;
-  m_placeboOptions->color_map_params.gamut_constants.softclip_knee = vs.m_PlaceboGamutConstantsSoftclipKnee;
-
-  m_placeboOptions->params.lut_type =  (pl_lut_type) vs.m_PlaceboLutType;
-  m_placeboOptions->params.antiringing_strength = vs.m_PlaceboAntiringingStrength;
-  m_placeboOptions->params.correct_subpixel_offsets = vs.m_PlaceboCorrectSubpixelOffset;
-  m_placeboOptions->params.disable_builtin_scalers = vs.m_PlaceboDisableBuiltinScalers;
-  m_placeboOptions->params.disable_dither_gamma_correction = vs.m_PlaceboDisableDitherGammaCorrection;
-  m_placeboOptions->params.disable_linear_scaling = vs.m_PlaceboDisableLinearScaling;
-  m_placeboOptions->params.dynamic_constants = vs.m_PlaceboDynamicConstant;
-  m_placeboOptions->params.error_diffusion = vs.m_PlaceboErrorDiffusion == -1 ? NULL : pl_error_diffusion_kernels[vs.m_PlaceboErrorDiffusion];
-  m_placeboOptions->params.force_dither = vs.m_PlaceboForceDither;
-  m_placeboOptions->params.force_low_bit_depth_fbos = vs.m_PlaceboForceLowBitDepthFbos;
-  m_placeboOptions->params.ignore_icc_profiles = vs.m_PlaceboIgnoreIccProfiles;
-  m_placeboOptions->params.preserve_mixing_cache = vs.m_PlaceboPreserveMixingCache;
-  m_placeboOptions->params.skip_anti_aliasing = vs.m_PlaceboSkipAntiAliasing;
-  m_placeboOptions->params.skip_caching_single_frame = vs.m_PlaceboSkipCachingSingleFrame;
-}
-
-void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, const std::string path)
-{
-  CXBMCTinyXML xmlDoc;
-  TiXmlElement rootElement("libPlaceboSettings");
-  rootElement.SetAttribute(SETTING_XML_ROOT_VERSION, "1.0");
-  TiXmlNode* lpNode = xmlDoc.InsertEndChild(rootElement);
-
-  if (!lpNode)
-  {
-    CLog::LogF(LOGERROR, "Failed to create XML node for LibPLacebo settings file \"{}\"", path);
-  }
-  else
-  {
-	SaveLibplaceboSettings(vs, lpNode);
-    if (!xmlDoc.SaveFile(path))
-      CLog::LogF(LOGERROR, "Failed to save LibPLacebo settings to file \"{}\"", path);
-  }
-}
-
-void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNode)
-{
-    XMLUtils::SetInt(pNode,    "placeboskinzoom", vs.m_PlaceboSkinZoom);
-    XMLUtils::SetString(pNode, "placebolutfilename", vs.m_PlaceboLutFilename);
-    XMLUtils::SetFloat(pNode,  "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
-    XMLUtils::SetInt(pNode,    "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
-    XMLUtils::SetInt(pNode,    "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
-
-    XMLUtils::SetBoolean(pNode, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
-    XMLUtils::SetFloat(pNode,   "saturation", vs.m_PlaceboSaturation);
-    XMLUtils::SetFloat(pNode,   "hue", vs.m_PlaceboHue);
-    XMLUtils::SetFloat(pNode,   "temperature", vs.m_PlaceboTemperature);
-
-    XMLUtils::SetBoolean(pNode, "placebopeakdetectenabled", vs.m_PlaceboPeakDetectEnabled);
-    XMLUtils::SetFloat(pNode,   "placebopeakdetectsmoothingperiod", vs.m_PlaceboPeakDetectSmoothingPeriod);
-    XMLUtils::SetFloat(pNode,   "placebopeakdetectscenethresholdlow", vs.m_PlaceboPeakDetectSceneThresholdLow);
-    XMLUtils::SetFloat(pNode,   "placebopeakdetectscenethresholdhigh", vs.m_PlaceboPeakDetectSceneThresholdHigh);
-    XMLUtils::SetFloat(pNode,   "placebopeakdetectpercentile", vs.m_PlaceboPeakDetectPercentile);
-    XMLUtils::SetFloat(pNode,   "placebopeakdetectblackcutoff", vs.m_PlaceboPeakDetectBlackCutoff);
-    XMLUtils::SetBoolean(pNode, "placebopeakdetectallowdelayed", vs.m_PlaceboPeakDetectAllowDelayed);
-
-    XMLUtils::SetString(pNode, "placeboupscaler", vs.m_PlaceboUpscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboUpscaler]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboUpscaler]->description);
-    XMLUtils::SetString(pNode, "placebodownscaler", vs.m_PlaceboDownscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboDownscaler]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboDownscaler]->description);
-    XMLUtils::SetString(pNode, "placeboplaneupscaler", vs.m_PlaceboPlaneUpscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboPlaneUpscaler]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboPlaneUpscaler]->description);
-    XMLUtils::SetString(pNode, "placeboplanedownscaler", vs.m_PlaceboPlaneDownscaler == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboPlaneDownscaler]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboPlaneDownscaler]->description);
-    XMLUtils::SetString(pNode, "placeboframemixer", vs.m_PlaceboFrameMixer == -1 ? "disabled" : pl_filter_configs[vs.m_PlaceboFrameMixer]->description == nullptr ? "" : pl_filter_configs[vs.m_PlaceboFrameMixer]->description);
-
-    XMLUtils::SetBoolean(pNode, "placebodebandenabled", vs.m_PlaceboDebandEnabled);
-    XMLUtils::SetFloat(pNode,   "placebodebandgrain", vs.m_PlaceboDebandGrain);
-    XMLUtils::SetFloat(pNode,   "placebodebandgrainneutral0", vs.m_PlaceboDebandGrainNeutral0);
-    XMLUtils::SetFloat(pNode,   "placebodebandgrainneutral1", vs.m_PlaceboDebandGrainNeutral1);
-    XMLUtils::SetFloat(pNode,   "placebodebandgrainneutral2", vs.m_PlaceboDebandGrainNeutral2);
-    XMLUtils::SetInt(pNode,     "placebodebanditerations", vs.m_PlaceboDebandIterations);
-    XMLUtils::SetFloat(pNode,   "placebodebandradius", vs.m_PlaceboDebandRadius);
-    XMLUtils::SetFloat(pNode,   "placebodebandthreshold", vs.m_PlaceboDebandThreshold);
-
-    XMLUtils::SetBoolean(pNode, "placebocolormapenabled", vs.m_PlaceboColorMapEnabled);
-    XMLUtils::SetFloat(pNode,   "placebocolormapcontrastrecovery", vs.m_PlaceboColorMapContrastRecovery);
-    XMLUtils::SetFloat(pNode,   "placebocolormapcontrastsmoothness", vs.m_PlaceboColorMapContrastSmoothness);
-    XMLUtils::SetBoolean(pNode, "placebocolormapgamutexpansion", vs.m_PlaceboColorMapGamutExpansion);
-    XMLUtils::SetString(pNode,  "placebocolormapgamutmapping", vs.m_PlaceboColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping]->description == nullptr ? "" : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping]->description);
-    XMLUtils::SetString(pNode,  "placebocolormaptonemapping", vs.m_PlaceboColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description == nullptr ? "" : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description);
-    XMLUtils::SetBoolean(pNode, "placebocolormapinversetonemapping", vs.m_PlaceboColorMapInverseToneMapping);
-    XMLUtils::SetInt(pNode,     "placebocolormaplut3dsizei", vs.m_PlaceboColorMapLut3dSizeI);
-    XMLUtils::SetInt(pNode,     "placebocolormaplut3dsizec", vs.m_PlaceboColorMapLut3dSizeC);
-    XMLUtils::SetInt(pNode,     "placebocolormaplut3dsizeh", vs.m_PlaceboColorMapLut3dSizeH);
-    XMLUtils::SetBoolean(pNode, "placebocolormaplut3dtricubic", vs.m_PlaceboColorMapLut3dTricubic);
-    XMLUtils::SetInt(pNode,     "placebocolormaplutsize", vs.m_PlaceboColorMapLutSize);
-    XMLUtils::SetBoolean(pNode, "placebocolormapshowclipping", vs.m_PlaceboColorMapShowClipping);
-    XMLUtils::SetString(pNode,  "placebocolormapintent", getColorMapIntentDescriptionFromIndex(vs.m_PlaceboColorMapIntent));
-    XMLUtils::SetBoolean(pNode, "placebocolormapforcetonemappinglut", vs.m_PlaceboColorMapForceToneMappingLut);
-    XMLUtils::SetBoolean(pNode, "placebocolormapvisualizelut", vs.m_PlaceboColorMapVisualizeLut);
-    XMLUtils::SetFloat(pNode,   "placebocolormapvisualizerectx0", vs.m_PlaceboColorMapVisualizeRectX0);
-    XMLUtils::SetFloat(pNode,   "placebocolormapvisualizerectx1", vs.m_PlaceboColorMapVisualizeRectX1);
-    XMLUtils::SetFloat(pNode,   "placebocolormapvisualizerecty0", vs.m_PlaceboColorMapVisualizeRectY0);
-    XMLUtils::SetFloat(pNode,   "placebocolormapvisualizerecty1", vs.m_PlaceboColorMapVisualizeRectY1);
-    XMLUtils::SetFloat(pNode,   "placebocolormapvisualizehue", vs.m_PlaceboColorMapVisualizeHue);
-    XMLUtils::SetFloat(pNode,   "placebocolormapvisualizetheta", vs.m_PlaceboColorMapVisualizeTheta);
-
-    XMLUtils::SetBoolean(pNode, "placebodeinterlaceenabled", vs.m_PlaceboDeinterlaceEnabled);
-    XMLUtils::SetString(pNode,  "placebodeinterlacealgo", getDeinterlaceAlgoDescriptionFromIndex(vs.m_PlaceboDeinterlaceAlgo));
-    XMLUtils::SetBoolean(pNode, "placebodeinterlaceskipspatialcheck", vs.m_PlaceboDeinterlaceSkipSpatialCheck);
-    XMLUtils::SetBoolean(pNode, "placeboconeenabled", vs.m_PlaceboConeEnabled);
-    XMLUtils::SetString(pNode,  "placeboconecones", getConeConesDescriptionFromIndex(vs.m_PlaceboConeCones));
-    XMLUtils::SetFloat(pNode,   "placeboconestrength", vs.m_PlaceboConeStrength);
-    XMLUtils::SetBoolean(pNode, "placebosigmoidenabled", vs.m_PlaceboSigmoidEnabled);
-    XMLUtils::SetFloat(pNode,   "placebosigmoidcenter", vs.m_PlaceboSigmoidCenter);
-    XMLUtils::SetFloat(pNode,   "placebosigmoidslope", vs.m_PlaceboSigmoidSlope);
-
-    XMLUtils::SetBoolean(pNode, "placeboditherenabled", vs.m_PlaceboDitherEnabled);
-    XMLUtils::SetString(pNode,  "placebodithermethod", getDitherMethodDescriptionFromIndex(vs.m_PlaceboDitherMethod));
-    XMLUtils::SetInt(pNode,     "placeboditherlutsize", vs.m_PlaceboDitherLutSize);
-    XMLUtils::SetBoolean(pNode, "placebodithertemporal", vs.m_PlaceboDitherTemporal);
-    XMLUtils::SetString(pNode,  "placebodithertransfer", getDitherTransferDescriptionFromIndex(vs.m_PlaceboDitherTransfer));
-
-    XMLUtils::SetFloat(pNode, "placebotoneconstantexposure", vs.m_PlaceboToneConstantExposure);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantkneeadaptation", vs.m_PlaceboToneConstantKneeAdaptation);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantkneedefault", vs.m_PlaceboToneConstantKneeDefault);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantkneemaximum", vs.m_PlaceboToneConstantKneeMaximum);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantkneeminimum", vs.m_PlaceboToneConstantKneeMinimum);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantkneeoffset", vs.m_PlaceboToneConstantKneeOffset);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantlinearknee", vs.m_PlaceboToneConstantLinearKnee);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantreinhardcontrast", vs.m_PlaceboToneConstantReinhardContrast);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantslopeoffset", vs.m_PlaceboToneConstantSlopeOffset);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantslopetuning", vs.m_PlaceboToneConstantSlopeTuning);
-    XMLUtils::SetFloat(pNode, "placebotoneconstantsplinecontrast", vs.m_PlaceboToneConstantSplineContrast);
-
-    XMLUtils::SetFloat(pNode,   "placebogamutconstantscolorimetricgamma", vs.m_PlaceboGamutConstantsColorimetricGamma);
-    XMLUtils::SetFloat(pNode,   "placebogamutconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
-    XMLUtils::SetFloat(pNode,   "placebogamutconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
-    XMLUtils::SetFloat(pNode,   "placebogamutconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
-
-    XMLUtils::SetString(pNode,  "placeboluttype", getLutTypeDescriptionFromIndex(vs.m_PlaceboLutType));
-    XMLUtils::SetFloat(pNode,   "placeboantiringingstrength", vs.m_PlaceboAntiringingStrength);
-    XMLUtils::SetBoolean(pNode, "placebocorrectsubpixeloffset", vs.m_PlaceboCorrectSubpixelOffset);
-    XMLUtils::SetBoolean(pNode, "placebodisablebuiltinscalers", vs.m_PlaceboDisableBuiltinScalers);
-    XMLUtils::SetBoolean(pNode, "placebodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
-    XMLUtils::SetBoolean(pNode, "placebodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
-    XMLUtils::SetBoolean(pNode, "placebodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
-    XMLUtils::SetString(pNode,  "placeboerrordiffusion", getDiffusionKernelDescriptionFromIndex(vs.m_PlaceboErrorDiffusion));
-    XMLUtils::SetBoolean(pNode, "placeboforcedither", vs.m_PlaceboForceDither);
-    XMLUtils::SetBoolean(pNode, "placeboforcelowbitdepthfbos", vs.m_PlaceboForceLowBitDepthFbos);
-    XMLUtils::SetBoolean(pNode, "placeboignoreiccprofiles", vs.m_PlaceboIgnoreIccProfiles);
-    XMLUtils::SetBoolean(pNode, "placebopreservemixingcache", vs.m_PlaceboPreserveMixingCache);
-    XMLUtils::SetBoolean(pNode, "placeboskipantialiasing", vs.m_PlaceboSkipAntiAliasing);
-    XMLUtils::SetBoolean(pNode, "placeboskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
-    SerializeShaders(vs, pNode);
-}
-
-bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, std::string path)
-{
-  CXBMCTinyXML xmlDoc;
-  std::string value;
-
-  if (!xmlDoc.LoadFile(path))
-  {
-    CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo settings {}, Line {}\n{}", path, xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
-    return false;
-  }
-  CLog::Log(LOGDEBUG, "CGUIDialogVideoSettings: loading LipPlacebo settings from {}", path);
-  const TiXmlElement* pElement = xmlDoc.FirstChildElement("libPlaceboSettings");
-  if (!pElement)
-  {
-    CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo settings, missing <libPlaceboSettings> element");
-    return false;
-  }
-
-  LoadLibplaceboSettings(vs, pElement);
-  SkinZoomUpdate();
-  UpdateLibPLaceboParamsFromVideoSettings(vs);
-  SetVideoSettings(vs);
-  return true;
-}
-
-bool CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* pElement)
-{
-  std::string value;
-  if (!pElement)
-    return false;
-
-  //std::unique_lock lock(m_critical);
-  XMLUtils::GetInt(pElement,    "placeboskinzoom", vs.m_PlaceboSkinZoom);
-  XMLUtils::GetString(pElement, "placebolutfilename", vs.m_PlaceboLutFilename);  LoadLutFile(vs, vs.m_PlaceboLutFilename);
-  XMLUtils::GetFloat(pElement,  "placebodisplaypeakluminance", vs.m_PlaceboDisplayPeakLuminance);
-  XMLUtils::GetInt(pElement,    "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
-  XMLUtils::GetInt(pElement,    "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
-
-  XMLUtils::GetBoolean(pElement, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
-  XMLUtils::GetFloat(pElement,   "saturation", vs.m_PlaceboSaturation);
-  XMLUtils::GetFloat(pElement,   "hue", vs.m_PlaceboHue);
-  XMLUtils::GetFloat(pElement,   "temperature", vs.m_PlaceboTemperature);
-
-  XMLUtils::GetBoolean(pElement, "placebopeakdetectenabled", vs.m_PlaceboPeakDetectEnabled);
-  XMLUtils::GetFloat(pElement,   "placebopeakdetectsmoothingperiod", vs.m_PlaceboPeakDetectSmoothingPeriod);
-  XMLUtils::GetFloat(pElement,   "placebopeakdetectscenethresholdlow", vs.m_PlaceboPeakDetectSceneThresholdLow);
-  XMLUtils::GetFloat(pElement,   "placebopeakdetectscenethresholdhigh", vs.m_PlaceboPeakDetectSceneThresholdHigh);
-  XMLUtils::GetFloat(pElement,   "placebopeakdetectpercentile", vs.m_PlaceboPeakDetectPercentile);
-  XMLUtils::GetFloat(pElement,   "placebopeakdetectblackcutoff", vs.m_PlaceboPeakDetectBlackCutoff);
-  XMLUtils::GetBoolean(pElement, "placebopeakdetectallowdelayed", vs.m_PlaceboPeakDetectAllowDelayed);
-
-  XMLUtils::GetString(pElement,  "placeboupscaler", value); vs.m_PlaceboUpscaler = getFilterIndexFromDescription(value);
-  XMLUtils::GetString(pElement,  "placebodownscaler", value); vs.m_PlaceboDownscaler = getFilterIndexFromDescription(value);
-  XMLUtils::GetString(pElement,  "placeboplaneupscaler", value); vs.m_PlaceboPlaneUpscaler = getFilterIndexFromDescription(value);
-  XMLUtils::GetString(pElement,  "placeboplanedownscaler", value); vs.m_PlaceboPlaneDownscaler = getFilterIndexFromDescription(value);
-  XMLUtils::GetString(pElement,  "placeboframemixer", value); vs.m_PlaceboFrameMixer = getFilterIndexFromDescription(value);
-
-  XMLUtils::GetBoolean(pElement, "placebodebandenabled", vs.m_PlaceboDebandEnabled);
-  XMLUtils::GetFloat(pElement,   "placebodebandgrain", vs.m_PlaceboDebandGrain);
-  XMLUtils::GetFloat(pElement,   "placebodebandgrainneutral0", vs.m_PlaceboDebandGrainNeutral0);
-  XMLUtils::GetFloat(pElement,   "placebodebandgrainneutral1", vs.m_PlaceboDebandGrainNeutral1);
-  XMLUtils::GetFloat(pElement,   "placebodebandgrainneutral2", vs.m_PlaceboDebandGrainNeutral2);
-  XMLUtils::GetInt(pElement,     "placebodebanditerations", vs.m_PlaceboDebandIterations);
-  XMLUtils::GetFloat(pElement,   "placebodebandradius", vs.m_PlaceboDebandRadius);
-  XMLUtils::GetFloat(pElement,   "placebodebandthreshold", vs.m_PlaceboDebandThreshold);
-
-  XMLUtils::GetBoolean(pElement, "placebocolormapenabled", vs.m_PlaceboColorMapEnabled);
-  XMLUtils::GetFloat(pElement,   "placebocolormapcontrastrecovery", vs.m_PlaceboColorMapContrastRecovery);
-  XMLUtils::GetFloat(pElement,   "placebocolormapcontrastsmoothness", vs.m_PlaceboColorMapContrastSmoothness);
-  XMLUtils::GetBoolean(pElement, "placebocolormapgamutexpansion", vs.m_PlaceboColorMapGamutExpansion);
-  XMLUtils::GetString(pElement,  "placebocolormapgamutmapping", value); vs.m_PlaceboColorMapGamutMapping = getGamutMapIndexFromDescription(value);
-  XMLUtils::GetString(pElement,  "placebocolormaptonemapping", value); vs.m_PlaceboColorMapToneMapping = getToneMapIndexFromDescription(value);
-  XMLUtils::GetBoolean(pElement, "placebocolormapinversetonemapping", vs.m_PlaceboColorMapInverseToneMapping);
-  XMLUtils::GetInt(pElement,     "placebocolormaplut3dsizei", vs.m_PlaceboColorMapLut3dSizeI);
-  XMLUtils::GetInt(pElement,     "placebocolormaplut3dsizec", vs.m_PlaceboColorMapLut3dSizeC);
-  XMLUtils::GetInt(pElement,     "placebocolormaplut3dsizeh", vs.m_PlaceboColorMapLut3dSizeH);
-  XMLUtils::GetBoolean(pElement, "placebocolormaplut3dtricubic", vs.m_PlaceboColorMapLut3dTricubic);
-  XMLUtils::GetInt(pElement,     "placebocolormaplutsize", vs.m_PlaceboColorMapLutSize);
-  XMLUtils::GetBoolean(pElement, "placebocolormapshowclipping", vs.m_PlaceboColorMapShowClipping);
-  XMLUtils::GetString(pElement,  "placebocolormapintent", value); vs.m_PlaceboColorMapIntent = getColorMapIntentIndexFromDescription(value);
-  XMLUtils::GetBoolean(pElement, "placebocolormapforcetonemappinglut", vs.m_PlaceboColorMapForceToneMappingLut);
-  XMLUtils::GetBoolean(pElement, "placebocolormapvisualizelut", vs.m_PlaceboColorMapVisualizeLut);
-  XMLUtils::GetFloat(pElement,   "placebocolormapvisualizerectx0", vs.m_PlaceboColorMapVisualizeRectX0);
-  XMLUtils::GetFloat(pElement,   "placebocolormapvisualizerectx1", vs.m_PlaceboColorMapVisualizeRectX1);
-  XMLUtils::GetFloat(pElement,   "placebocolormapvisualizerecty0", vs.m_PlaceboColorMapVisualizeRectY0);
-  XMLUtils::GetFloat(pElement,   "placebocolormapvisualizerecty1", vs.m_PlaceboColorMapVisualizeRectY1);
-  XMLUtils::GetFloat(pElement,   "placebocolormapvisualizehue", vs.m_PlaceboColorMapVisualizeHue);
-  XMLUtils::GetFloat(pElement,   "placebocolormapvisualizetheta", vs.m_PlaceboColorMapVisualizeTheta);
-
-  XMLUtils::GetBoolean(pElement, "placebodeinterlaceenabled", vs.m_PlaceboDeinterlaceEnabled);
-  XMLUtils::GetString(pElement,  "placebodeinterlacealgo", value); vs.m_PlaceboDeinterlaceAlgo = getDeinterlaceAlgoIndexFromDescription(value);
-  XMLUtils::GetBoolean(pElement, "placebodeinterlaceskipspatialcheck", vs.m_PlaceboDeinterlaceSkipSpatialCheck);
-  XMLUtils::GetBoolean(pElement, "placebosigmoidenabled", vs.m_PlaceboSigmoidEnabled);
-  XMLUtils::GetFloat(pElement,   "placebosigmoidcenter", vs.m_PlaceboSigmoidCenter);
-  XMLUtils::GetFloat(pElement,   "placebosigmoidslope", vs.m_PlaceboSigmoidSlope);
-  XMLUtils::GetBoolean(pElement, "placeboconeenabled", vs.m_PlaceboConeEnabled);
-  XMLUtils::GetString(pElement,  "placeboconecones", value); vs.m_PlaceboConeCones = getConeConesIndexFromDescription(value);
-  XMLUtils::GetFloat(pElement,   "placeboconestrength", vs.m_PlaceboConeStrength);
-
-  XMLUtils::GetBoolean(pElement, "placeboditherenabled", vs.m_PlaceboDitherEnabled);
-  XMLUtils::GetString(pElement,  "placebodithermethod", value); vs.m_PlaceboDitherMethod = getDitherMethodIndexFromDescription(value);
-  XMLUtils::GetInt(pElement,     "placeboditherlutsize", vs.m_PlaceboDitherLutSize);
-  XMLUtils::GetBoolean(pElement, "placebodithertemporal", vs.m_PlaceboDitherTemporal);
-  XMLUtils::GetString(pElement,  "placebodithertransfer", value); vs.m_PlaceboDitherTransfer = getDitherTransferIndexFromDescription(value);
-
-  XMLUtils::GetFloat(pElement, "placebotoneconstantexposure", vs.m_PlaceboToneConstantExposure);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantkneeadaptation", vs.m_PlaceboToneConstantKneeAdaptation);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantkneedefault", vs.m_PlaceboToneConstantKneeDefault);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantkneemaximum", vs.m_PlaceboToneConstantKneeMaximum);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantkneeminimum", vs.m_PlaceboToneConstantKneeMinimum);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantkneeoffset", vs.m_PlaceboToneConstantKneeOffset);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantlinearknee", vs.m_PlaceboToneConstantLinearKnee);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantreinhardcontrast", vs.m_PlaceboToneConstantReinhardContrast);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantslopeoffset", vs.m_PlaceboToneConstantSlopeOffset);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantslopetuning", vs.m_PlaceboToneConstantSlopeTuning);
-  XMLUtils::GetFloat(pElement, "placebotoneconstantsplinecontrast", vs.m_PlaceboToneConstantSplineContrast);
-
-  XMLUtils::GetFloat(pElement,   "placebogamutconstantscolorimetricgamma", vs.m_PlaceboGamutConstantsColorimetricGamma);
-  XMLUtils::GetFloat(pElement,   "placebogamutconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
-  XMLUtils::GetFloat(pElement,   "placebogamutconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
-  XMLUtils::GetFloat(pElement,   "placebogamutconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
-
-  XMLUtils::GetString(pElement,  "placeboluttype", value); vs.m_PlaceboLutType = getLutTypeIndexFromDescription(value); //params.lut will be updated in UpdateLibPLaceboParamsFromVideoSettings 
-  XMLUtils::GetFloat(pElement,   "placeboantiringingstrength", vs.m_PlaceboAntiringingStrength);
-  XMLUtils::GetBoolean(pElement, "placebocorrectsubpixeloffset", vs.m_PlaceboCorrectSubpixelOffset);
-  XMLUtils::GetBoolean(pElement, "placebodisablebuiltinscalers", vs.m_PlaceboDisableBuiltinScalers);
-  XMLUtils::GetBoolean(pElement, "placebodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
-  XMLUtils::GetBoolean(pElement, "placebodisablelinearscaling", vs.m_PlaceboDisableLinearScaling);
-  XMLUtils::GetBoolean(pElement, "placebodynamicconstant", vs.m_PlaceboDynamicConstant);
-  XMLUtils::GetString(pElement,  "placeboerrordiffusion", value); vs.m_PlaceboErrorDiffusion = getErrorDiffusionIndexFromDescription(value);
-  XMLUtils::GetBoolean(pElement, "placeboforcedither", vs.m_PlaceboForceDither);
-  XMLUtils::GetBoolean(pElement, "placeboforcelowbitdepthfbos", vs.m_PlaceboForceLowBitDepthFbos);
-  XMLUtils::GetBoolean(pElement, "placeboignoreiccprofiles", vs.m_PlaceboIgnoreIccProfiles);
-  XMLUtils::GetBoolean(pElement, "placebopreservemixingcache", vs.m_PlaceboPreserveMixingCache);
-  XMLUtils::GetBoolean(pElement, "placeboskipantialiasing", vs.m_PlaceboSkipAntiAliasing);
-  XMLUtils::GetBoolean(pElement, "placeboskipcachingsingleframe", vs.m_PlaceboSkipCachingSingleFrame);
-  LoadShaderSettings(vs, pElement);
-  return true;
-}
-
-std::shared_ptr<const pl_custom_lut> CGUIDialogVideoSettings::ReadLut(const std::string& fileName)
-{
-  std::shared_ptr<const pl_custom_lut> lutPtr = nullptr;
-
-  if (fileName.empty())
-    return nullptr;
-
-  CFile lutFile;
-  if (!lutFile.Open(fileName))
-  {
-    CLog::Log(LOGERROR, "{}: Could not open 3DLUT file: {}", __FUNCTION__, fileName);
-    return nullptr;
-  }
-
-  // Read entire file to memory
-  ULONGLONG fileSize = lutFile.GetLength();
-  if (fileSize > 0)
-  {
-    BYTE* pBuffer = new BYTE[(size_t)fileSize];
-    UINT bytesRead = lutFile.Read(pBuffer, (UINT)fileSize);
-
-    pl_custom_lut* lut = nullptr;
-    lut = pl_lut_parse_cube(NULL, (const char*)pBuffer, (size_t)bytesRead);
-	std::shared_ptr<const pl_custom_lut> lutPtr2(lut, [](pl_custom_lut* p) { pl_lut_free(&p); });
-	lutPtr = lutPtr2;
-    delete[] pBuffer;
-  }
-  lutFile.Close();
-  return lutPtr;
-}
-
-void CGUIDialogVideoSettings::LoadShaderSettings(CVideoSettings& vs, const std::string& data)
-{
-  CXBMCTinyXML xmlDoc;
-  std::string value;
-
-  if (!xmlDoc.LoadString(data))
-  {
-    CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo Shadings from database, Line {}\n{}", xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
-    return;
-  }
-  const TiXmlElement* pElement = xmlDoc.FirstChildElement("libPlaceboShaders");
-  if (!pElement)
-  {
-    CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo settings, missing <libPlaceboShaders> element");
-    return;
-  }
-
-  LoadShaderSettings(vs, pElement);
-}
-
-void CGUIDialogVideoSettings::LoadShaderSettings(CVideoSettings& vs, const TiXmlElement* pElement)
-{
-  int numShaders;
-  XMLUtils::GetInt(pElement, "placeboShadersCount", numShaders);
-  for (int i = 0; i < numShaders; i++)
-  {
-    bool bValue;
-    std::string fileName;
-    XMLUtils::GetString(pElement, ("placeboShaderFilename" + StringUtils::Format("_{:02}", i)).c_str(), fileName);
-    XMLUtils::GetBoolean(pElement, ("placeboShaderEnabled" + StringUtils::Format("_{:02}", i)).c_str(), bValue);
-
-    vs.m_PlaceboShadersFilename.emplace_back(fileName);
-    vs.m_PlaceboShadersEnabled.emplace_back(bValue);
-
-    int numParams;
-    XMLUtils::GetInt(pElement, ("placeboShadersParamsCount" + StringUtils::Format("_{:02}", i)).c_str(), numParams);
-    vs.m_PlaceboShadersParams.emplace_back();
-    for (int j = 0; j < numParams; j++)
-    {
-      std::string name;
-      std::string valueStr;
-      std::variant<float, int, unsigned int> value;
-
-      XMLUtils::GetString(pElement, ("placeboShaderParamName" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), name);
-      XMLUtils::GetString(pElement, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), valueStr);
-      std::string typeStr = valueStr.substr(0, valueStr.find(':'));
-      pl_var_type type = typeStr == "float" ? PL_VAR_FLOAT : typeStr == "sint" ? PL_VAR_SINT : typeStr == "uint" ? PL_VAR_UINT : PL_VAR_INVALID;
-
-      value = 0;
-      if (type == PL_VAR_FLOAT)
-      {
-        value = std::stof(valueStr.substr(valueStr.find(':') + 1));
-      }
-      else if (type == PL_VAR_SINT)
-      {
-        value = std::stoi(valueStr.substr(valueStr.find(':') + 1));
-      }
-      if (type == PL_VAR_UINT)
-      {
-        value = std::stoul(valueStr.substr(valueStr.find(':') + 1));
-      }
-      else
-      {
-        //cl make it invalid, reload from scratch?
-        CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo shader parameter, unknown type: {}", valueStr);
-      }
-
-      vs.m_PlaceboShadersParams[i].emplace_back(name, type, value);
-    }
-  }
-}
-
-
-void CGUIDialogVideoSettings::SerializeShaders(const CVideoSettings& vs, std::string& serializedData)
-{
-  CXBMCTinyXML xmlDoc;
-  TiXmlElement rootElement("libPlaceboShaders");
-  rootElement.SetAttribute(SETTING_XML_ROOT_VERSION, "1.0");
-  TiXmlNode* pNode = xmlDoc.InsertEndChild(rootElement);
-
-  if (!pNode)
-  {
-    CLog::LogF(LOGERROR, "Failed to create XML node for LibPlacebo shaders serialization \"{}\"", rootElement.Value());
-    return;
-  }
-  else
-  {
-    SerializeShaders(vs, pNode);
-  }
-  xmlDoc.SaveString(serializedData);
-}
-
-void CGUIDialogVideoSettings::SerializeShaders(const CVideoSettings& vs, TiXmlNode* pNode)
-{
-  XMLUtils::SetInt(pNode, "placeboShadersCount", vs.m_PlaceboShadersFilename.size());
-  for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); i++)
-  {
-    XMLUtils::SetString(pNode, ("placeboShaderFilename" + StringUtils::Format("_{:02}", i)).c_str(), vs.m_PlaceboShadersFilename[i]);
-    XMLUtils::SetBoolean(pNode, ("placeboShaderEnabled" + StringUtils::Format("_{:02}", i)).c_str(), vs.m_PlaceboShadersEnabled[i]);
-    XMLUtils::SetInt(pNode, ("placeboShadersParamsCount" + StringUtils::Format("_{:02}", i)).c_str(), vs.m_PlaceboShadersParams[i].size());
-    for (int j = 0; j < vs.m_PlaceboShadersParams[i].size(); j++)
-    {
-      XMLUtils::SetString(pNode, ("placeboShaderParamName" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), vs.m_PlaceboShadersParams[i][j].m_Name);
-      if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_FLOAT)
-      {
-        XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "float:" + std::to_string(std::get<float>(vs.m_PlaceboShadersParams[i][j].m_Value)));
-      }
-      else if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_SINT)
-      {
-        XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "sint:" + std::to_string(std::get<int>(vs.m_PlaceboShadersParams[i][j].m_Value)));
-      }
-      if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_UINT)
-      {
-        XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "uint:" + std::to_string(std::get<unsigned int>(vs.m_PlaceboShadersParams[i][j].m_Value)));
-      }
-      else
-      {
-        //cl 
-        CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error serializing LipPlacebo shader parameter, unknown type: {}", vs.m_PlaceboShadersParams[i][j].m_Type);
-      }
-    }
-  }
-}
-
-
-void CGUIDialogVideoSettings::InitializeShaders(pl_gpu gpu)
-{
-  auto& components = CServiceBroker::GetAppComponents();
-  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+  const std::string& settingId = setting->GetId();
   CVideoSettings vs = appPlayer->GetVideoSettings();
-
-  for(int i=0; i<vs.m_PlaceboShadersFilename.size(); ++i)
+  pl_options m_placeboOptions = vs.m_placeboOptions->getPlOptions();
+  if (settingId == SETTING_VIDEO_CALIBRATION)
   {
- 
-    if (vs.m_PlaceboShadersFilename[i].empty())
-      return;
+	const std::shared_ptr<CProfileManager> profileManager = CServiceBroker::GetSettingsComponent()->GetProfileManager();
 
-    CFile shaderFile;
-    if (!shaderFile.Open(vs.m_PlaceboShadersFilename[i]))
-    {
-      CLog::Log(LOGERROR, "{}: Could not open shader file: {}", __FUNCTION__, vs.m_PlaceboShadersFilename[i]);
-      return;
-    }
+	auto settingsComponent = CServiceBroker::GetSettingsComponent();
+	if (!settingsComponent)
+	  return;
 
-    // Read entire file to memory
-    ULONGLONG fileSize = shaderFile.GetLength();
-    if (fileSize > 0)
-    {
-      BYTE* pBuffer = new BYTE[(size_t)fileSize];
-      UINT bytesRead = shaderFile.Read(pBuffer, (UINT)fileSize);
+	auto settings = settingsComponent->GetSettings();
+	if (!settings)
+	  return;
 
-      const pl_hook* pHook = pl_mpv_user_shader_parse(gpu, (const char*)pBuffer, (size_t)bytesRead);
-      delete[] pBuffer;
-      if (pHook)
-      {
-        std::shared_ptr<const pl_hook> SharedHook(pHook, [](const pl_hook* p) { pl_mpv_user_shader_destroy(&p); });
+	auto calibsetting = settings->GetSetting(CSettings::SETTING_VIDEOSCREEN_GUICALIBRATION);
+	if (!calibsetting)
+	{
+	  CLog::Log(LOGERROR, "Failed to load setting for: {}",
+		CSettings::SETTING_VIDEOSCREEN_GUICALIBRATION);
+	  return;
+	}
 
-        std::string shortFileName = URIUtils::GetFileName(vs.m_PlaceboShadersFilename[i]);
-        vs.m_Shaders.m_FileNames.push_back(shortFileName);
-        vs.m_Shaders.m_Hooks.push_back(SharedHook);
-        vs.m_Shaders.m_Valid.push_back(true);
-        for(int j = 0; j< pHook->num_parameters; ++j)
-        {
-          if(vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_FLOAT)
-		    pHook->parameters[j].data->f = std::get<float>(vs.m_PlaceboShadersParams[i][j].m_Value);
-          else if(vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_SINT)
-            pHook->parameters[j].data->i = std::get<int>(vs.m_PlaceboShadersParams[i][j].m_Value);
-          else if(vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_UINT)
-			  pHook->parameters[j].data->u = std::get<unsigned int>(vs.m_PlaceboShadersParams[i][j].m_Value);
-        }
-      }
-      else
-      {
-        CLog::Log(LOGERROR, "{}: Error parsing shader file: {}", __FUNCTION__, vs.m_PlaceboShadersFilename[i]);
-        std::string shortFileName = URIUtils::GetFileName(vs.m_PlaceboShadersFilename[i]);
-        vs.m_Shaders.m_FileNames.push_back(shortFileName);
-        vs.m_Shaders.m_Hooks.push_back(nullptr);
-        vs.m_Shaders.m_Valid.push_back(false);
-      }
-    }
-    shaderFile.Close();
+	// launch calibration window
+	if (profileManager->GetMasterProfile().getLockMode() != LockMode::EVERYONE &&
+	  g_passwordManager.CheckSettingLevelLock(calibsetting->GetLevel()))
+	  return;
+
+	CServiceBroker::GetGUI()->GetWindowManager().ForceActivateWindow(WINDOW_SCREEN_CALIBRATION);
   }
-  appPlayer->SetVideoSettings(vs);
+  else if (settingId == SETTING_VIDEO_MAKE_DEFAULT)
+  {
+	Save();
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_LOAD_PRESET_DEFAULT)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55231), CVariant(55339)))
+	{
+	  vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::DEFAULT);
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_LOAD_PRESET_FAST)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55232), CVariant(55339)))
+	{
+	  vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::FAST);
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_LOAD_PRESET_HIGH_QUALITY)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55233), CVariant(55339)))
+	{
+	  vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::HIGH_QUALITY);
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_LOAD_PRESET_DEFAULT)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55234), CVariant(55339)))
+	{
+	  m_placeboOptions->peak_detect_params = pl_peak_detect_default_params;
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_LOAD_PRESET_HIGH_QUALITY)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55235), CVariant(55339)))
+	{
+	  m_placeboOptions->peak_detect_params = pl_peak_detect_high_quality_params;
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_DEBAND_LOAD_PRESET)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55245), CVariant(55339)))
+	{
+	  m_placeboOptions->deband_params = pl_deband_default_params;
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_DEFAULT)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55246), CVariant(55339)))
+	{
+	  m_placeboOptions->color_map_params = pl_color_map_default_params;
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_HIGH_QUALITY)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55247), CVariant(55339)))
+	{
+	  m_placeboOptions->color_map_params = pl_color_map_high_quality_params;
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_SIGMOID_LOAD_PRESET_DEFAULT)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55255), CVariant(55339)))
+	{
+	  m_placeboOptions->sigmoid_params = pl_sigmoid_default_params;
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_DITHER_LOAD_PRESET_DEFAULT)
+  {
+	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55261), CVariant(55339)))
+	{
+	  m_placeboOptions->dither_params = pl_dither_default_params;
+	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
+	  appPlayer->SetVideoSettings(vs);
+	  SetupView();
+	}
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_LOAD_FROM_FILE)
+  {
+    vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::DEFAULT); //make sure all options are set, even if not present in the file
+	CPLHelper::LoadLibplaceboSettings(vs);
+	appPlayer->SetVideoSettings(vs);
+	SetupView();
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_SAVE_TO_FILE)
+  {
+	SaveLibplaceboSettings(vs);
+	appPlayer->SetVideoSettings(vs);
+	SetupView();
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_SHADER_ADD)
+  {
+	std::string path;
+	if (!CGUIDialogFileBrowser::ShowAndGetFile("special://masterprofile/", ".glsl|.hook", CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(55334), path))
+	{
+	  return;
+	}
+
+	CLog::Log(LOGDEBUG, "CGUIDialogVideoSettings: loading shader file from {}", path);
+	CPLHelper::AddShaderFile(PL::PLInstance::Get()->GetGpu(), vs, path);
+	appPlayer->SetVideoSettings(vs);
+	SetupView();
+  }
+  else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_REMOVE))
+  {
+	int shaderNumber = std::atoi(settingId.substr(settingId.find_last_of('_') + 1).c_str());
+
+	vs.m_PlaceboShadersFilename.erase(vs.m_PlaceboShadersFilename.begin() + shaderNumber);
+	vs.m_PlaceboShadersEnabled.erase(vs.m_PlaceboShadersEnabled.begin() + shaderNumber);
+	vs.m_PlaceboShadersParams.erase(vs.m_PlaceboShadersParams.begin() + shaderNumber);
+	vs.m_PlaceboShadersHooks.erase(shaderNumber);
+
+	appPlayer->SetVideoSettings(vs);
+	SetupView();
+  }
+  else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_MOVE_UP))
+  {
+	int shaderNumber = std::atoi(settingId.substr(settingId.find_last_of('_') + 1).c_str());
+	if (shaderNumber > 0)
+	{
+	  std::swap(vs.m_PlaceboShadersHooks.m_FileNames[shaderNumber], vs.m_PlaceboShadersHooks.m_FileNames[shaderNumber - 1]);
+	  std::swap(vs.m_PlaceboShadersHooks.m_Hooks[shaderNumber], vs.m_PlaceboShadersHooks.m_Hooks[shaderNumber - 1]);
+	  bool temp = vs.m_PlaceboShadersHooks.m_Valid[shaderNumber];
+	  vs.m_PlaceboShadersHooks.m_Valid[shaderNumber] = vs.m_PlaceboShadersHooks.m_Valid[shaderNumber - 1];
+	  vs.m_PlaceboShadersHooks.m_Valid[shaderNumber - 1] = temp;
+	  std::swap(vs.m_PlaceboShadersFilename[shaderNumber], vs.m_PlaceboShadersFilename[shaderNumber - 1]);
+	  std::swap(vs.m_PlaceboShadersParams[shaderNumber], vs.m_PlaceboShadersParams[shaderNumber - 1]);
+	}
+	appPlayer->SetVideoSettings(vs);
+	SetupView();
+  }
+  else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_MOVE_DOWN))
+  {
+	int shaderNumber = std::atoi(settingId.substr(settingId.find_last_of('_') + 1).c_str());
+	if (shaderNumber < vs.m_PlaceboShadersHooks.m_FileNames.size() - 1)
+	{
+	  std::swap(vs.m_PlaceboShadersHooks.m_FileNames[shaderNumber], vs.m_PlaceboShadersHooks.m_FileNames[shaderNumber + 1]);
+	  std::swap(vs.m_PlaceboShadersHooks.m_Hooks[shaderNumber], vs.m_PlaceboShadersHooks.m_Hooks[shaderNumber + 1]);
+	  bool temp = vs.m_PlaceboShadersHooks.m_Valid[shaderNumber];
+	  vs.m_PlaceboShadersHooks.m_Valid[shaderNumber] = vs.m_PlaceboShadersHooks.m_Valid[shaderNumber + 1];
+	  vs.m_PlaceboShadersHooks.m_Valid[shaderNumber + 1] = temp;
+	  std::swap(vs.m_PlaceboShadersFilename[shaderNumber], vs.m_PlaceboShadersFilename[shaderNumber + 1]);
+	  std::swap(vs.m_PlaceboShadersParams[shaderNumber], vs.m_PlaceboShadersParams[shaderNumber + 1]);
+	}
+	appPlayer->SetVideoSettings(vs);
+	SetupView();
+  }
 }
 
-void CGUIDialogVideoSettings::AddShaderFile(pl_gpu gpu, CVideoSettings& vs, const std::string& fileName)
+bool CGUIDialogVideoSettings::Save()
 {
-  if (fileName.empty())
-    return;
+  const std::shared_ptr<CProfileManager> profileManager = CServiceBroker::GetSettingsComponent()->GetProfileManager();
 
-  CFile shaderFile;
-  if (!shaderFile.Open(fileName))
-  {
-    CLog::Log(LOGERROR, "{}: Could not open shader file: {}", __FUNCTION__, fileName);
-    return;
+  if (profileManager->GetMasterProfile().getLockMode() != LockMode::EVERYONE &&
+	!g_passwordManager.CheckSettingLevelLock(::SettingLevel::Expert))
+	return true;
+
+  // prompt user if they are sure
+  if (CGUIDialogYesNo::ShowAndGetInput(CVariant(12376), CVariant(12377)))
+  { 
+	// reset the settings
+	CVideoDatabase db;
+	if (!db.Open())
+	  return true;
+	db.EraseAllVideoSettings();
+	db.Close();
+
+	const auto& components = CServiceBroker::GetAppComponents();
+	const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+
+	CMediaSettings::GetInstance().GetDefaultVideoSettings() = appPlayer->GetVideoSettings();
+	CMediaSettings::GetInstance().GetDefaultVideoSettings().m_SubtitleStream = -1;
+	CMediaSettings::GetInstance().GetDefaultVideoSettings().m_AudioStream = -1;
+	CServiceBroker::GetSettingsComponent()->GetSettings()->Save();
   }
-
-  // Read entire file to memory
-  ULONGLONG fileSize = shaderFile.GetLength();
-  if (fileSize > 0)
-  {
-    BYTE* pBuffer = new BYTE[(size_t)fileSize];
-    UINT bytesRead = shaderFile.Read(pBuffer, (UINT)fileSize);
-    
-	const pl_hook *pHook = pl_mpv_user_shader_parse(gpu, (const char*)pBuffer, (size_t)bytesRead);
-    delete[] pBuffer;
-    if(pHook)
-    {
-      std::shared_ptr<const pl_hook> SharedHook(pHook, [](const pl_hook* p) { pl_mpv_user_shader_destroy(&p); });
-
-      std::string shortFileName = URIUtils::GetFileName(fileName);
-      vs.m_PlaceboShadersFilename.push_back(fileName);
-      vs.m_PlaceboShadersEnabled.push_back(true);
-      vs.m_PlaceboShadersParams.push_back({});
-      vs.m_Shaders.m_FileNames.push_back(shortFileName);
-      vs.m_Shaders.m_Hooks.push_back(SharedHook);
-      vs.m_Shaders.m_Valid.push_back(true);
-
-	  for (int i = 0; i < pHook->num_parameters; ++i)
-      {
-        CShaderParam param;
-		param.m_Name = pHook->parameters[i].name ? pHook->parameters[i].name : "";
-        param.m_Type = pHook->parameters[i].type;
-        param.m_Value = param.m_Type== PL_VAR_FLOAT ? pHook->parameters[i].data->f: param.m_Type == PL_VAR_SINT ? pHook->parameters[i].data->i : param.m_Type == PL_VAR_UINT ? pHook->parameters[i].data->u : PL_VAR_INVALID;
-
-        vs.m_PlaceboShadersParams.back().emplace_back(param.m_Name, param.m_Type, param.m_Value);
-      }
-    }
-    else
-    {
-      CLog::Log(LOGERROR, "{}: Error parsing shader file: {}", __FUNCTION__, fileName);
-      std::string shortFileName = URIUtils::GetFileName(fileName);
-      vs.m_PlaceboShadersFilename.push_back(fileName);
-      vs.m_PlaceboShadersEnabled.push_back(false);
-      vs.m_PlaceboShadersParams.push_back({});
-      vs.m_Shaders.m_FileNames.push_back(shortFileName);
-      vs.m_Shaders.m_Hooks.push_back(nullptr);
-      vs.m_Shaders.m_Valid.push_back(false);
-    }
-
-
-  }
-  shaderFile.Close();
+  return true;
 }
-
-
 
 void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs)
 {
@@ -1863,273 +1222,45 @@ void CGUIDialogVideoSettings::SaveLibplaceboSettings(const CVideoSettings& vs)
   std::string filePath;
   if (!CGUIKeyboardFactory::ShowAndGetInput(fileName, CVariant{ CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(55323) }, false) || fileName.empty())
   {
-    return;
+	return;
   }
-  if (!URIUtils::HasExtension(fileName), ".xml")
-    fileName += ".xml";
-  filePath = URIUtils::AddFileToFolder("special://masterprofile/", fileName);
-  //if(XFILE::CFile::Exists());
 
-  SaveLibplaceboSettings(vs, fileName);
+  if (!URIUtils::HasExtension(fileName, ".xml"))
+	fileName += ".xml";
+  filePath = URIUtils::AddFileToFolder("special://masterprofile/", fileName);
+  if (CFile::Exists(filePath))
+  {
+	if (!CGUIDialogYesNo::ShowAndGetInput(CVariant(55323), CVariant(55340)))
+	  return;
+  }
+
+  CPLHelper::SaveLibplaceboSettings(vs, filePath);
 }
 
-
-void CGUIDialogVideoSettings::LoadLibplaceboSettings(CVideoSettings& vs)
+void CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs)
 {
   std::string path;
   if (!CGUIDialogFileBrowser::ShowAndGetFile("special://masterprofile/", ".xml", CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(55322), path))
   {
-    return;
+	return;
+  }
+
+  if (!CGUIDialogYesNo::ShowAndGetInput(CVariant(55322), CVariant(55339)))
+  {
+	return;
   }
 
   CXBMCTinyXML xmlDoc;
   if (!xmlDoc.LoadFile(path))
   {
-    CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo settings {}, Line {}\n{}", path, xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
-    return;
+	CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo settings {}, Line {}\n{}", path, xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
+	return;
   }
-
   CLog::Log(LOGDEBUG, "CGUIDialogVideoSettings: loading LipPlacebo settings from {}", path);
-  CGUIDialogVideoSettings::LoadLibplaceboSettings(vs, path);
+  CPLHelper::LoadLibplaceboSettings(vs, path);
 }
 
-void CGUIDialogVideoSettings::SkinZoomUpdate(void)
-{
-  auto& components = CServiceBroker::GetAppComponents();
-  auto appPlayer = components.GetComponent<CApplicationPlayer>();
-  CVideoSettings vs = appPlayer->GetVideoSettings();
-  if (vs.m_PlaceboSkinZoomHint != vs.m_PlaceboSkinZoom)
-  {
-    vs.m_PlaceboSkinZoomHint = vs.m_PlaceboSkinZoom;
-    appPlayer->SetVideoSettings(vs);
-    CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
-    CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
-  }
-}
 
-void CGUIDialogVideoSettings::LoadLutFile(CVideoSettings& vs, const std::string& path)
-{
-  //cl test vs.m_PlaceboIccProfile = CRendererPL::ReadIcc("C:/Users/Pooky/source/repos/kodi/kodi-build.x64/Debug/portable_data/userdata/small.icc");
-  vs.m_PlaceboLut = ReadLut(path);
-  CLog::Log(LOGDEBUG, "CGUIDialogVideoSettings: loading LUT file from {}", path);
-  vs.m_placeboOptions->getPlOptions()->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut.get();
-}
-
-void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetting>& setting)
-{
-  auto& components = CServiceBroker::GetAppComponents();
-  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-
-  if (setting == NULL)
-    return;
-
-  CGUIDialogSettingsManualBase::OnSettingChanged(setting);
-
-  const std::string &settingId = setting->GetId();
-  CVideoSettings vs = appPlayer->GetVideoSettings();
-  pl_options m_placeboOptions = vs.m_placeboOptions->getPlOptions();
-  if (settingId == SETTING_VIDEO_CALIBRATION)
-  {
-    const std::shared_ptr<CProfileManager> profileManager = CServiceBroker::GetSettingsComponent()->GetProfileManager();
-
-    auto settingsComponent = CServiceBroker::GetSettingsComponent();
-    if (!settingsComponent)
-      return;
-
-    auto settings = settingsComponent->GetSettings();
-    if (!settings)
-      return;
-
-    auto calibsetting = settings->GetSetting(CSettings::SETTING_VIDEOSCREEN_GUICALIBRATION);
-    if (!calibsetting)
-    {
-      CLog::Log(LOGERROR, "Failed to load setting for: {}",
-                CSettings::SETTING_VIDEOSCREEN_GUICALIBRATION);
-      return;
-    }
-
-    // launch calibration window
-    if (profileManager->GetMasterProfile().getLockMode() != LockMode::EVERYONE &&
-        g_passwordManager.CheckSettingLevelLock(calibsetting->GetLevel()))
-      return;
-
-    CServiceBroker::GetGUI()->GetWindowManager().ForceActivateWindow(WINDOW_SCREEN_CALIBRATION);
-  }
-  else if (settingId == SETTING_VIDEO_MAKE_DEFAULT)
-  {
-    Save();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_LOAD_PRESET_DEFAULT)
-  {
-    vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::DEFAULT);
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_LOAD_PRESET_FAST)
-  {
-    vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::FAST);
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_LOAD_PRESET_HIGH_QUALITY)
-  {
-    vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::HIGH_QUALITY);
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_LOAD_PRESET_DEFAULT)
-  {
-    m_placeboOptions->peak_detect_params = pl_peak_detect_default_params;
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_PEAK_DETECT_LOAD_PRESET_HIGH_QUALITY)
-  {
-    m_placeboOptions->peak_detect_params = pl_peak_detect_high_quality_params;
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_DEBAND_LOAD_PRESET)
-  {
-    m_placeboOptions->deband_params = pl_deband_default_params;
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_DEFAULT)
-  {
-    m_placeboOptions->color_map_params = pl_color_map_default_params;
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_HIGH_QUALITY)
-  {
-    m_placeboOptions->color_map_params = pl_color_map_high_quality_params;
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_SIGMOID_LOAD_PRESET_DEFAULT)
-  {
-    m_placeboOptions->sigmoid_params = pl_sigmoid_default_params;
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_DITHER_LOAD_PRESET_DEFAULT)
-  {
-    m_placeboOptions->dither_params = pl_dither_default_params;
-    UpdateVideoSettingsFromLibPLaceboParams(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_LOAD_FROM_FILE)
-  {
-	vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::DEFAULT); //make sure all options are set, even if not present in the file
-    LoadLibplaceboSettings(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_SAVE_TO_FILE)
-  {
-    SaveLibplaceboSettings(vs);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId == SETTING_LIB_PLACEBO_SHADER_ADD)
-  {
-    std::string path;
-    if (!CGUIDialogFileBrowser::ShowAndGetFile("special://masterprofile/", ".glsl|.hook", CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(55334), path))
-    {
-      return;
-    }
-    
-    CLog::Log(LOGDEBUG, "CGUIDialogVideoSettings: loading shader file from {}", path);
-    AddShaderFile(PL::PLInstance::Get()->GetGpu(), vs, path);
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_REMOVE))
-  {
-	int shaderNumber = std::atoi(settingId.substr(settingId.find_last_of('_') + 1).c_str());
-
-	vs.m_PlaceboShadersFilename.erase(vs.m_PlaceboShadersFilename.begin() + shaderNumber);
-    vs.m_PlaceboShadersEnabled.erase(vs.m_PlaceboShadersEnabled.begin() + shaderNumber);
-    vs.m_PlaceboShadersParams.erase(vs.m_PlaceboShadersParams.begin() + shaderNumber);
-    vs.m_Shaders.erase(shaderNumber);
-
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_MOVE_UP))
-  {
-    int shaderNumber = std::atoi(settingId.substr(settingId.find_last_of('_') + 1).c_str());
-    if(shaderNumber>0)
-    {
-      std::swap(vs.m_Shaders.m_FileNames[shaderNumber], vs.m_Shaders.m_FileNames[shaderNumber - 1]);
-      std::swap(vs.m_Shaders.m_Hooks[shaderNumber], vs.m_Shaders.m_Hooks[shaderNumber - 1]);
-      bool temp = vs.m_Shaders.m_Valid[shaderNumber];
-      vs.m_Shaders.m_Valid[shaderNumber] = vs.m_Shaders.m_Valid[shaderNumber - 1];
-      vs.m_Shaders.m_Valid[shaderNumber - 1] = temp;
-      std::swap(vs.m_PlaceboShadersFilename[shaderNumber], vs.m_PlaceboShadersFilename[shaderNumber - 1]);
-      std::swap(vs.m_PlaceboShadersParams[shaderNumber], vs.m_PlaceboShadersParams[shaderNumber - 1]);
-    }
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-  }
-  else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_MOVE_DOWN))
-  {
-    int shaderNumber = std::atoi(settingId.substr(settingId.find_last_of('_') + 1).c_str());
-    if (shaderNumber < vs.m_Shaders.m_FileNames.size() - 1)
-    {
-      std::swap(vs.m_Shaders.m_FileNames[shaderNumber], vs.m_Shaders.m_FileNames[shaderNumber + 1]);
-      std::swap(vs.m_Shaders.m_Hooks[shaderNumber], vs.m_Shaders.m_Hooks[shaderNumber + 1]);
-      bool temp = vs.m_Shaders.m_Valid[shaderNumber];
-      vs.m_Shaders.m_Valid[shaderNumber] = vs.m_Shaders.m_Valid[shaderNumber + 1];
-      vs.m_Shaders.m_Valid[shaderNumber + 1] = temp;
-      std::swap(vs.m_PlaceboShadersFilename[shaderNumber], vs.m_PlaceboShadersFilename[shaderNumber + 1]);
-      std::swap(vs.m_PlaceboShadersParams[shaderNumber], vs.m_PlaceboShadersParams[shaderNumber + 1]);
-    }
-    appPlayer->SetVideoSettings(vs);
-    SetupView();
-    }
-}
-
-bool CGUIDialogVideoSettings::Save()
-{
-  const std::shared_ptr<CProfileManager> profileManager = CServiceBroker::GetSettingsComponent()->GetProfileManager();
-
-  if (profileManager->GetMasterProfile().getLockMode() != LockMode::EVERYONE &&
-      !g_passwordManager.CheckSettingLevelLock(::SettingLevel::Expert))
-    return true;
-
-  // prompt user if they are sure
-  if (CGUIDialogYesNo::ShowAndGetInput(CVariant(12376), CVariant(12377)))
-  { // reset the settings
-    CVideoDatabase db;
-    if (!db.Open())
-      return true;
-    db.EraseAllVideoSettings();
-    db.Close();
-
-    const auto& components = CServiceBroker::GetAppComponents();
-    const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-
-    CMediaSettings::GetInstance().GetDefaultVideoSettings() = appPlayer->GetVideoSettings();
-    CMediaSettings::GetInstance().GetDefaultVideoSettings().m_SubtitleStream = -1;
-    CMediaSettings::GetInstance().GetDefaultVideoSettings().m_AudioStream = -1;
-    CServiceBroker::GetSettingsComponent()->GetSettings()->Save();
-  }
-
-  return true;
-}
 
 void CGUIDialogVideoSettings::SetupView()
 {
@@ -2146,19 +1277,20 @@ bool CGUIDialogVideoSettings::OnMessage(CGUIMessage& message)
 {
   switch (message.GetMessage())
   {
-    case GUI_MSG_WINDOW_DEINIT:
-    {
-      {
-        auto& components = CServiceBroker::GetAppComponents();
-        auto appPlayer = components.GetComponent<CApplicationPlayer>();
-        CVideoSettings videoSettings = appPlayer->GetVideoSettings();
+  case GUI_MSG_WINDOW_DEINIT:
+  {
+	{
+	  auto& components = CServiceBroker::GetAppComponents();
+	  auto appPlayer = components.GetComponent<CApplicationPlayer>();
+	  CVideoSettings videoSettings = appPlayer->GetVideoSettings();
 
-        videoSettings.m_PlaceboSkinZoomHint = 0;
-        appPlayer->SetVideoSettings(videoSettings);
-        CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
-        CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
-      }
-    }
+	  CLog::Log(LOGINFO, "CGUIDialogVideoSettings: Setting resetting skinzoom to 0");
+	  videoSettings.m_PlaceboSkinZoomHint = 0;
+	  appPlayer->SetVideoSettings(videoSettings);
+	  CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+	  CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+	}
+  }
   }
   return CGUIDialogSettingsBase::OnMessage(message);
 }
@@ -2178,25 +1310,25 @@ void CGUIDialogVideoSettings::InitializeSettings()
   CGUIDialogSettingsManualBase::InitializeSettings();
 
   int renderMethod = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_RENDERMETHOD);
-  
-  
+
+
   auto& components = CServiceBroker::GetAppComponents();
   auto appPlayer = components.GetComponent<CApplicationPlayer>();
   CVideoSettings videoSettings = appPlayer->GetVideoSettings();
 
   if (renderMethod == RENDER_METHOD_LIBPLACEBO)
   {
-    videoSettings.m_PlaceboSkinZoomHint = videoSettings.m_PlaceboSkinZoom;
-    appPlayer->SetVideoSettings(videoSettings);
-    CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
-    CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+	videoSettings.m_PlaceboSkinZoomHint = videoSettings.m_PlaceboSkinZoom;
+	appPlayer->SetVideoSettings(videoSettings);
+	CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+	CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
   }
 
   const std::shared_ptr<CSettingCategory> category = AddCategory("videosettings", -1);
   if (category == NULL)
   {
-    CLog::Log(LOGERROR, "CGUIDialogVideoSettings: unable to setup settings");
-    return;
+	CLog::Log(LOGERROR, "CGUIDialogVideoSettings: unable to setup settings");
+	return;
   }
 
   // get all necessary setting groups
@@ -2228,78 +1360,78 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
   TranslatableIntegerSettingOptions entries;
 
-    // cl not sure how to handle interlacing...
-    if (renderMethod == RENDER_METHOD_LIBPLACEBO)
-    {
-    }
-    else
-    {
-      entries.clear();
-      entries.emplace_back(16039, VS_INTERLACEMETHOD_NONE);
-      entries.emplace_back(16019, VS_INTERLACEMETHOD_AUTO);
-      entries.emplace_back(20131, VS_INTERLACEMETHOD_RENDER_BLEND);
-      entries.emplace_back(20129, VS_INTERLACEMETHOD_RENDER_WEAVE);
-      entries.emplace_back(16021, VS_INTERLACEMETHOD_RENDER_BOB);
-      entries.emplace_back(16020, VS_INTERLACEMETHOD_DEINTERLACE);
-      entries.emplace_back(16036, VS_INTERLACEMETHOD_DEINTERLACE_HALF);
-      entries.emplace_back(16311, VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL);
-      entries.emplace_back(16310, VS_INTERLACEMETHOD_VDPAU_TEMPORAL);
-      entries.emplace_back(16325, VS_INTERLACEMETHOD_VDPAU_BOB);
-      entries.emplace_back(16318, VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF);
-      entries.emplace_back(16317, VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF);
-      entries.emplace_back(16327, VS_INTERLACEMETHOD_VAAPI_BOB);
-      entries.emplace_back(16328, VS_INTERLACEMETHOD_VAAPI_MADI);
-      entries.emplace_back(16329, VS_INTERLACEMETHOD_VAAPI_MACI);
-      entries.emplace_back(16320, VS_INTERLACEMETHOD_DXVA_AUTO);
+  // cl not sure how to handle interlacing...
+  if (renderMethod == RENDER_METHOD_LIBPLACEBO)
+  {
+  }
+  else
+  {
+	entries.clear();
+	entries.emplace_back(16039, VS_INTERLACEMETHOD_NONE);
+	entries.emplace_back(16019, VS_INTERLACEMETHOD_AUTO);
+	entries.emplace_back(20131, VS_INTERLACEMETHOD_RENDER_BLEND);
+	entries.emplace_back(20129, VS_INTERLACEMETHOD_RENDER_WEAVE);
+	entries.emplace_back(16021, VS_INTERLACEMETHOD_RENDER_BOB);
+	entries.emplace_back(16020, VS_INTERLACEMETHOD_DEINTERLACE);
+	entries.emplace_back(16036, VS_INTERLACEMETHOD_DEINTERLACE_HALF);
+	entries.emplace_back(16311, VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL);
+	entries.emplace_back(16310, VS_INTERLACEMETHOD_VDPAU_TEMPORAL);
+	entries.emplace_back(16325, VS_INTERLACEMETHOD_VDPAU_BOB);
+	entries.emplace_back(16318, VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF);
+	entries.emplace_back(16317, VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF);
+	entries.emplace_back(16327, VS_INTERLACEMETHOD_VAAPI_BOB);
+	entries.emplace_back(16328, VS_INTERLACEMETHOD_VAAPI_MADI);
+	entries.emplace_back(16329, VS_INTERLACEMETHOD_VAAPI_MACI);
+	entries.emplace_back(16320, VS_INTERLACEMETHOD_DXVA_AUTO);
 
-      /* remove unsupported methods */
-      for (TranslatableIntegerSettingOptions::iterator it = entries.begin(); it != entries.end(); )
-      {
-        if (appPlayer->Supports(static_cast<EINTERLACEMETHOD>(it->value)))
-          ++it;
-        else
-          it = entries.erase(it);
-      }
-      if (!entries.empty())
-      {
-        EINTERLACEMETHOD method = videoSettings.m_InterlaceMethod;
-        if (!appPlayer->Supports(method))
-        {
-          method = appPlayer->GetDeinterlacingMethodDefault();
-        }
-        AddSpinner(groupVideo, SETTING_VIDEO_INTERLACEMETHOD, 16038, SettingLevel::Basic, static_cast<int>(method), entries);
-    }
+	/* remove unsupported methods */
+	for (TranslatableIntegerSettingOptions::iterator it = entries.begin(); it != entries.end(); )
+	{
+	  if (appPlayer->Supports(static_cast<EINTERLACEMETHOD>(it->value)))
+		++it;
+	  else
+		it = entries.erase(it);
+	}
+	if (!entries.empty())
+	{
+	  EINTERLACEMETHOD method = videoSettings.m_InterlaceMethod;
+	  if (!appPlayer->Supports(method))
+	  {
+		method = appPlayer->GetDeinterlacingMethodDefault();
+	  }
+	  AddSpinner(groupVideo, SETTING_VIDEO_INTERLACEMETHOD, 16038, SettingLevel::Basic, static_cast<int>(method), entries);
+	}
 
-    entries.clear();
-    entries.emplace_back(16301, VS_SCALINGMETHOD_NEAREST);
-    entries.emplace_back(16302, VS_SCALINGMETHOD_LINEAR);
-    entries.emplace_back(16303, VS_SCALINGMETHOD_CUBIC_B_SPLINE);
-    entries.emplace_back(16314, VS_SCALINGMETHOD_CUBIC_MITCHELL);
-    entries.emplace_back(16321, VS_SCALINGMETHOD_CUBIC_CATMULL);
-    entries.emplace_back(16326, VS_SCALINGMETHOD_CUBIC_0_075);
-    entries.emplace_back(16330, VS_SCALINGMETHOD_CUBIC_0_1);
-    entries.emplace_back(16304, VS_SCALINGMETHOD_LANCZOS2);
-    entries.emplace_back(16323, VS_SCALINGMETHOD_SPLINE36_FAST);
-    entries.emplace_back(16315, VS_SCALINGMETHOD_LANCZOS3_FAST);
-    entries.emplace_back(16322, VS_SCALINGMETHOD_SPLINE36);
-    entries.emplace_back(16305, VS_SCALINGMETHOD_LANCZOS3);
-    entries.emplace_back(16306, VS_SCALINGMETHOD_SINC8);
-    entries.emplace_back(16307, VS_SCALINGMETHOD_BICUBIC_SOFTWARE);
-    entries.emplace_back(16308, VS_SCALINGMETHOD_LANCZOS_SOFTWARE);
-    entries.emplace_back(16309, VS_SCALINGMETHOD_SINC_SOFTWARE);
-    entries.emplace_back(13120, VS_SCALINGMETHOD_VDPAU_HARDWARE);
-    entries.emplace_back(16319, VS_SCALINGMETHOD_DXVA_HARDWARE);
-    entries.emplace_back(16316, VS_SCALINGMETHOD_AUTO);
+	entries.clear();
+	entries.emplace_back(16301, VS_SCALINGMETHOD_NEAREST);
+	entries.emplace_back(16302, VS_SCALINGMETHOD_LINEAR);
+	entries.emplace_back(16303, VS_SCALINGMETHOD_CUBIC_B_SPLINE);
+	entries.emplace_back(16314, VS_SCALINGMETHOD_CUBIC_MITCHELL);
+	entries.emplace_back(16321, VS_SCALINGMETHOD_CUBIC_CATMULL);
+	entries.emplace_back(16326, VS_SCALINGMETHOD_CUBIC_0_075);
+	entries.emplace_back(16330, VS_SCALINGMETHOD_CUBIC_0_1);
+	entries.emplace_back(16304, VS_SCALINGMETHOD_LANCZOS2);
+	entries.emplace_back(16323, VS_SCALINGMETHOD_SPLINE36_FAST);
+	entries.emplace_back(16315, VS_SCALINGMETHOD_LANCZOS3_FAST);
+	entries.emplace_back(16322, VS_SCALINGMETHOD_SPLINE36);
+	entries.emplace_back(16305, VS_SCALINGMETHOD_LANCZOS3);
+	entries.emplace_back(16306, VS_SCALINGMETHOD_SINC8);
+	entries.emplace_back(16307, VS_SCALINGMETHOD_BICUBIC_SOFTWARE);
+	entries.emplace_back(16308, VS_SCALINGMETHOD_LANCZOS_SOFTWARE);
+	entries.emplace_back(16309, VS_SCALINGMETHOD_SINC_SOFTWARE);
+	entries.emplace_back(13120, VS_SCALINGMETHOD_VDPAU_HARDWARE);
+	entries.emplace_back(16319, VS_SCALINGMETHOD_DXVA_HARDWARE);
+	entries.emplace_back(16316, VS_SCALINGMETHOD_AUTO);
 
-    /* remove unsupported methods */
-    for(TranslatableIntegerSettingOptions::iterator it = entries.begin(); it != entries.end(); )
-    {
-      if (appPlayer->Supports(static_cast<ESCALINGMETHOD>(it->value)))
-        ++it;
-      else
-        it = entries.erase(it);
-    }
-    AddSpinner(groupVideo, SETTING_VIDEO_SCALINGMETHOD, 16300, SettingLevel::Basic, static_cast<int>(videoSettings.m_ScalingMethod), entries);
+	/* remove unsupported methods */
+	for (TranslatableIntegerSettingOptions::iterator it = entries.begin(); it != entries.end(); )
+	{
+	  if (appPlayer->Supports(static_cast<ESCALINGMETHOD>(it->value)))
+		++it;
+	  else
+		it = entries.erase(it);
+	}
+	AddSpinner(groupVideo, SETTING_VIDEO_SCALINGMETHOD, 16300, SettingLevel::Basic, static_cast<int>(videoSettings.m_ScalingMethod), entries);
   }
 
 
@@ -2307,46 +1439,46 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
   if (appPlayer->Supports(RENDERFEATURE_STRETCH) || appPlayer->Supports(RENDERFEATURE_PIXEL_RATIO))
   {
-    AddList(groupVideo, SETTING_VIDEO_VIEW_MODE, 629, SettingLevel::Basic, videoSettings.m_ViewMode, CViewModeSettings::ViewModesFiller, 629);
+	AddList(groupVideo, SETTING_VIDEO_VIEW_MODE, 629, SettingLevel::Basic, videoSettings.m_ViewMode, CViewModeSettings::ViewModesFiller, 629);
   }
   if (appPlayer->Supports(RENDERFEATURE_ZOOM))
-    AddSlider(groupVideo, SETTING_VIDEO_ZOOM, 216, SettingLevel::Basic,
-              videoSettings.m_CustomZoomAmount, "{:2.2f}", 0.5f, 0.01f, 2.0f, 216, usePopup);
+	AddSlider(groupVideo, SETTING_VIDEO_ZOOM, 216, SettingLevel::Basic,
+	  videoSettings.m_CustomZoomAmount, "{:2.2f}", 0.5f, 0.01f, 2.0f, 216, usePopup);
   if (appPlayer->Supports(RENDERFEATURE_VERTICAL_SHIFT))
-    AddSlider(groupVideo, SETTING_VIDEO_VERTICAL_SHIFT, 225, SettingLevel::Basic,
-              videoSettings.m_CustomVerticalShift, "{:2.2f}", -2.0f, 0.01f, 2.0f, 225, usePopup);
+	AddSlider(groupVideo, SETTING_VIDEO_VERTICAL_SHIFT, 225, SettingLevel::Basic,
+	  videoSettings.m_CustomVerticalShift, "{:2.2f}", -2.0f, 0.01f, 2.0f, 225, usePopup);
   if (appPlayer->Supports(RENDERFEATURE_PIXEL_RATIO))
-    AddSlider(groupVideo, SETTING_VIDEO_PIXEL_RATIO, 217, SettingLevel::Basic,
-              videoSettings.m_CustomPixelRatio, "{:2.2f}", 0.5f, 0.01f, 2.0f, 217, usePopup);
+	AddSlider(groupVideo, SETTING_VIDEO_PIXEL_RATIO, 217, SettingLevel::Basic,
+	  videoSettings.m_CustomPixelRatio, "{:2.2f}", 0.5f, 0.01f, 2.0f, 217, usePopup);
 
   AddList(groupVideo, SETTING_VIDEO_ORIENTATION, 21843, SettingLevel::Basic, videoSettings.m_Orientation, CGUIDialogVideoSettings::VideoOrientationFiller, 21843);
 
-    if (appPlayer->Supports(RENDERFEATURE_POSTPROCESS))    AddToggle(groupVideo, SETTING_VIDEO_POSTPROCESS, 16400, SettingLevel::Basic, videoSettings.m_PostProcess);
-    if (renderMethod != RENDER_METHOD_LIBPLACEBO)
-    {
-      if (appPlayer->Supports(RENDERFEATURE_BRIGHTNESS))     AddPercentageSlider(groupVideo, SETTING_VIDEO_BRIGHTNESS, 464, SettingLevel::Basic, static_cast<int>(videoSettings.m_Brightness), 14047, 1, 464, usePopup);
-      if (appPlayer->Supports(RENDERFEATURE_CONTRAST))       AddPercentageSlider(groupVideo, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, static_cast<int>(videoSettings.m_Contrast), 14047, 1, 465, usePopup);
-      if (appPlayer->Supports(RENDERFEATURE_GAMMA))          AddPercentageSlider(groupVideo, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, static_cast<int>(videoSettings.m_Gamma), 14047, 1, 466, usePopup);
-    }
-    if (appPlayer->Supports(RENDERFEATURE_NOISE))          AddSlider(groupVideo, SETTING_VIDEO_VDPAU_NOISE, 16312, SettingLevel::Basic,              videoSettings.m_NoiseReduction, "{:2.2f}", 0.0f, 0.01f, 1.0f, 16312, usePopup);  
-    if (appPlayer->Supports(RENDERFEATURE_SHARPNESS))      AddSlider(groupVideo, SETTING_VIDEO_VDPAU_SHARPNESS, 16313, SettingLevel::Basic, videoSettings.m_Sharpness, "{:2.2f}", -1.0f, 0.02f, 1.0f, 16313, usePopup);  
-    if (appPlayer->Supports(RENDERFEATURE_NONLINSTRETCH))  AddToggle(groupVideo, SETTING_VIDEO_NONLIN_STRETCH, 659, SettingLevel::Basic, videoSettings.m_CustomNonLinStretch);
+  if (appPlayer->Supports(RENDERFEATURE_POSTPROCESS))    AddToggle(groupVideo, SETTING_VIDEO_POSTPROCESS, 16400, SettingLevel::Basic, videoSettings.m_PostProcess);
+  if (renderMethod != RENDER_METHOD_LIBPLACEBO)
+  {
+	if (appPlayer->Supports(RENDERFEATURE_BRIGHTNESS))     AddPercentageSlider(groupVideo, SETTING_VIDEO_BRIGHTNESS, 464, SettingLevel::Basic, static_cast<int>(videoSettings.m_Brightness), 14047, 1, 464, usePopup);
+	if (appPlayer->Supports(RENDERFEATURE_CONTRAST))       AddPercentageSlider(groupVideo, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, static_cast<int>(videoSettings.m_Contrast), 14047, 1, 465, usePopup);
+	if (appPlayer->Supports(RENDERFEATURE_GAMMA))          AddPercentageSlider(groupVideo, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, static_cast<int>(videoSettings.m_Gamma), 14047, 1, 466, usePopup);
+  }
+  if (appPlayer->Supports(RENDERFEATURE_NOISE))          AddSlider(groupVideo, SETTING_VIDEO_VDPAU_NOISE, 16312, SettingLevel::Basic, videoSettings.m_NoiseReduction, "{:2.2f}", 0.0f, 0.01f, 1.0f, 16312, usePopup);
+  if (appPlayer->Supports(RENDERFEATURE_SHARPNESS))      AddSlider(groupVideo, SETTING_VIDEO_VDPAU_SHARPNESS, 16313, SettingLevel::Basic, videoSettings.m_Sharpness, "{:2.2f}", -1.0f, 0.02f, 1.0f, 16313, usePopup);
+  if (appPlayer->Supports(RENDERFEATURE_NONLINSTRETCH))  AddToggle(groupVideo, SETTING_VIDEO_NONLIN_STRETCH, 659, SettingLevel::Basic, videoSettings.m_CustomNonLinStretch);
 
   // tone mapping
   if (appPlayer->Supports(RENDERFEATURE_TONEMAP))
   {
-    const bool visible = !CServiceBroker::GetWinSystem()->IsHDRDisplaySettingEnabled();
-    entries.clear();
-    entries.emplace_back(36554, VS_TONEMAPMETHOD_OFF);
-    entries.emplace_back(36555, VS_TONEMAPMETHOD_REINHARD);
-    entries.emplace_back(36557, VS_TONEMAPMETHOD_ACES);
-    entries.emplace_back(36558, VS_TONEMAPMETHOD_HABLE);
+	const bool visible = !CServiceBroker::GetWinSystem()->IsHDRDisplaySettingEnabled();
+	entries.clear();
+	entries.emplace_back(36554, VS_TONEMAPMETHOD_OFF);
+	entries.emplace_back(36555, VS_TONEMAPMETHOD_REINHARD);
+	entries.emplace_back(36557, VS_TONEMAPMETHOD_ACES);
+	entries.emplace_back(36558, VS_TONEMAPMETHOD_HABLE);
 
-    AddSpinner(groupVideo, SETTING_VIDEO_TONEMAP_METHOD, 36553, SettingLevel::Basic,
-               videoSettings.m_ToneMapMethod, entries, false, visible);
-    AddSlider(groupVideo, SETTING_VIDEO_TONEMAP_PARAM, 36556, SettingLevel::Basic,
-              videoSettings.m_ToneMapParam, "{:2.2f}", 0.1f, 0.1f, 5.0f, 36556, usePopup, false,
-              visible);
+	AddSpinner(groupVideo, SETTING_VIDEO_TONEMAP_METHOD, 36553, SettingLevel::Basic,
+	  videoSettings.m_ToneMapMethod, entries, false, visible);
+	AddSlider(groupVideo, SETTING_VIDEO_TONEMAP_PARAM, 36556, SettingLevel::Basic,
+	  videoSettings.m_ToneMapParam, "{:2.2f}", 0.1f, 0.1f, 5.0f, 36556, usePopup, false,
+	  visible);
   }
 
   // stereoscopic settings
@@ -2365,159 +1497,160 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
   if (renderMethod == RENDER_METHOD_LIBPLACEBO)
   {
-    AddSlider(groupLpFile, SETTING_LIB_PLACEBO_SKIN_ZOOM, 55333, SettingLevel::Basic, videoSettings.m_PlaceboSkinZoom, -1, -80, 1, 0, 55292, false);
-    AddButton(groupLpFile, SETTING_LIB_PLACEBO_SAVE_TO_FILE, 55323, SettingLevel::Basic);
-    AddButton(groupLpFile, SETTING_LIB_PLACEBO_LOAD_FROM_FILE,   55322, SettingLevel::Basic);
+	AddSlider(groupLpFile, SETTING_LIB_PLACEBO_SKIN_ZOOM, 55333, SettingLevel::Basic, videoSettings.m_PlaceboSkinZoom, -1, -80, 1, 0, 55292, false);
+	AddButton(groupLpFile, SETTING_LIB_PLACEBO_SAVE_TO_FILE, 55323, SettingLevel::Basic);
+	AddButton(groupLpFile, SETTING_LIB_PLACEBO_LOAD_FROM_FILE, 55322, SettingLevel::Basic);
 
-    AddButton(groupLpReset, SETTING_LIB_PLACEBO_LOAD_PRESET_DEFAULT,      55231, SettingLevel::Basic);
-    AddButton(groupLpReset, SETTING_LIB_PLACEBO_LOAD_PRESET_FAST,         55232, SettingLevel::Basic);
-    AddButton(groupLpReset, SETTING_LIB_PLACEBO_LOAD_PRESET_HIGH_QUALITY, 55233, SettingLevel::Basic);
+	AddButton(groupLpReset, SETTING_LIB_PLACEBO_LOAD_PRESET_DEFAULT, 55231, SettingLevel::Basic);
+	AddButton(groupLpReset, SETTING_LIB_PLACEBO_LOAD_PRESET_FAST, 55232, SettingLevel::Basic);
+	AddButton(groupLpReset, SETTING_LIB_PLACEBO_LOAD_PRESET_HIGH_QUALITY, 55233, SettingLevel::Basic);
 
-    // Render Options
-    AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE, 55313, SettingLevel::Basic, videoSettings.m_PlaceboDisplayPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55313, usePopup);
-    entries.clear();
-    entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));
-    entries.emplace_back(55316, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::NO));
-    entries.emplace_back(55317, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::YES));
-    AddSpinner(groupOptions, SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT, 55314, SettingLevel::Basic, videoSettings.m_PlaceboTargetColorspaceHint, entries);
-    entries.clear();
-    entries.emplace_back(55319, static_cast<int>(SettinglibPlaceboTargetColorspaceHintMode::TARGET));
-    entries.emplace_back(55320, static_cast<int>(SettinglibPlaceboTargetColorspaceHintMode::SOURCE));
-    entries.emplace_back(55321, static_cast<int>(SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC));
-    AddSpinner(groupOptions, SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT_MODE, 55318, SettingLevel::Basic, videoSettings.m_PlaceboTargetColorspaceHintMode, entries);
-    
-    // Color_Adjustment
-    AddToggle(groupColorAjustment, SETTING_LIB_PLACEBO_COLOR_ADJUSTMENT_ENABLED, 55221, SettingLevel::Basic, videoSettings.m_PlaceboColorAdjustmentEnabled);
-    AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_BRIGHTNESS, 464, SettingLevel::Basic, static_cast<int>(videoSettings.m_Brightness), 14047, 1, 464, usePopup);
-    AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, static_cast<int>(videoSettings.m_Contrast), 14047, 1, 465, usePopup);
-    AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, static_cast<int>(videoSettings.m_Gamma), 14047, 1, 466, usePopup);
-    AddSlider          (groupColorAjustment, SETTING_LIB_PLACEBO_HUE,                      55222, SettingLevel::Basic, videoSettings.m_PlaceboHue,        "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55222, usePopup);
-    AddSlider          (groupColorAjustment, SETTING_LIB_PLACEBO_SATURATION,               55210, SettingLevel::Basic, videoSettings.m_PlaceboSaturation, "{0:2.2f}", (float)0.0, (float)0.01, (float)100.0, 55210, usePopup);
-    AddSlider          (groupColorAjustment, SETTING_LIB_PLACEBO_TEMPERATURE,              55212, SettingLevel::Basic, videoSettings.m_PlaceboTemperature, "{0:6.0f}K", (float)1700, (float)10.0, (float)10000, 55212, usePopup);
+	// Render Options
+	AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE, 55313, SettingLevel::Basic, videoSettings.m_PlaceboDisplayPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55313, usePopup);
+	entries.clear();
+	entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));
+	entries.emplace_back(55316, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::NO));
+	entries.emplace_back(55317, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::YES));
+	AddSpinner(groupOptions, SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT, 55314, SettingLevel::Basic, videoSettings.m_PlaceboTargetColorspaceHint, entries);
+	entries.clear();
+	entries.emplace_back(55319, static_cast<int>(SettinglibPlaceboTargetColorspaceHintMode::TARGET));
+	entries.emplace_back(55320, static_cast<int>(SettinglibPlaceboTargetColorspaceHintMode::SOURCE));
+	entries.emplace_back(55321, static_cast<int>(SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC));
+	AddSpinner(groupOptions, SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT_MODE, 55318, SettingLevel::Basic, videoSettings.m_PlaceboTargetColorspaceHintMode, entries);
 
-    // Peak_Detection
-    // cl parameters range conversion..., not just this group
-    AddToggle(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_ENABLED, 55213, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectEnabled);
-    AddButton(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_LOAD_PRESET_DEFAULT, 55234, SettingLevel::Basic);
-    AddButton(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_LOAD_PRESET_HIGH_QUALITY, 55235, SettingLevel::Basic);
-    AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SMOOTHING_PERIOD,                  55214, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectSmoothingPeriod,    "{0:4.0f}", (float)0.0,  (float)1.0, (float)1000.0, 55214, usePopup);
-    AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SCENE_THRESHOLD_LOW,               55215, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectSceneThresholdLow,  "{0:5.1f}", (float)0.0,  (float)0.1, (float)100.0,  55215, usePopup);
-    AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SCENE_THRESHOLD_HIGH,              55216, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectSceneThresholdHigh, "{0:5.1f}", (float)0.0,  (float)0.1, (float)100.0,  55216, usePopup);
-    AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_PERCENTILE,                        55218, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectPercentile,         "{0:6.3f}", (float)95.0, (float)0.001, (float)100.0,  55218, usePopup);
-    AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_BLACK_CUTOFF,                      55219, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectBlackCutoff,        "{0:5.1f}", (float)0.0,  (float)0.1, (float)100.0,  55219, usePopup);
-    // deprecated AddToggle(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_ALLOW_DELAYED,                     55220, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectAllowDelayed);
+	// Color_Adjustment
+	AddToggle(groupColorAjustment, SETTING_LIB_PLACEBO_COLOR_ADJUSTMENT_ENABLED, 55221, SettingLevel::Basic, videoSettings.m_PlaceboColorAdjustmentEnabled);
+	AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_BRIGHTNESS, 464, SettingLevel::Basic, static_cast<int>(videoSettings.m_Brightness), 14047, 1, 464, usePopup);
+	AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, static_cast<int>(videoSettings.m_Contrast), 14047, 1, 465, usePopup);
+	AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, static_cast<int>(videoSettings.m_Gamma), 14047, 1, 466, usePopup);
+	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_HUE, 55222, SettingLevel::Basic, videoSettings.m_PlaceboHue, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55222, usePopup);
+	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSaturation, "{0:2.2f}", (float)0.0, (float)0.01, (float)100.0, 55210, usePopup);
+	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_TEMPERATURE, 55212, SettingLevel::Basic, videoSettings.m_PlaceboTemperature, "{0:6.0f}K", (float)1700, (float)10.0, (float)10000, 55212, usePopup);
 
-    // Scalers
-    AddList(groupScaler, SETTING_LIB_PLACEBO_UPSCALER,         55223, SettingLevel::Basic, videoSettings.m_PlaceboUpscaler, PlUpscalerOptionFiller, 55223);
-    AddList(groupScaler, SETTING_LIB_PLACEBO_DOWNSCALER,       55224, SettingLevel::Basic, videoSettings.m_PlaceboDownscaler, PlDownscalerOptionFiller, 55224);
-    AddList(groupScaler, SETTING_LIB_PLACEBO_PLANE_UPSCALER,   55225, SettingLevel::Basic, videoSettings.m_PlaceboPlaneUpscaler, PlUpscalerOptionFiller, 55225);
-    AddList(groupScaler, SETTING_LIB_PLACEBO_PLANE_DOWNSCALER, 55226, SettingLevel::Basic, videoSettings.m_PlaceboPlaneDownscaler, PlDownscalerOptionFiller, 55226);
-    AddList(groupScaler, SETTING_LIB_PLACEBO_FRAME_MIXER,      55227, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixer, PlFrameMixerOptionFiller, 55227);
+	// Peak_Detection
+	// cl parameters range conversion..., not just this group
+	AddToggle(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_ENABLED, 55213, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectEnabled);
+	AddButton(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_LOAD_PRESET_DEFAULT, 55234, SettingLevel::Basic);
+	AddButton(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_LOAD_PRESET_HIGH_QUALITY, 55235, SettingLevel::Basic);
+	AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SMOOTHING_PERIOD, 55214, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectSmoothingPeriod, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55214, usePopup);
+	AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SCENE_THRESHOLD_LOW, 55215, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectSceneThresholdLow, "{0:5.1f}", (float)0.0, (float)0.1, (float)100.0, 55215, usePopup);
+	AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_SCENE_THRESHOLD_HIGH, 55216, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectSceneThresholdHigh, "{0:5.1f}", (float)0.0, (float)0.1, (float)100.0, 55216, usePopup);
+	AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_PERCENTILE, 55218, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectPercentile, "{0:6.3f}", (float)95.0, (float)0.001, (float)100.0, 55218, usePopup);
+	AddSlider(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_BLACK_CUTOFF, 55219, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectBlackCutoff, "{0:5.1f}", (float)0.0, (float)0.1, (float)100.0, 55219, usePopup);
+	// deprecated AddToggle(groupPeakDetect, SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_ALLOW_DELAYED,                     55220, SettingLevel::Basic, videoSettings.m_PlaceboPeakDetectAllowDelayed);
 
-
-    // Color map
-    AddToggle(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_ENABLED,                  55248, SettingLevel::Basic, videoSettings.m_PlaceboColorMapEnabled);
-    AddButton(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_DEFAULT,      55246, SettingLevel::Basic);
-    AddButton(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_HIGH_QUALITY, 55247, SettingLevel::Basic);
-    AddList(groupColorMap,     SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING,            55228, SettingLevel::Basic, videoSettings.m_PlaceboColorMapGamutMapping, PlColorMapGamutMapFunctionOptionFiller, 55228);
-    AddList(groupColorMap,     SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING,             55236, SettingLevel::Basic, videoSettings.m_PlaceboColorMapToneMapping,  PlColorMapToneMapFunctionOptionFiller, 55236);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY,        55284, SettingLevel::Basic, videoSettings.m_PlaceboColorMapContrastRecovery,   "{0:4.2f}", (float)0.0, (float)0.01, (float)2.0, 55284, usePopup);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS,      55285, SettingLevel::Basic, videoSettings.m_PlaceboColorMapContrastSmoothness, "{0:4.1f}", (float)1.0, (float)0.1, (float)32.0, 55285, usePopup);
-    AddToggle(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_EXPANSION,          55290, SettingLevel::Basic, videoSettings.m_PlaceboColorMapGamutExpansion);
-
-    AddToggle(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_INVERSE_TONE_MAPPING,     55291, SettingLevel::Basic, videoSettings.m_PlaceboColorMapInverseToneMapping);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_I,             55292, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeI, -1, 0, 1, 1024, 55292, usePopup);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_C,             55293, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeC, -1, 0, 1, 1024, 55293, usePopup);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_H,             55294, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeH, -1, 0, 1, 1024, 55294, usePopup);
-    AddToggle(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_TRICUBIC,           55295, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dTricubic);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_LUT_SIZE,                 55296, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLutSize, -1, 0, 1, 1024, 55296, usePopup);
-    AddToggle(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_SHOW_CLIPPING,            55297, SettingLevel::Basic, videoSettings.m_PlaceboColorMapShowClipping);
-    AddList(groupColorMap,     SETTING_LIB_PLACEBO_COLOR_MAP_INTENT,                   55298, SettingLevel::Basic, videoSettings.m_PlaceboColorMapIntent, PlColorMapIntentOptionFiller, 55298);
-    AddToggle(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_FORCE_TONE_MAPPING_LUT,   55299, SettingLevel::Basic, videoSettings.m_PlaceboColorMapForceToneMappingLut);
-
-    AddToggle(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_LUT,     55277, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeLut);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X0, 55278, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectX0, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55278, usePopup);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X1, 55279, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectX1, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55279, usePopup);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y0, 55280, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectY0, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55280, usePopup);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y1, 55281, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectY1, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55281, usePopup);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_HUE,     55282, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeHue,    "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55282, usePopup);
-    AddSlider(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_THETA,   55283, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeTheta,  "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55283, usePopup);
-    
-    // Tone mapping constants
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_EXPOSURE, 55266, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantExposure, "{0:4.1f}", (float)0.0, (float)0.1, (float)10.0, 55266, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_ADAPTATION, 55267, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeAdaptation, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55267, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_DEFAULT, 55268, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeDefault, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55268, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MAXIMUM, 55269, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeMaximum, "{0:4.2f}", (float)0.5, (float)0.01, (float)1.0, 55269, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MINIMUM, 55270, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeMinimum, "{0:4.2f}", (float)0.0, (float)0.01, (float)0.5, 55270, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_OFFSET, 55271, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeOffset, "{0:4.2f}", (float)0.5, (float)0.01, (float)2.0, 55271, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_LINEAR_KNEE, 55272, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantLinearKnee, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55272, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_REINHARD_CONTRAST, 55273, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantReinhardContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55273, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_OFFSET, 55274, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeOffset, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55274, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING, 55275, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeTuning, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55275, usePopup);
-    AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST, 55276, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSplineContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.5, 55276, usePopup);
-
-    // Gamut mapping constants
-    AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA, 55286, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsColorimetricGamma, "{0:4.1f}", (float)0.0, (float)0.1, (float)10.0, 55286, usePopup);
-    AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE, 55287, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsPerceptualDeadzone, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55287, usePopup);
-    AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT, 55288, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsSoftclipDesat, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55288, usePopup);
-    AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_KNEE, 55289, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsSoftclipKnee, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55289, usePopup);
-
-    // Deband
-    AddToggle(groupDeband, SETTING_LIB_PLACEBO_DEBAND_ENABLED,        55237, SettingLevel::Basic, videoSettings.m_PlaceboDebandEnabled);
-    AddButton(groupDeband, SETTING_LIB_PLACEBO_DEBAND_LOAD_PRESET,    55245, SettingLevel::Basic);
-    AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_GRAIN,          55238, SettingLevel::Basic, videoSettings.m_PlaceboDebandGrain,        "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55238, usePopup);
-    AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL0, 55239, SettingLevel::Basic, videoSettings.m_PlaceboDebandGrainNeutral0, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55239, usePopup);
-    AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL1, 55240, SettingLevel::Basic, videoSettings.m_PlaceboDebandGrainNeutral1, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55240, usePopup);
-    AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL2, 55241, SettingLevel::Basic, videoSettings.m_PlaceboDebandGrainNeutral2, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55241, usePopup);
-    AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_ITERATIONS,     55242, SettingLevel::Basic, videoSettings.m_PlaceboDebandIterations,    -1, 0, 1, 16, 55242, usePopup);
-    AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_RADIUS,         55243, SettingLevel::Basic, videoSettings.m_PlaceboDebandRadius,       "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55243, usePopup);
-    AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_THRESHOLD,      55244, SettingLevel::Basic, videoSettings.m_PlaceboDebandThreshold,    "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55244, usePopup);
-    
-    // Deinterlace
-    AddToggle(groupDeinterlace, SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED,             55249, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceEnabled);
-    AddList(groupDeinterlace,   SETTING_LIB_PLACEBO_DEINTERLACE_ALGO,                55250, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceAlgo, PlDeinterlaceAlgoOptionFiller, 55250);
-    AddToggle(groupDeinterlace, SETTING_LIB_PLACEBO_DEINTERLACE_SKIP_SPATIAL_CHECK,  55251, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceSkipSpatialCheck);
-
-    // Sigmoid 
-    AddToggle(groupSigmoid, SETTING_LIB_PLACEBO_SIGMOID_ENABLED,             55252, SettingLevel::Basic, videoSettings.m_PlaceboSigmoidEnabled);
-    AddButton(groupSigmoid, SETTING_LIB_PLACEBO_SIGMOID_LOAD_PRESET_DEFAULT, 55255, SettingLevel::Basic);
-    AddSlider(groupSigmoid, SETTING_LIB_PLACEBO_SIGMOID_CENTER,              55253, SettingLevel::Basic, videoSettings.m_PlaceboSigmoidCenter, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55253, usePopup);
-    AddSlider(groupSigmoid, SETTING_LIB_PLACEBO_SIGMOID_SLOPE,               55254, SettingLevel::Basic, videoSettings.m_PlaceboSigmoidSlope, "{0:4.1f}", (float)1.0, (float)1.0, (float)20.0, 55254, usePopup);
-
-    // Cones 
-    AddToggle(groupCone, SETTING_LIB_PLACEBO_CONE_ENABLED,             55256, SettingLevel::Basic, videoSettings.m_PlaceboConeEnabled);
-    AddList(groupCone,   SETTING_LIB_PLACEBO_CONE_CONES,               55258, SettingLevel::Basic, videoSettings.m_PlaceboConeCones, PlConeConesOptionFiller, 55258);
-    AddSlider(groupCone, SETTING_LIB_PLACEBO_CONE_STRENGTH,            55259, SettingLevel::Basic, videoSettings.m_PlaceboConeStrength, "{0:5.2f}", (float)0.0, (float)0.01, (float)10.0, 55259, usePopup);
-
-    // Dither
-    AddToggle(groupDither, SETTING_LIB_PLACEBO_DITHER_ENABLED,             55260, SettingLevel::Basic, videoSettings.m_PlaceboDitherEnabled);
-    AddButton(groupDither, SETTING_LIB_PLACEBO_DITHER_LOAD_PRESET_DEFAULT, 55261, SettingLevel::Basic);
-    AddList(groupDither,   SETTING_LIB_PLACEBO_DITHER_METHOD,              55262, SettingLevel::Basic, videoSettings.m_PlaceboDitherMethod, PlDitherMethodOptionFiller, 55262);
-    AddSlider(groupDither, SETTING_LIB_PLACEBO_DITHER_LUT_SIZE,            55263, SettingLevel::Basic, videoSettings.m_PlaceboDitherLutSize, -1, 1, 1, 8, 55263, usePopup);
-    AddToggle(groupDither, SETTING_LIB_PLACEBO_DITHER_TEMPORAL,            55264, SettingLevel::Basic, videoSettings.m_PlaceboDitherTemporal);
-    AddList(groupDither,   SETTING_LIB_PLACEBO_DITHER_TRANSFER,            55265, SettingLevel::Basic, videoSettings.m_PlaceboDitherTransfer, PlDitherTransferOptionFiller, 55265);
-        
-    AddList(groupLut,   SETTING_LIB_PLACEBO_LUT_TYPE,                        55330, SettingLevel::Basic, videoSettings.m_PlaceboLutType, PlLutTypeOptionFiller, 55330);
-    AddList(groupLut,   SETTING_LIB_PLACEBO_LUT_FILENAME,                    55332, SettingLevel::Basic, videoSettings.m_PlaceboLutFilename, PlLutOptionFiller, 55332);
-    AddSlider(groupMisc, SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH,            55300, SettingLevel::Basic, videoSettings.m_PlaceboAntiringingStrength, "{0:3.2f}", (float)0.0, (float)0.01, (float)1.0, 55300, usePopup);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_CORRECT_SUBPIXEL_OFFSET,         55301, SettingLevel::Basic, videoSettings.m_PlaceboCorrectSubpixelOffset);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_BUILTIN_SCALERS,         55302, SettingLevel::Basic, videoSettings.m_PlaceboDisableBuiltinScalers);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_DITHER_GAMMA_CORRECTION, 55303, SettingLevel::Basic, videoSettings.m_PlaceboDisableDitherGammaCorrection);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_LINEAR_SCALING,          55304, SettingLevel::Basic, videoSettings.m_PlaceboDisableLinearScaling);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_DYNAMIC_CONSTANTS,               55305, SettingLevel::Basic, videoSettings.m_PlaceboDynamicConstant);
-    AddList(groupMisc,   SETTING_LIB_PLACEBO_ERROR_DIFFUSION,                 55306, SettingLevel::Basic, videoSettings.m_PlaceboErrorDiffusion, PlDiffusionKernelOptionFiller, 55306);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_FORCE_DITHER,                    55307, SettingLevel::Basic, videoSettings.m_PlaceboForceDither);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_FORCE_LOW_BIT_DEPTH_FBOS,        55308, SettingLevel::Basic, videoSettings.m_PlaceboForceLowBitDepthFbos);
-    // AddToggle(groupMisc, SETTING_LIB_PLACEBO_IGNORE_ICC_PROFILES,             55309, SettingLevel::Basic, videoSettings.m_PlaceboIgnoreIccProfiles); ignore_icc_profiles; // non-functional, just set pl_frame.icc to NULL
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_PRESERVE_MIXING_CACHE,           55310, SettingLevel::Basic, videoSettings.m_PlaceboPreserveMixingCache);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING,              55311, SettingLevel::Basic, videoSettings.m_PlaceboSkipAntiAliasing);
-    AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME,       55312, SettingLevel::Basic, videoSettings.m_PlaceboSkipCachingSingleFrame);
+	// Scalers
+	AddList(groupScaler, SETTING_LIB_PLACEBO_UPSCALER, 55223, SettingLevel::Basic, videoSettings.m_PlaceboUpscaler, CPLHelper::PlUpscalerOptionFiller, 55223);
+	AddList(groupScaler, SETTING_LIB_PLACEBO_DOWNSCALER, 55224, SettingLevel::Basic, videoSettings.m_PlaceboDownscaler, CPLHelper::PlDownscalerOptionFiller, 55224);
+	AddList(groupScaler, SETTING_LIB_PLACEBO_PLANE_UPSCALER, 55225, SettingLevel::Basic, videoSettings.m_PlaceboPlaneUpscaler, CPLHelper::PlUpscalerOptionFiller, 55225);
+	AddList(groupScaler, SETTING_LIB_PLACEBO_PLANE_DOWNSCALER, 55226, SettingLevel::Basic, videoSettings.m_PlaceboPlaneDownscaler, CPLHelper::PlDownscalerOptionFiller, 55226);
+	AddList(groupScaler, SETTING_LIB_PLACEBO_FRAME_MIXER, 55227, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixer, CPLHelper::PlFrameMixerOptionFiller, 55227);
 
 
+	// Color map
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_ENABLED, 55248, SettingLevel::Basic, videoSettings.m_PlaceboColorMapEnabled);
+	AddButton(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_DEFAULT, 55246, SettingLevel::Basic);
+	AddButton(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_HIGH_QUALITY, 55247, SettingLevel::Basic);
+	AddList(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING, 55228, SettingLevel::Basic, videoSettings.m_PlaceboColorMapGamutMapping, CPLHelper::PlColorMapGamutMapFunctionOptionFiller, 55228);
+	AddList(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING, 55236, SettingLevel::Basic, videoSettings.m_PlaceboColorMapToneMapping, CPLHelper::PlColorMapToneMapFunctionOptionFiller, 55236);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY, 55284, SettingLevel::Basic, videoSettings.m_PlaceboColorMapContrastRecovery, "{0:4.2f}", (float)0.0, (float)0.01, (float)2.0, 55284, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS, 55285, SettingLevel::Basic, videoSettings.m_PlaceboColorMapContrastSmoothness, "{0:4.1f}", (float)1.0, (float)0.1, (float)32.0, 55285, usePopup);
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_EXPANSION, 55290, SettingLevel::Basic, videoSettings.m_PlaceboColorMapGamutExpansion);
 
-    InitializeShaderMenu(videoSettings, category);
-    CreateGroup(groupDummy, category);
-    AddButton(groupDummy, SETTING_LIB_PLACEBO_SHADER_ADD, 55334, SettingLevel::Basic);
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_INVERSE_TONE_MAPPING, 55291, SettingLevel::Basic, videoSettings.m_PlaceboColorMapInverseToneMapping);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_I, 55292, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeI, -1, 0, 1, 1024, 55292, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_C, 55293, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeC, -1, 0, 1, 1024, 55293, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_H, 55294, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeH, -1, 0, 1, 1024, 55294, usePopup);
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_TRICUBIC, 55295, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dTricubic);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT_SIZE, 55296, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLutSize, -1, 0, 1, 1024, 55296, usePopup);
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_SHOW_CLIPPING, 55297, SettingLevel::Basic, videoSettings.m_PlaceboColorMapShowClipping);
+	AddList(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_INTENT, 55298, SettingLevel::Basic, videoSettings.m_PlaceboColorMapIntent, CPLHelper::PlColorMapIntentOptionFiller, 55298);
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_FORCE_TONE_MAPPING_LUT, 55299, SettingLevel::Basic, videoSettings.m_PlaceboColorMapForceToneMappingLut);
+
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_LUT, 55277, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeLut);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X0, 55278, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectX0, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55278, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X1, 55279, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectX1, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55279, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y0, 55280, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectY0, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55280, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y1, 55281, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectY1, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55281, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_HUE, 55282, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeHue, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55282, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_THETA, 55283, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeTheta, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55283, usePopup);
+
+	// Tone mapping constants
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_EXPOSURE, 55266, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantExposure, "{0:4.1f}", (float)0.0, (float)0.1, (float)10.0, 55266, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_ADAPTATION, 55267, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeAdaptation, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55267, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_DEFAULT, 55268, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeDefault, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55268, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MAXIMUM, 55269, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeMaximum, "{0:4.2f}", (float)0.5, (float)0.01, (float)1.0, 55269, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MINIMUM, 55270, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeMinimum, "{0:4.2f}", (float)0.0, (float)0.01, (float)0.5, 55270, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_OFFSET, 55271, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeOffset, "{0:4.2f}", (float)0.5, (float)0.01, (float)2.0, 55271, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_LINEAR_KNEE, 55272, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantLinearKnee, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55272, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_REINHARD_CONTRAST, 55273, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantReinhardContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55273, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_OFFSET, 55274, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeOffset, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55274, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING, 55275, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeTuning, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55275, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST, 55276, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSplineContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.5, 55276, usePopup);
+
+	// Gamut mapping constants
+	AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA, 55286, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsColorimetricGamma, "{0:4.1f}", (float)0.0, (float)0.1, (float)10.0, 55286, usePopup);
+	AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE, 55287, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsPerceptualDeadzone, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55287, usePopup);
+	AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT, 55288, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsSoftclipDesat, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55288, usePopup);
+	AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_KNEE, 55289, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsSoftclipKnee, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55289, usePopup);
+
+	// Deband
+	AddToggle(groupDeband, SETTING_LIB_PLACEBO_DEBAND_ENABLED, 55237, SettingLevel::Basic, videoSettings.m_PlaceboDebandEnabled);
+	AddButton(groupDeband, SETTING_LIB_PLACEBO_DEBAND_LOAD_PRESET, 55245, SettingLevel::Basic);
+	AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_GRAIN, 55238, SettingLevel::Basic, videoSettings.m_PlaceboDebandGrain, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55238, usePopup);
+	AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL0, 55239, SettingLevel::Basic, videoSettings.m_PlaceboDebandGrainNeutral0, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55239, usePopup);
+	AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL1, 55240, SettingLevel::Basic, videoSettings.m_PlaceboDebandGrainNeutral1, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55240, usePopup);
+	AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_GRAIN_NEUTRAL2, 55241, SettingLevel::Basic, videoSettings.m_PlaceboDebandGrainNeutral2, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55241, usePopup);
+	AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_ITERATIONS, 55242, SettingLevel::Basic, videoSettings.m_PlaceboDebandIterations, -1, 0, 1, 16, 55242, usePopup);
+	AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_RADIUS, 55243, SettingLevel::Basic, videoSettings.m_PlaceboDebandRadius, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55243, usePopup);
+	AddSlider(groupDeband, SETTING_LIB_PLACEBO_DEBAND_THRESHOLD, 55244, SettingLevel::Basic, videoSettings.m_PlaceboDebandThreshold, "{0:4.0f}", (float)0.0, (float)1.0, (float)1000.0, 55244, usePopup);
+
+	// Deinterlace
+	AddToggle(groupDeinterlace, SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED, 55249, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceEnabled);
+	AddList(groupDeinterlace, SETTING_LIB_PLACEBO_DEINTERLACE_ALGO, 55250, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceAlgo, CPLHelper::PlDeinterlaceAlgoOptionFiller, 55250);
+	AddToggle(groupDeinterlace, SETTING_LIB_PLACEBO_DEINTERLACE_SKIP_SPATIAL_CHECK, 55251, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceSkipSpatialCheck);
+
+	// Sigmoid 
+	AddToggle(groupSigmoid, SETTING_LIB_PLACEBO_SIGMOID_ENABLED, 55252, SettingLevel::Basic, videoSettings.m_PlaceboSigmoidEnabled);
+	AddButton(groupSigmoid, SETTING_LIB_PLACEBO_SIGMOID_LOAD_PRESET_DEFAULT, 55255, SettingLevel::Basic);
+	AddSlider(groupSigmoid, SETTING_LIB_PLACEBO_SIGMOID_CENTER, 55253, SettingLevel::Basic, videoSettings.m_PlaceboSigmoidCenter, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55253, usePopup);
+	AddSlider(groupSigmoid, SETTING_LIB_PLACEBO_SIGMOID_SLOPE, 55254, SettingLevel::Basic, videoSettings.m_PlaceboSigmoidSlope, "{0:4.1f}", (float)1.0, (float)1.0, (float)20.0, 55254, usePopup);
+
+	// Cones 
+	AddToggle(groupCone, SETTING_LIB_PLACEBO_CONE_ENABLED, 55256, SettingLevel::Basic, videoSettings.m_PlaceboConeEnabled);
+	AddList(groupCone, SETTING_LIB_PLACEBO_CONE_CONES, 55258, SettingLevel::Basic, videoSettings.m_PlaceboConeCones, CPLHelper::PlConeConesOptionFiller, 55258);
+	AddSlider(groupCone, SETTING_LIB_PLACEBO_CONE_STRENGTH, 55259, SettingLevel::Basic, videoSettings.m_PlaceboConeStrength, "{0:5.2f}", (float)0.0, (float)0.01, (float)10.0, 55259, usePopup);
+
+	// Dither
+	AddToggle(groupDither, SETTING_LIB_PLACEBO_DITHER_ENABLED, 55260, SettingLevel::Basic, videoSettings.m_PlaceboDitherEnabled);
+	AddButton(groupDither, SETTING_LIB_PLACEBO_DITHER_LOAD_PRESET_DEFAULT, 55261, SettingLevel::Basic);
+	AddList(groupDither, SETTING_LIB_PLACEBO_DITHER_METHOD, 55262, SettingLevel::Basic, videoSettings.m_PlaceboDitherMethod, CPLHelper::PlDitherMethodOptionFiller, 55262);
+	AddSlider(groupDither, SETTING_LIB_PLACEBO_DITHER_LUT_SIZE, 55263, SettingLevel::Basic, videoSettings.m_PlaceboDitherLutSize, -1, 1, 1, 8, 55263, usePopup);
+	AddToggle(groupDither, SETTING_LIB_PLACEBO_DITHER_TEMPORAL, 55264, SettingLevel::Basic, videoSettings.m_PlaceboDitherTemporal);
+	AddList(groupDither, SETTING_LIB_PLACEBO_DITHER_TRANSFER, 55265, SettingLevel::Basic, videoSettings.m_PlaceboDitherTransfer, CPLHelper::PlDitherTransferOptionFiller, 55265);
+
+	AddList(groupLut, SETTING_LIB_PLACEBO_LUT_TYPE, 55330, SettingLevel::Basic, videoSettings.m_PlaceboLutType, CPLHelper::PlLutTypeOptionFiller, 55330);
+	AddList(groupLut, SETTING_LIB_PLACEBO_LUT_FILENAME, 55332, SettingLevel::Basic, videoSettings.m_PlaceboLutFilename, CPLHelper::PlLutOptionFiller, 55332);
+	AddSlider(groupMisc, SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH, 55300, SettingLevel::Basic, videoSettings.m_PlaceboAntiringingStrength, "{0:3.2f}", (float)0.0, (float)0.01, (float)1.0, 55300, usePopup);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_CORRECT_SUBPIXEL_OFFSET, 55301, SettingLevel::Basic, videoSettings.m_PlaceboCorrectSubpixelOffset);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_BUILTIN_SCALERS, 55302, SettingLevel::Basic, videoSettings.m_PlaceboDisableBuiltinScalers);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_DITHER_GAMMA_CORRECTION, 55303, SettingLevel::Basic, videoSettings.m_PlaceboDisableDitherGammaCorrection);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_LINEAR_SCALING, 55304, SettingLevel::Basic, videoSettings.m_PlaceboDisableLinearScaling);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DYNAMIC_CONSTANTS, 55305, SettingLevel::Basic, videoSettings.m_PlaceboDynamicConstant);
+	AddList(groupMisc, SETTING_LIB_PLACEBO_ERROR_DIFFUSION, 55306, SettingLevel::Basic, videoSettings.m_PlaceboErrorDiffusion, CPLHelper::PlDiffusionKernelOptionFiller, 55306);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_FORCE_DITHER, 55307, SettingLevel::Basic, videoSettings.m_PlaceboForceDither);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_FORCE_LOW_BIT_DEPTH_FBOS, 55308, SettingLevel::Basic, videoSettings.m_PlaceboForceLowBitDepthFbos);
+	// AddToggle(groupMisc, SETTING_LIB_PLACEBO_IGNORE_ICC_PROFILES,             55309, SettingLevel::Basic, videoSettings.m_PlaceboIgnoreIccProfiles); ignore_icc_profiles; // non-functional, just set pl_frame.icc to NULL
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_PRESERVE_MIXING_CACHE, 55310, SettingLevel::Basic, videoSettings.m_PlaceboPreserveMixingCache);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING, 55311, SettingLevel::Basic, videoSettings.m_PlaceboSkipAntiAliasing);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME, 55312, SettingLevel::Basic, videoSettings.m_PlaceboSkipCachingSingleFrame);
+
+
+
+	InitializeShaderMenu(videoSettings, category);
+	CreateGroup(groupShaderLoad, category);
+	AddToggle(groupShaderLoad, SETTING_LIB_PLACEBO_SHADER_APPLY, 55338, SettingLevel::Basic, videoSettings.m_PlaceboShaderApply);
+	AddButton(groupShaderLoad, SETTING_LIB_PLACEBO_SHADER_ADD, 55334, SettingLevel::Basic);
 
 
   }
@@ -2527,353 +1660,77 @@ void CGUIDialogVideoSettings::InitializeShaderMenu(CVideoSettings& vs, const std
 {
   for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); i++)
   {
-    std::string settingId;
-	const pl_hook* hook = vs.m_Shaders.m_Hooks[i].get();
-    CreateGroup(group, category);
+	std::string settingId;
+	const pl_hook* hook = vs.m_PlaceboShadersHooks.m_Hooks[i].get();
+	CreateGroup(group, category);
 
-    settingId = SETTING_LIB_PLACEBO_SHADER_ENABLED + StringUtils::Format("_{:02}", i);
-    AddToggle(group, settingId, "Shader: " + vs.m_Shaders.m_FileNames[i], SettingLevel::Basic, vs.m_PlaceboShadersEnabled[i]);
+	settingId = SETTING_LIB_PLACEBO_SHADER_ENABLED + StringUtils::Format("_{:02}", i);
+	AddToggle(group, settingId, "Shader: " + vs.m_PlaceboShadersHooks.m_FileNames[i], SettingLevel::Basic, vs.m_PlaceboShadersEnabled[i]);
 
-    settingId = SETTING_LIB_PLACEBO_SHADER_REMOVE + StringUtils::Format("_{:02}", i);
-    AddButton(group, settingId, 55335, SettingLevel::Basic);
+	settingId = SETTING_LIB_PLACEBO_SHADER_REMOVE + StringUtils::Format("_{:02}", i);
+	AddButton(group, settingId, 55335, SettingLevel::Basic);
 
-    settingId = SETTING_LIB_PLACEBO_SHADER_MOVE_UP + StringUtils::Format("_{:02}", i);
-    AddButton(group, settingId, 55336, SettingLevel::Basic);
+	settingId = SETTING_LIB_PLACEBO_SHADER_MOVE_UP + StringUtils::Format("_{:02}", i);
+	AddButton(group, settingId, 55336, SettingLevel::Basic);
 
-    settingId = SETTING_LIB_PLACEBO_SHADER_MOVE_DOWN + StringUtils::Format("_{:02}", i);
-    AddButton(group, settingId, 55337, SettingLevel::Basic);
-    for(int j=0; j< hook->num_parameters; j++)
-    {
-      std::string paramSettingId = SETTING_LIB_PLACEBO_SHADER_PARAM + StringUtils::Format("_{:02}_{:02}", i, j);
-      if(hook->parameters[j].type == PL_VAR_FLOAT)
-      {
-		std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
-		float min = hook->parameters[j].minimum.f;
-        float max = hook->parameters[j].maximum.f;
-		std::isfinite(min) ? min : min = 0.0; //cl hust use some value, it can easily be changed in the .glsl/.hook file instead of guessing here.
-        std::isfinite(max) ? max : max = min + 100.0; 
-        float step = (max-min)/100.0;
-        AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->f, "{0:8.3f}", min, step, max, true); //cl format
-      }
-      else if(hook->parameters[j].type == PL_VAR_SINT)
+	settingId = SETTING_LIB_PLACEBO_SHADER_MOVE_DOWN + StringUtils::Format("_{:02}", i);
+	AddButton(group, settingId, 55337, SettingLevel::Basic);
+	for (int j = 0; j < hook->num_parameters; j++)
+	{
+	  std::string paramSettingId = SETTING_LIB_PLACEBO_SHADER_PARAM + StringUtils::Format("_{:02}_{:02}", i, j);
+	  if (hook->parameters[j].type == PL_VAR_FLOAT)
 	  {
 		std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
-        int min = hook->parameters[j].minimum.i;
-        int max = hook->parameters[j].maximum.i;
-        std::isfinite(min) ? min : min = -50; 
-        std::isfinite(max) ? max : max = min + 100;
-        int step = (max - min) / 100;
+		float min = hook->parameters[j].minimum.f;
+		float max = hook->parameters[j].maximum.f;
+		std::isfinite(min) ? min : min = 0.0; //cl hust use some value, it can easily be changed in the .glsl/.hook file instead of guessing here.
+		std::isfinite(max) ? max : max = min + 100.0;
+		float step = (max - min) / 100.0;
+		AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->f, "{0:8.3f}", min, step, max, true); //cl format
+	  }
+	  else if (hook->parameters[j].type == PL_VAR_SINT)
+	  {
+		std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
+		int min = hook->parameters[j].minimum.i;
+		int max = hook->parameters[j].maximum.i;
+		std::isfinite(min) ? min : min = -50;
+		std::isfinite(max) ? max : max = min + 100;
+		int step = (max - min) / 100;
 		if (step < 1) step = 1;
-        AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->i, "", min, step, max, true);
+		AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->i, "", min, step, max, true);
 
-      }
-      else if (hook->parameters[j].type == PL_VAR_UINT)
-      {
-        std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
-        unsigned int min = hook->parameters[j].minimum.u;
-        unsigned int max = hook->parameters[j].maximum.u;
-        std::isfinite(min) ? min : min = 0;
-        std::isfinite(max) ? max : max = min + 100;
-        unsigned int step = (max - min) / 100;
-        if (step < 1) step = 1;
-        AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->u, "", (int)min, (int)step, (int)max, true);
-      }
-    }
-    
-    
+	  }
+	  else if (hook->parameters[j].type == PL_VAR_UINT)
+	  {
+		std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
+		unsigned int min = hook->parameters[j].minimum.u;
+		unsigned int max = hook->parameters[j].maximum.u;
+		std::isfinite(min) ? min : min = 0;
+		std::isfinite(max) ? max : max = min + 100;
+		unsigned int step = (max - min) / 100;
+		if (step < 1) step = 1;
+		AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->u, "", (int)min, (int)step, (int)max, true);
+	  }
+	}
+
+
   }
 }
 
 void CGUIDialogVideoSettings::AddVideoStreams(const std::shared_ptr<CSettingGroup>& group,
-                                              const std::string& settingId)
+  const std::string& settingId)
 {
   if (group == NULL || settingId.empty())
-    return;
+	return;
 
   auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
 
   m_videoStream = appPlayer->GetVideoStream();
   if (m_videoStream < 0)
-    m_videoStream = 0;
+	m_videoStream = 0;
 
   AddList(group, settingId, 38031, SettingLevel::Basic, m_videoStream, VideoStreamsOptionFiller, 38031);
-}
-
-std::string CGUIDialogVideoSettings::getDiffusionKernelDescriptionFromIndex(int index)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-
-  PlDiffusionKernelOptionFiller(asetting, alist, value);
-
-  if (index == -1)
-    return "disabled";
-  else if (index < 0 || index >= alist.size())
-    return "";
-  else
-    return alist[index].label;
-}
-
-std::string CGUIDialogVideoSettings::getDitherTransferDescriptionFromIndex(int index)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-
-  PlDitherTransferOptionFiller(asetting, alist, value);
-
-  if (index < 0 || index >= alist.size())
-    return "";
-  else
-    return alist[index].label;
-}
-
-std::string CGUIDialogVideoSettings::getDitherMethodDescriptionFromIndex(int index)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-
-  PlDitherMethodOptionFiller(asetting, alist, value);
-
-  if (index < 0 || index >= alist.size())
-    return "";
-  else
-    return alist[index].label;
-}
-
-std::string CGUIDialogVideoSettings::getLutTypeDescriptionFromIndex(int index)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-
-  PlLutTypeOptionFiller(asetting, alist, value);
-
-  if (index == -1)
-    return "disabled";
-  if (index < 0 || index >= alist.size())
-    return "disabled";
-  else
-    return alist[index].label;
-}
-
-
-std::string CGUIDialogVideoSettings::getDeinterlaceAlgoDescriptionFromIndex(int index)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-
-  PlDeinterlaceAlgoOptionFiller(asetting, alist, value);
-
-  if (index < 0 || index >= alist.size())
-    return "";
-  else
-    return alist[index].label;
-}
-
-
-std::string CGUIDialogVideoSettings::getConeConesDescriptionFromIndex(int index)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-
-  PlConeConesOptionFiller(asetting, alist, value);
-
-  if (index < 0 || index >= alist.size())
-    return "";
-  else
-    return alist[index].label;
-}
-
-std::string CGUIDialogVideoSettings::getColorMapIntentDescriptionFromIndex(int index)
-{
-  std::vector<IntegerSettingOption> alist;
-  int value;
-  const std::shared_ptr<const CSetting> asetting;
-
-  PlColorMapIntentOptionFiller(asetting, alist, value);
-
-  if (index+1 < 0 || index+1 >= alist.size())
-    return "";
-  else
-    return alist[index+1].label;
-}
-
-void CGUIDialogVideoSettings::PlLutOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<StringSettingOption>& list, std::string& current)
-{
-  CFileItemList items;
-  auto& components = CServiceBroker::GetAppComponents();
-  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-  CVideoSettings vs = appPlayer->GetVideoSettings();
-
-  std::string currentLut = vs.m_PlaceboLutFilename;
-  XFILE::CDirectory::GetDirectory("special://masterprofile/", items, ".cube", DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_NO_FILE_INFO);
-
-  for (int i = 0; i < items.Size(); i++)
-  {
-    if(items[i]->IsType(".cube"))
-      list.emplace_back(items[i]->GetLabel(), items[i]->GetPath());
-  }
-}
-
-void CGUIDialogVideoSettings::PlLutTypeOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  list.emplace_back("Disabled", -1);
-  list.emplace_back("Auto (unknown)", PL_LUT_UNKNOWN);
-  list.emplace_back("Raw RGB (native)", PL_LUT_NATIVE);
-  list.emplace_back("Linear RGB (normalized)", PL_LUT_NORMALIZED);
-  list.emplace_back("Gamut conversion (native)", PL_LUT_CONVERSION);
-}
-
-void CGUIDialogVideoSettings::PlDiffusionKernelOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-  {
-  const struct pl_error_diffusion_kernel* f;
-  list.emplace_back("Disabled", -1);
-  for (int i = 0; i < pl_num_error_diffusion_kernels; i++)
-    {
-      f = pl_error_diffusion_kernels[i];
-      if (f->description)
-        list.emplace_back(f->description, i);
-    }
-  }
-
-void CGUIDialogVideoSettings::PlColorMapIntentOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  list.emplace_back("Auto", PL_INTENT_AUTO);
-  list.emplace_back("Perceptual", PL_INTENT_PERCEPTUAL);
-  list.emplace_back("Relative colorimetric", PL_INTENT_RELATIVE_COLORIMETRIC);
-  list.emplace_back("Saturation", PL_INTENT_SATURATION);
-  list.emplace_back("Absolute colorimetric", PL_INTENT_ABSOLUTE_COLORIMETRIC);
-}
-
-void CGUIDialogVideoSettings::PlDitherMethodOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  list.emplace_back("Blue noise", PL_DITHER_BLUE_NOISE);
-  list.emplace_back("Ordered LUT", PL_DITHER_ORDERED_LUT);
-  list.emplace_back("Ordered fixed", PL_DITHER_ORDERED_FIXED);
-  list.emplace_back("White noise", PL_DITHER_WHITE_NOISE);
-}
-
-void CGUIDialogVideoSettings::PlDitherTransferOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  const struct pl_tone_map_function* f;
-  for (int i = 0; i < PL_COLOR_TRC_COUNT; i++)
-  {
-    if (pl_color_transfer_name(static_cast<pl_color_transfer>(i)))
-      list.emplace_back(pl_color_transfer_name(static_cast<pl_color_transfer>(i)), i);
-  }
-}
-
-void CGUIDialogVideoSettings::PlConeConesOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  list.emplace_back("None", PL_CONE_NONE);
-  list.emplace_back("L", PL_CONE_L);
-  list.emplace_back("M", PL_CONE_M);
-  list.emplace_back("S", PL_CONE_S);
-  list.emplace_back("LM", PL_CONE_L | PL_CONE_M);
-  list.emplace_back("MS", PL_CONE_M | PL_CONE_S);
-  list.emplace_back("LS", PL_CONE_L | PL_CONE_S);
-  list.emplace_back("LMS", PL_CONE_L | PL_CONE_M | PL_CONE_S);
-
-}
-
-void CGUIDialogVideoSettings::PlDeinterlaceAlgoOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  list.emplace_back("WEAVE", PL_DEINTERLACE_WEAVE);
-  list.emplace_back("BOB",   PL_DEINTERLACE_BOB);
-  list.emplace_back("YADIF", PL_DEINTERLACE_YADIF);
-  list.emplace_back("BWDIF", PL_DEINTERLACE_BWDIF);
-
-}
-
-void CGUIDialogVideoSettings::PlColorMapToneMapFunctionOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  const struct pl_tone_map_function* f;
-
-  list.emplace_back("Disabled", -1);
-  for (int i = 0; i < pl_num_tone_map_functions; i++)
-  {
-    std::string strItem;
-    f = pl_tone_map_functions[i];
-    if (f->description)
-      list.emplace_back(f->description, i);
-  }
-}
-
-void CGUIDialogVideoSettings::PlColorMapGamutMapFunctionOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  const struct pl_gamut_map_function* f;
-
-  list.emplace_back("Disabled", -1);
-  for (int i = 0; i < pl_num_gamut_map_functions; i++)
-  {
-    std::string strItem;
-    f = pl_gamut_map_functions[i];
-    if (f->description)
-      list.emplace_back(f->description, i);
-  }
-}
-
-void CGUIDialogVideoSettings::PlUpscalerOptionFiller(const std::shared_ptr<const CSetting>& setting,std::vector<IntegerSettingOption>& list, int& current)
-{
-  const struct pl_filter_config* f;
-  
-  list.emplace_back("Disabled", -1);
-  for (int i = 0; i < pl_num_filter_configs; i++)
-  {
-    std::string strItem;
-    f = pl_filter_configs[i];
-    if (!f->description)
-      continue;
-    if (!(f->allowed & PL_FILTER_UPSCALING))
-      continue;
-    if (!(f->recommended & PL_FILTER_UPSCALING))
-      continue;
-    list.emplace_back(f->description, i);
-  }
-}
-
-void CGUIDialogVideoSettings::PlDownscalerOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  const struct pl_filter_config* f;
-
-  list.emplace_back("Disabled", -1);
-  for (int i = 0; i < pl_num_filter_configs; i++)
-  {
-    std::string strItem;
-    f = pl_filter_configs[i];
-    if (!f->description)
-      continue;
-    if (!(f->allowed & PL_FILTER_DOWNSCALING))
-      continue;
-    if (!(f->recommended & PL_FILTER_DOWNSCALING))
-      continue;
-    list.emplace_back(f->description, i);
-  }
-}
-
-void CGUIDialogVideoSettings::PlFrameMixerOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
-{
-  const struct pl_filter_config* f;
-  
-  list.emplace_back("Disabled", -1);
-  for (int i = 0; i < pl_num_filter_configs; i++)
-  {
-    std::string strItem;
-    f = pl_filter_configs[i];
-    if (!f->description)
-      continue;
-    if (!(f->allowed & PL_FILTER_FRAME_MIXING))
-      continue;
-    if (!(f->recommended & PL_FILTER_FRAME_MIXING))
-      continue;
-    list.emplace_back(f->description, i);
-  }
 }
 
 
@@ -2881,9 +1738,9 @@ void CGUIDialogVideoSettings::PlFrameMixerOptionFiller(const std::shared_ptr<con
 
 
 void CGUIDialogVideoSettings::VideoStreamsOptionFiller(
-    const std::shared_ptr<const CSetting>& setting,
-    std::vector<IntegerSettingOption>& list,
-    int& current)
+  const std::shared_ptr<const CSetting>& setting,
+  std::vector<IntegerSettingOption>& list,
+  int& current)
 {
   const auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
@@ -2892,52 +1749,52 @@ void CGUIDialogVideoSettings::VideoStreamsOptionFiller(
   // cycle through each video stream and add it to our list control
   for (int i = 0; i < videoStreamCount; ++i)
   {
-    std::string strItem;
-    std::string strLanguage;
+	std::string strItem;
+	std::string strLanguage;
 
-    VideoStreamInfo info;
-    appPlayer->GetVideoStreamInfo(i, info);
+	VideoStreamInfo info;
+	appPlayer->GetVideoStreamInfo(i, info);
 
-    g_LangCodeExpander.Lookup(info.language, strLanguage);
+	g_LangCodeExpander.Lookup(info.language, strLanguage);
 
-    if (!info.name.empty())
-    {
-      if (!strLanguage.empty())
-        strItem = StringUtils::Format("{} - {}", strLanguage, info.name);
-      else
-        strItem = info.name;
-    }
-    else if (!strLanguage.empty())
-    {
-        strItem = strLanguage;
-    }
+	if (!info.name.empty())
+	{
+	  if (!strLanguage.empty())
+		strItem = StringUtils::Format("{} - {}", strLanguage, info.name);
+	  else
+		strItem = info.name;
+	}
+	else if (!strLanguage.empty())
+	{
+	  strItem = strLanguage;
+	}
 
-    if (info.codecName.empty())
-      strItem += StringUtils::Format(" ({}x{}", info.width, info.height);
-    else
-      strItem += StringUtils::Format(" ({}, {}x{}", info.codecName, info.width, info.height);
+	if (info.codecName.empty())
+	  strItem += StringUtils::Format(" ({}x{}", info.width, info.height);
+	else
+	  strItem += StringUtils::Format(" ({}, {}x{}", info.codecName, info.width, info.height);
 
-    if (info.bitrate)
-      strItem += StringUtils::Format(", {} bps)", info.bitrate);
-    else
-      strItem += ")";
+	if (info.bitrate)
+	  strItem += StringUtils::Format(", {} bps)", info.bitrate);
+	else
+	  strItem += ")";
 
-    strItem += FormatFlags(info.flags);
-    strItem += StringUtils::Format(" ({}/{})", i + 1, videoStreamCount);
-    list.emplace_back(strItem, i);
+	strItem += FormatFlags(info.flags);
+	strItem += StringUtils::Format(" ({}/{})", i + 1, videoStreamCount);
+	list.emplace_back(strItem, i);
   }
 
   if (list.empty())
   {
-    list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(231), -1);
-    current = -1;
+	list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(231), -1);
+	current = -1;
   }
 }
 
 void CGUIDialogVideoSettings::VideoOrientationFiller(
-    const std::shared_ptr<const CSetting>& /*setting*/,
-    std::vector<IntegerSettingOption>& list,
-    int& /*current*/)
+  const std::shared_ptr<const CSetting>& /*setting*/,
+  std::vector<IntegerSettingOption>& list,
+  int& /*current*/)
 {
   list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(687), 0);
   list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(35229), 90);
@@ -2949,142 +1806,23 @@ std::string CGUIDialogVideoSettings::FormatFlags(StreamFlags flags)
 {
   std::vector<std::string> localizedFlags;
   if (flags & StreamFlags::FLAG_DEFAULT)
-    localizedFlags.emplace_back(
-        CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(39105));
+	localizedFlags.emplace_back(
+	  CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(39105));
   if (flags & StreamFlags::FLAG_FORCED)
-    localizedFlags.emplace_back(
-        CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(39106));
+	localizedFlags.emplace_back(
+	  CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(39106));
   if (flags & StreamFlags::FLAG_HEARING_IMPAIRED)
-    localizedFlags.emplace_back(
-        CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(39107));
-  if (flags &  StreamFlags::FLAG_VISUAL_IMPAIRED)
-    localizedFlags.emplace_back(
-        CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(39108));
+	localizedFlags.emplace_back(
+	  CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(39107));
+  if (flags & StreamFlags::FLAG_VISUAL_IMPAIRED)
+	localizedFlags.emplace_back(
+	  CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(39108));
 
   std::string formated = StringUtils::Join(localizedFlags, ", ");
 
   if (!formated.empty())
-    formated = StringUtils::Format(" [{}]", formated);
+	formated = StringUtils::Format(" [{}]", formated);
 
   return formated;
 }
 
-/*
-// Deprecated, use pl_frame.icc
-videoSettings.m_placeboOptions->icc_params;
-videoSettings.m_placeboOptions->icc_params.cache->params;
-videoSettings.m_placeboOptions->icc_params.cache_load;
-videoSettings.m_placeboOptions->icc_params.cache_priv;
-videoSettings.m_placeboOptions->icc_params.cache_save;
-videoSettings.m_placeboOptions->icc_params.force_bpc;
-videoSettings.m_placeboOptions->icc_params.intent;
-videoSettings.m_placeboOptions->icc_params.max_luma;
-videoSettings.m_placeboOptions->icc_params.size_b;
-videoSettings.m_placeboOptions->icc_params.size_g;
-videoSettings.m_placeboOptions->icc_params.size_r;
-
-pl_icc_params is included in pl_icc_object which can be included in every pl_frame.icc
-struct pl_icc_params {
-    // The rendering intent to use, for profiles with multiple intents. A
-    // recommended value is PL_INTENT_RELATIVE_COLORIMETRIC for color-accurate
-    // video reproduction, or PL_INTENT_PERCEPTUAL for profiles containing
-    // meaningful perceptual mapping tables for some more suitable color space
-    // like BT.709.
-    //
-    // If this is set to the special value PL_INTENT_AUTO, will use the
-    // preferred intent provided by the profile header.
-    enum pl_rendering_intent intent;
-
-    // The size of the 3DLUT to generate. If left as NULL, these individually
-    // default to values appropriate for the profile. (Based on internal
-    // precision heuristics)
-    //
-    // Note: Setting this manually is strongly discouraged, as it can result
-    // in excessively high 3DLUT sizes where a much smaller LUT would have
-    // sufficed.
-    int size_r, size_g, size_b;
-
-    // This field can be used to override the detected brightness level of the
-    // ICC profile. If you set this to the special value 0 (or a negative
-    // number), libplacebo will attempt reading the brightness value from the
-    // ICC profile's tagging (if available), falling back to PL_COLOR_SDR_WHITE
-    // if unavailable.
-    float max_luma;
-
-    // Force black point compensation. May help avoid crushed or raised black
-    // points on "improper" profiles containing e.g. colorimetric tables that
-    // do not round-trip. Should not be required on well-behaved profiles,
-    // or when using PL_INTENT_PERCEPTUAL, but YMMV.
-    bool force_bpc;
-
-    // If provided, this pl_cache instance will be used, instead of the
-    // GPU-internal cache, to cache the generated 3DLUTs. Note that these can
-    // get large, especially for large values of size_{r,g,b}, so the user may
-    // wish to split this cache off from the main shader cache. (Optional)
-    pl_cache cache;
-};
- */
-
- /* Available options leftover from structure
- *
- //upscaler/downscaler/frame_mixer/plane upscaler/plane downscaler have a list of preset filters but using the "custom" filter, the values can be set individiually
- videoSettings.m_placeboOptions->upscaler;
- videoSettings.m_placeboOptions->upscaler.allowed;
- videoSettings.m_placeboOptions->upscaler.antiring;
- videoSettings.m_placeboOptions->upscaler.blur;
- videoSettings.m_placeboOptions->upscaler.clamp;
- videoSettings.m_placeboOptions->upscaler.description;
- videoSettings.m_placeboOptions->upscaler.kernel; ///
- videoSettings.m_placeboOptions->upscaler.name;
- videoSettings.m_placeboOptions->upscaler.params;
- videoSettings.m_placeboOptions->upscaler.polar;
- videoSettings.m_placeboOptions->upscaler.radius;
- videoSettings.m_placeboOptions->upscaler.recommended;
- videoSettings.m_placeboOptions->upscaler.taper;
- videoSettings.m_placeboOptions->upscaler.window; ///
- videoSettings.m_placeboOptions->upscaler.wparams;
-
- // More for kodi integration
- videoSettings.m_placeboOptions->params.background;                  // no
- videoSettings.m_placeboOptions->params.background_color;            // no
- videoSettings.m_placeboOptions->params.background_transparency;     // no
- videoSettings.m_placeboOptions->params.blend_against_tiles;         // no
- videoSettings.m_placeboOptions->params.blur_radius;                 // no
- videoSettings.m_placeboOptions->params.border;                      // no
- videoSettings.m_placeboOptions->params.corner_rounding;             // no
- videoSettings.m_placeboOptions->params.disable_fbos;                // no
- videoSettings.m_placeboOptions->params.hooks;                       // no
- videoSettings.m_placeboOptions->params.info_callback;               // allows gathering stats on shader usage, cache usage, etc. not really useful for end-users but could be used for debugging or advanced users
- videoSettings.m_placeboOptions->params.info_priv;                   // "
- videoSettings.m_placeboOptions->params.num_hooks;                   // no
- videoSettings.m_placeboOptions->params.tile_colors;                 // no
- videoSettings.m_placeboOptions->params.tile_size;                   // no
- videoSettings.m_placeboOptions->params.polar_cutoff;                // deprecated // hard-coded as 1e-3
- videoSettings.m_placeboOptions->params.allow_delayed_peak_detect;   //deprecated
- videoSettings.m_placeboOptions->params.skip_target_clearing;        //deprecated
- videoSettings.m_placeboOptions->color_map_params.tone_mapping_crosstalk; // deprecated, now hard-coded as 0.04
- videoSettings.m_placeboOptions->color_map_params.tone_mapping_mode;      // deprecated
- videoSettings.m_placeboOptions->color_map_params.tone_mapping_param;     // deprecated
- videoSettings.m_placeboOptions->color_map_params.hybrid_mix;             // deprecated
-
- // More for kodi integration
- videoSettings.m_placeboOptions->color_map_params.metadata;               // {"any",  PL_HDR_METADATA_ANY},{"none", PL_HDR_METADATA_NONE},{"hdr10",PL_HDR_METADATA_HDR10},{"hdr10plus", PL_HDR_METADATA_HDR10PLUS},{"cie_y",PL_HDR_METADATA_CIE_Y})),
-
- // More for kodi integration
- videoSettings.m_placeboOptions->blend_params;
- videoSettings.m_placeboOptions->blend_params.dst_alpha;
- videoSettings.m_placeboOptions->blend_params.dst_rgb;
- videoSettings.m_placeboOptions->blend_params.src_alpha;
- videoSettings.m_placeboOptions->blend_params.src_rgb;
-
- // More for kodi integration
- videoSettings.m_placeboOptions->distort_params;
- videoSettings.m_placeboOptions->distort_params.address_mode;
- videoSettings.m_placeboOptions->distort_params.alpha_mode;
- videoSettings.m_placeboOptions->distort_params.bicubic;
- videoSettings.m_placeboOptions->distort_params.constrain;
- videoSettings.m_placeboOptions->distort_params.transform;
- videoSettings.m_placeboOptions->distort_params.transform.c;
- videoSettings.m_placeboOptions->distort_params.transform.mat;
- videoSettings.m_placeboOptions->distort_params.unscaled;
-   */

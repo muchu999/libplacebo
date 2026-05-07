@@ -8,36 +8,41 @@
 
 #pragma once
 
-#include "utils/Map.h"
-#include "libplacebo/options.h"
-#include "libplacebo/gpu.h"
 #include "..\VideoPlayer\VideoRenderers\LibPlacebo\PlOptionsWrapper.h"
+#include "libplacebo/gpu.h"
+#include "utils/Map.h"
 
-#include <string_view>
 #include <memory>
+#include <string_view>
 #include <variant>
 
+#include <fmt/base.h>
 #include <fmt/format.h>
+#include <libplacebo/shaders/custom.h>
+#include <libplacebo/shaders/lut.h>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
-// VideoSettings.h: interface for the CVideoSettings class.
-//
-//////////////////////////////////////////////////////////////////////
+ // VideoSettings.h: interface for the CVideoSettings class.
+ //
+ //////////////////////////////////////////////////////////////////////
 
 enum EINTERLACEMETHOD
 {
-  VS_INTERLACEMETHOD_NONE=0,
-  VS_INTERLACEMETHOD_AUTO=1,
-  VS_INTERLACEMETHOD_RENDER_BLEND=2,
-  VS_INTERLACEMETHOD_RENDER_WEAVE=4,
-  VS_INTERLACEMETHOD_RENDER_BOB=6,
-  VS_INTERLACEMETHOD_DEINTERLACE=7,
-  VS_INTERLACEMETHOD_VDPAU_BOB=8,
-  VS_INTERLACEMETHOD_VDPAU_INVERSE_TELECINE=11,
-  VS_INTERLACEMETHOD_VDPAU_TEMPORAL=12,
-  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF=13,
-  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL=14,
-  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF=15,
-  VS_INTERLACEMETHOD_DEINTERLACE_HALF=16,
+  VS_INTERLACEMETHOD_NONE = 0,
+  VS_INTERLACEMETHOD_AUTO = 1,
+  VS_INTERLACEMETHOD_RENDER_BLEND = 2,
+  VS_INTERLACEMETHOD_RENDER_WEAVE = 4,
+  VS_INTERLACEMETHOD_RENDER_BOB = 6,
+  VS_INTERLACEMETHOD_DEINTERLACE = 7,
+  VS_INTERLACEMETHOD_VDPAU_BOB = 8,
+  VS_INTERLACEMETHOD_VDPAU_INVERSE_TELECINE = 11,
+  VS_INTERLACEMETHOD_VDPAU_TEMPORAL = 12,
+  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF = 13,
+  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL = 14,
+  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF = 15,
+  VS_INTERLACEMETHOD_DEINTERLACE_HALF = 16,
   VS_INTERLACEMETHOD_VAAPI_BOB = 22,
   VS_INTERLACEMETHOD_VAAPI_MADI = 23,
   VS_INTERLACEMETHOD_VAAPI_MACI = 24,
@@ -51,38 +56,38 @@ struct fmt::formatter<EINTERLACEMETHOD> : fmt::formatter<std::string_view>
   template<typename FormatContext>
   constexpr auto format(const EINTERLACEMETHOD& interlaceMethod, FormatContext& ctx)
   {
-    const auto it = interlaceMethodMap.find(interlaceMethod);
-    if (it == interlaceMethodMap.cend())
-      throw std::range_error("no interlace method string found");
+	const auto it = interlaceMethodMap.find(interlaceMethod);
+	if (it == interlaceMethodMap.cend())
+	  throw std::range_error("no interlace method string found");
 
-    return fmt::formatter<string_view>::format(it->second, ctx);
+	return fmt::formatter<string_view>::format(it->second, ctx);
   }
 
 private:
   static constexpr auto interlaceMethodMap = make_map<EINTERLACEMETHOD, std::string_view>({
-      {VS_INTERLACEMETHOD_NONE, "none"},
-      {VS_INTERLACEMETHOD_AUTO, "auto"},
-      {VS_INTERLACEMETHOD_RENDER_BLEND, "render blend"},
-      {VS_INTERLACEMETHOD_RENDER_WEAVE, "render weave"},
-      {VS_INTERLACEMETHOD_RENDER_BOB, "render bob"},
-      {VS_INTERLACEMETHOD_DEINTERLACE, "deinterlace"},
-      {VS_INTERLACEMETHOD_VDPAU_BOB, "vdpau bob"},
-      {VS_INTERLACEMETHOD_VDPAU_INVERSE_TELECINE, "vdpau inverse telecine"},
-      {VS_INTERLACEMETHOD_VDPAU_TEMPORAL, "vdpau temporal"},
-      {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF, "vdpau temporal half"},
-      {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL, "vdpau temporal spatial"},
-      {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF, "vdpau temporal spatial half"},
-      {VS_INTERLACEMETHOD_DEINTERLACE_HALF, "deinterlace half"},
-      {VS_INTERLACEMETHOD_VAAPI_BOB, "vaapi bob"},
-      {VS_INTERLACEMETHOD_VAAPI_MADI, "vaapi madi"},
-      {VS_INTERLACEMETHOD_VAAPI_MACI, "vaapi maci"},
-      {VS_INTERLACEMETHOD_DXVA_AUTO, "dxva auto"},
-  });
+	  {VS_INTERLACEMETHOD_NONE, "none"},
+	  {VS_INTERLACEMETHOD_AUTO, "auto"},
+	  {VS_INTERLACEMETHOD_RENDER_BLEND, "render blend"},
+	  {VS_INTERLACEMETHOD_RENDER_WEAVE, "render weave"},
+	  {VS_INTERLACEMETHOD_RENDER_BOB, "render bob"},
+	  {VS_INTERLACEMETHOD_DEINTERLACE, "deinterlace"},
+	  {VS_INTERLACEMETHOD_VDPAU_BOB, "vdpau bob"},
+	  {VS_INTERLACEMETHOD_VDPAU_INVERSE_TELECINE, "vdpau inverse telecine"},
+	  {VS_INTERLACEMETHOD_VDPAU_TEMPORAL, "vdpau temporal"},
+	  {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF, "vdpau temporal half"},
+	  {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL, "vdpau temporal spatial"},
+	  {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF, "vdpau temporal spatial half"},
+	  {VS_INTERLACEMETHOD_DEINTERLACE_HALF, "deinterlace half"},
+	  {VS_INTERLACEMETHOD_VAAPI_BOB, "vaapi bob"},
+	  {VS_INTERLACEMETHOD_VAAPI_MADI, "vaapi madi"},
+	  {VS_INTERLACEMETHOD_VAAPI_MACI, "vaapi maci"},
+	  {VS_INTERLACEMETHOD_DXVA_AUTO, "dxva auto"},
+	});
 };
 
 enum ESCALINGMETHOD
 {
-  VS_SCALINGMETHOD_NEAREST=0,
+  VS_SCALINGMETHOD_NEAREST = 0,
   VS_SCALINGMETHOD_LINEAR,
   VS_SCALINGMETHOD_CUBIC_B_SPLINE,
   VS_SCALINGMETHOD_CUBIC_MITCHELL,
@@ -111,39 +116,39 @@ public:
   template<typename FormatContext>
   constexpr auto format(const ESCALINGMETHOD& scalingMethod, FormatContext& ctx)
   {
-    const auto it = scalingMethodMap.find(scalingMethod);
-    if (it == scalingMethodMap.cend())
-      throw std::range_error("no scaling method string found");
+	const auto it = scalingMethodMap.find(scalingMethod);
+	if (it == scalingMethodMap.cend())
+	  throw std::range_error("no scaling method string found");
 
-    return fmt::formatter<string_view>::format(it->second, ctx);
+	return fmt::formatter<string_view>::format(it->second, ctx);
   }
 
 private:
   static constexpr auto scalingMethodMap = make_map<ESCALINGMETHOD, std::string_view>({
-      {VS_SCALINGMETHOD_NEAREST, "nearest neighbour"},
-      {VS_SCALINGMETHOD_LINEAR, "linear"},
-      {VS_SCALINGMETHOD_CUBIC_B_SPLINE, "cubic b spline"},
-      {VS_SCALINGMETHOD_CUBIC_MITCHELL, "cubic mitchell"},
-      {VS_SCALINGMETHOD_CUBIC_CATMULL, "cubic catmull"},
-      {VS_SCALINGMETHOD_CUBIC_0_075, "cubic 0/075"},
-      {VS_SCALINGMETHOD_CUBIC_0_1, "cubic 0/1"},
-      {VS_SCALINGMETHOD_LANCZOS2, "lanczos2"},
-      {VS_SCALINGMETHOD_LANCZOS3_FAST, "lanczos3 fast"},
-      {VS_SCALINGMETHOD_LANCZOS3, "lanczos3"},
-      {VS_SCALINGMETHOD_SINC8, "sinc8"},
-      {VS_SCALINGMETHOD_BICUBIC_SOFTWARE, "bicubic software"},
-      {VS_SCALINGMETHOD_LANCZOS_SOFTWARE, "lanczos software"},
-      {VS_SCALINGMETHOD_SINC_SOFTWARE, "sinc software"},
-      {VS_SCALINGMETHOD_VDPAU_HARDWARE, "vdpau"},
-      {VS_SCALINGMETHOD_DXVA_HARDWARE, "dxva"},
-      {VS_SCALINGMETHOD_AUTO, "auto"},
-      {VS_SCALINGMETHOD_SPLINE36_FAST, "spline32 fast"},
-      {VS_SCALINGMETHOD_SPLINE36, "spline32"},
-  });
+	  {VS_SCALINGMETHOD_NEAREST, "nearest neighbour"},
+	  {VS_SCALINGMETHOD_LINEAR, "linear"},
+	  {VS_SCALINGMETHOD_CUBIC_B_SPLINE, "cubic b spline"},
+	  {VS_SCALINGMETHOD_CUBIC_MITCHELL, "cubic mitchell"},
+	  {VS_SCALINGMETHOD_CUBIC_CATMULL, "cubic catmull"},
+	  {VS_SCALINGMETHOD_CUBIC_0_075, "cubic 0/075"},
+	  {VS_SCALINGMETHOD_CUBIC_0_1, "cubic 0/1"},
+	  {VS_SCALINGMETHOD_LANCZOS2, "lanczos2"},
+	  {VS_SCALINGMETHOD_LANCZOS3_FAST, "lanczos3 fast"},
+	  {VS_SCALINGMETHOD_LANCZOS3, "lanczos3"},
+	  {VS_SCALINGMETHOD_SINC8, "sinc8"},
+	  {VS_SCALINGMETHOD_BICUBIC_SOFTWARE, "bicubic software"},
+	  {VS_SCALINGMETHOD_LANCZOS_SOFTWARE, "lanczos software"},
+	  {VS_SCALINGMETHOD_SINC_SOFTWARE, "sinc software"},
+	  {VS_SCALINGMETHOD_VDPAU_HARDWARE, "vdpau"},
+	  {VS_SCALINGMETHOD_DXVA_HARDWARE, "dxva"},
+	  {VS_SCALINGMETHOD_AUTO, "auto"},
+	  {VS_SCALINGMETHOD_SPLINE36_FAST, "spline32 fast"},
+	  {VS_SCALINGMETHOD_SPLINE36, "spline32"},
+	});
 
   static_assert(VS_SCALINGMETHOD_MAX == scalingMethodMap.size(),
-                "scalingMethodMap doesn't match the size of ESCALINGMETHOD, did you forget to "
-                "add/remove a mapping?");
+	"scalingMethodMap doesn't match the size of ESCALINGMETHOD, did you forget to "
+	"add/remove a mapping?");
 };
 
 enum ETONEMAPMETHOD
@@ -162,24 +167,24 @@ public:
   template<typename FormatContext>
   constexpr auto format(const ETONEMAPMETHOD& tonemapMethod, FormatContext& ctx)
   {
-    const auto it = tonemapMethodMap.find(tonemapMethod);
-    if (it == tonemapMethodMap.cend())
-      throw std::range_error("no tonemap method string found");
+	const auto it = tonemapMethodMap.find(tonemapMethod);
+	if (it == tonemapMethodMap.cend())
+	  throw std::range_error("no tonemap method string found");
 
-    return fmt::formatter<string_view>::format(it->second, ctx);
+	return fmt::formatter<string_view>::format(it->second, ctx);
   }
 
 private:
   static constexpr auto tonemapMethodMap = make_map<ETONEMAPMETHOD, std::string_view>({
-      {VS_TONEMAPMETHOD_OFF, "off"},
-      {VS_TONEMAPMETHOD_REINHARD, "reinhard"},
-      {VS_TONEMAPMETHOD_ACES, "aces"},
-      {VS_TONEMAPMETHOD_HABLE, "hable"},
-  });
+	  {VS_TONEMAPMETHOD_OFF, "off"},
+	  {VS_TONEMAPMETHOD_REINHARD, "reinhard"},
+	  {VS_TONEMAPMETHOD_ACES, "aces"},
+	  {VS_TONEMAPMETHOD_HABLE, "hable"},
+	});
 
   static_assert(VS_TONEMAPMETHOD_MAX == tonemapMethodMap.size(),
-                "tonemapMethodMap doesn't match the size of ETONEMAPMETHOD, did you forget to "
-                "add/remove a mapping?");
+	"tonemapMethodMap doesn't match the size of ETONEMAPMETHOD, did you forget to "
+	"add/remove a mapping?");
 };
 
 enum ViewMode
@@ -199,39 +204,46 @@ enum ViewMode
 class CPlaceboShaders
 {
 public:
+  CPlaceboShaders() = default;
+  ~CPlaceboShaders() = default;
   std::vector<std::shared_ptr<const pl_hook>> m_Hooks = {};
   std::vector<std::string> m_FileNames = {};
   std::vector<bool> m_Valid = {};
+  bool m_bInit = false;
+
+  void clear(void)
+  {
+	m_Hooks.clear();
+	m_FileNames.clear();
+	m_Valid.clear();
+	m_bInit = false;
+  }
+
   CPlaceboShaders& operator=(const CPlaceboShaders& other)
   {
-    if (this != &other)
-    {
-      m_FileNames = other.m_FileNames;
-      m_Valid = other.m_Valid;
-      m_Hooks = other.m_Hooks;
-    }
-    return *this;
+	if (this != &other)
+	{
+	  m_FileNames = other.m_FileNames;
+	  m_Valid = other.m_Valid;
+	  m_Hooks = other.m_Hooks;
+	  m_bInit = other.m_bInit;
+	}
+	return *this;
   }
 
 
   size_t size() const { return m_FileNames.size(); }
-  void clear(void)
-  {
-    m_Hooks.clear();     
-    m_FileNames.clear();
-    m_Valid.clear();
-  };
-  //void emplace_back(const pl_hook* Hook, std::string FileName, bool Valid)
+
   void emplace_back(const std::shared_ptr<const pl_hook>& Hook, std::string FileName, bool Valid)
   {
-    m_Hooks.emplace_back(Hook);
-    m_FileNames.emplace_back(FileName);
-    m_Valid.emplace_back(Valid);
+	m_Hooks.emplace_back(Hook);
+	m_FileNames.emplace_back(FileName);
+	m_Valid.emplace_back(Valid);
   }
   void erase(int index)
   {
-    m_Hooks.erase(m_Hooks.begin() + index);
-    m_FileNames.erase(m_FileNames.begin() + index);
+	m_Hooks.erase(m_Hooks.begin() + index);
+	m_FileNames.erase(m_FileNames.begin() + index);
 	m_Valid.erase(m_Valid.begin() + index);
   }
 };
@@ -252,31 +264,31 @@ public:
 
   bool operator == (const CShaderParam& other) const
   {
-    if ((this->m_Name == other.m_Name) && ((int)this->m_Type == (int)other.m_Type) && (this->m_Value == other.m_Value))
-    {
-      return true;
-    }
-    return false;
+	if ((this->m_Name == other.m_Name) && ((int)this->m_Type == (int)other.m_Type) && (this->m_Value == other.m_Value))
+	{
+	  return true;
+	}
+	return false;
   }
   bool operator != (const CShaderParam& other) const
   {
-    if ((this->m_Name == other.m_Name) && ((int)this->m_Type == (int)other.m_Type) && (this->m_Value == other.m_Value))
-    {
-      return false;
-    }
-    return true;
+	if ((this->m_Name == other.m_Name) && ((int)this->m_Type == (int)other.m_Type) && (this->m_Value == other.m_Value))
+	{
+	  return false;
+	}
+	return true;
   }
   void emplace_back(std::string Name, pl_var_type Type, std::variant<float, int, unsigned int> Value)
   {
-    m_Name = Name;
-    m_Type = Type;
-    m_Value = Value;
+	m_Name = Name;
+	m_Type = Type;
+	m_Value = Value;
   }
   void clear(void)
   {
-    m_Name.clear();
-    m_Type = PL_VAR_SINT;
-    m_Value = 0;
+	m_Name.clear();
+	m_Type = PL_VAR_SINT;
+	m_Value = 0;
   }
 };
 
@@ -287,13 +299,13 @@ class CVideoSettings
 public:
   CVideoSettings();
   ~CVideoSettings();
-  CVideoSettings(const CVideoSettings&  other);
+  CVideoSettings(const CVideoSettings& other);
   CVideoSettings& operator=(const CVideoSettings& other);
   void copy(const CVideoSettings& other);
 
 
 
-  bool operator!=(const CVideoSettings &right) const;
+  bool operator!=(const CVideoSettings& right) const;
 
   EINTERLACEMETHOD m_InterlaceMethod;
   ESCALINGMETHOD m_ScalingMethod;
@@ -306,8 +318,8 @@ public:
   float m_VolumeAmplification;
   int m_SubtitleStream;
   float m_SubtitleDelay;
-  int m_subtitleVerticalPosition{0};
-  bool m_subtitleVerticalPositionSave{false};
+  int m_subtitleVerticalPosition{ 0 };
+  bool m_subtitleVerticalPositionSave{ false };
   bool m_SubtitleOn;
   float m_Brightness;
   float m_Contrast;
@@ -332,7 +344,8 @@ public:
   float m_PlaceboDisplayPeakLuminance;
   int m_PlaceboTargetColorspaceHint;
   int m_PlaceboTargetColorspaceHintMode;
-  
+  bool m_PlaceboShaderApply;
+
   bool m_PlaceboColorAdjustmentEnabled;
   float m_PlaceboSaturation;
   float m_PlaceboHue;
@@ -436,24 +449,24 @@ public:
   bool m_PlaceboSkipAntiAliasing;
   bool m_PlaceboSkipCachingSingleFrame;
 
-  static constexpr std::size_t MAX_NUMBER_OF_SHADERS = 16;
+  //static constexpr std::size_t MAX_NUMBER_OF_SHADERS = 16;
   std::vector<bool> m_PlaceboShadersEnabled;
   std::vector<std::string> m_PlaceboShadersFilename;
   std::vector<std::vector<CShaderParam>> m_PlaceboShadersParams;
-  CPlaceboShaders m_Shaders;
+  CPlaceboShaders m_PlaceboShadersHooks;
 
-  PlOptionsWrapper *m_placeboOptions;
+  PlOptionsWrapper* m_placeboOptions;
 };
 
 class CCriticalSection;
 class CVideoSettingsLocked
 {
 public:
-  CVideoSettingsLocked(CVideoSettings &vs, CCriticalSection &critSection);
+  CVideoSettingsLocked(CVideoSettings& vs, CCriticalSection& critSection);
   virtual ~CVideoSettingsLocked() = default;
 
-  CVideoSettingsLocked(CVideoSettingsLocked const &) = delete;
-  void operator=(CVideoSettingsLocked const &x) = delete;
+  CVideoSettingsLocked(CVideoSettingsLocked const&) = delete;
+  void operator=(CVideoSettingsLocked const& x) = delete;
 
   void SetSubtitleStream(int stream);
   void SetSubtitleVisible(bool visible);
@@ -474,6 +487,6 @@ public:
   void SetVolumeAmplification(float amp);
 
 protected:
-  CVideoSettings &m_videoSettings;
-  CCriticalSection &m_critSection;
+  CVideoSettings& m_videoSettings;
+  CCriticalSection& m_critSection;
 };
