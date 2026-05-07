@@ -211,7 +211,7 @@ bool CMediaSettings::Save(TiXmlNode *settings) const
   XMLUtils::SetInt(pNode, "tonemapmethod", m_defaultVideoSettings.m_ToneMapMethod);
   XMLUtils::SetFloat(pNode, "tonemapparam", m_defaultVideoSettings.m_ToneMapParam);
 
-  CGUIDialogVideoSettings::SaveLibplaceboSettings(m_defaultVideoSettings, pNode);
+  CPLHelper::SaveLibplaceboSettings(m_defaultVideoSettings, pNode);
 
   // default audio settings for dsp addons
   TiXmlElement audioSettingsNode("defaultaudiosettings");
