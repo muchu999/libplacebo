@@ -221,6 +221,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_SHADER_ENABLED                      "video.libplacebo.shader_enabled"
 #define SETTING_LIB_PLACEBO_SHADER_PARAM                        "video.libplacebo.shader_param"
 #define SETTING_LIB_PLACEBO_SHADER_APPLY                        "video.libplacebo.shader_apply"
+#define SETTING_LIB_PLACEBO_SHADER_INVALID                      "video.libplacebo.shader_invalid"
 
 
 #define CreateGroup(thegroup,thecategory) std::shared_ptr<CSettingGroup> thegroup = AddGroup(thecategory); if (thegroup == NULL) {CLog::Log(LOGERROR, "CGUIDialogLibplacebo: unable to setup settings");  return; }
@@ -1661,11 +1662,17 @@ void CGUIDialogVideoSettings::InitializeShaderMenu(CVideoSettings& vs, const std
   for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); i++)
   {
 	std::string settingId;
-	const pl_hook* hook = vs.m_PlaceboShadersHooks.m_Hooks[i].get();
-	CreateGroup(group, category);
-
-	settingId = SETTING_LIB_PLACEBO_SHADER_ENABLED + StringUtils::Format("_{:02}", i);
-	AddToggle(group, settingId, "Shader: " + vs.m_PlaceboShadersHooks.m_FileNames[i], SettingLevel::Basic, vs.m_PlaceboShadersEnabled[i]);
+    CreateGroup(group, category);
+	if (!vs.m_PlaceboShadersHooks.m_Valid[i])
+	{
+	  //cl Eventually need to give some feedback even if menu is not open, popup???
+	  AddInfoLabelButton(group, SETTING_LIB_PLACEBO_SHADER_INVALID, 55341, SettingLevel::Basic, vs.m_PlaceboShadersHooks.m_FileNames[i]);
+	}
+	else
+	{
+	  settingId = SETTING_LIB_PLACEBO_SHADER_ENABLED + StringUtils::Format("_{:02}", i);
+	  AddToggle(group, settingId, "Shader: " + vs.m_PlaceboShadersHooks.m_FileNames[i], SettingLevel::Basic, vs.m_PlaceboShadersEnabled[i]);
+	}
 
 	settingId = SETTING_LIB_PLACEBO_SHADER_REMOVE + StringUtils::Format("_{:02}", i);
 	AddButton(group, settingId, 55335, SettingLevel::Basic);
@@ -1675,45 +1682,49 @@ void CGUIDialogVideoSettings::InitializeShaderMenu(CVideoSettings& vs, const std
 
 	settingId = SETTING_LIB_PLACEBO_SHADER_MOVE_DOWN + StringUtils::Format("_{:02}", i);
 	AddButton(group, settingId, 55337, SettingLevel::Basic);
-	for (int j = 0; j < hook->num_parameters; j++)
-	{
-	  std::string paramSettingId = SETTING_LIB_PLACEBO_SHADER_PARAM + StringUtils::Format("_{:02}_{:02}", i, j);
-	  if (hook->parameters[j].type == PL_VAR_FLOAT)
-	  {
-		std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
-		float min = hook->parameters[j].minimum.f;
-		float max = hook->parameters[j].maximum.f;
-		std::isfinite(min) ? min : min = 0.0; //cl hust use some value, it can easily be changed in the .glsl/.hook file instead of guessing here.
-		std::isfinite(max) ? max : max = min + 100.0;
-		float step = (max - min) / 100.0;
-		AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->f, "{0:8.3f}", min, step, max, true); //cl format
-	  }
-	  else if (hook->parameters[j].type == PL_VAR_SINT)
-	  {
-		std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
-		int min = hook->parameters[j].minimum.i;
-		int max = hook->parameters[j].maximum.i;
-		std::isfinite(min) ? min : min = -50;
-		std::isfinite(max) ? max : max = min + 100;
-		int step = (max - min) / 100;
-		if (step < 1) step = 1;
-		AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->i, "", min, step, max, true);
 
-	  }
-	  else if (hook->parameters[j].type == PL_VAR_UINT)
+
+    if(vs.m_PlaceboShadersHooks.m_Valid[i])
+	{
+	  const pl_hook* hook = vs.m_PlaceboShadersHooks.m_Hooks[i].get();
+	  for (int j = 0; j < hook->num_parameters; j++)
 	  {
-		std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
-		unsigned int min = hook->parameters[j].minimum.u;
-		unsigned int max = hook->parameters[j].maximum.u;
-		std::isfinite(min) ? min : min = 0;
-		std::isfinite(max) ? max : max = min + 100;
-		unsigned int step = (max - min) / 100;
-		if (step < 1) step = 1;
-		AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->u, "", (int)min, (int)step, (int)max, true);
+		std::string paramSettingId = SETTING_LIB_PLACEBO_SHADER_PARAM + StringUtils::Format("_{:02}_{:02}", i, j);
+		if (hook->parameters[j].type == PL_VAR_FLOAT)
+		{
+		  std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
+		  float min = hook->parameters[j].minimum.f;
+		  float max = hook->parameters[j].maximum.f;
+		  std::isfinite(min) ? min : min = 0.0; //cl hust use some value, it can easily be changed in the .glsl/.hook file instead of guessing here.
+		  std::isfinite(max) ? max : max = min + 100.0;
+		  float step = (max - min) / 100.0;
+		  AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->f, "{0:8.3f}", min, step, max, true); //cl format
+		}
+		else if (hook->parameters[j].type == PL_VAR_SINT)
+		{
+		  std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
+		  int min = hook->parameters[j].minimum.i;
+		  int max = hook->parameters[j].maximum.i;
+		  std::isfinite(min) ? min : min = -50;
+		  std::isfinite(max) ? max : max = min + 100;
+		  int step = (max - min) / 100;
+		  if (step < 1) step = 1;
+		  AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->i, "", min, step, max, true);
+
+		}
+		else if (hook->parameters[j].type == PL_VAR_UINT)
+		{
+		  std::string name = hook->parameters[j].name == nullptr ? "" : hook->parameters[j].name;
+		  unsigned int min = hook->parameters[j].minimum.u;
+		  unsigned int max = hook->parameters[j].maximum.u;
+		  std::isfinite(min) ? min : min = 0;
+		  std::isfinite(max) ? max : max = min + 100;
+		  unsigned int step = (max - min) / 100;
+		  if (step < 1) step = 1;
+		  AddSlider(group, paramSettingId, name, SettingLevel::Basic, hook->parameters[j].data->u, "", (int)min, (int)step, (int)max, true);
+		}
 	  }
 	}
-
-
   }
 }
 

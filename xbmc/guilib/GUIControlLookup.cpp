@@ -108,6 +108,6 @@ void CGUIControlLookup::RemoveLookup()
   {
     const LookupMap map(m_lookup);
     for (const auto &i : map)
-      lookupControl->RemoveLookup(i.second);
+      lookupControl->RemoveLookup(i.second);  //cl kodi often crashes here with invalid m_parentControl pointer (not null) content when closing the kodi window directly
   }
 }

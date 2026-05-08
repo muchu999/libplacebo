@@ -25416,5 +25416,9 @@ msgctxt "#55340"
 msgid "This will overwrite the existing file, Are you sure?"
 msgstr ""
 
+msgctxt "#55341"
+msgid "***The shader is invalid***"
+msgstr ""
+
 
 

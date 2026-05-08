@@ -1150,10 +1150,16 @@ void CPLHelper::InitializeShaders(pl_gpu gpu, CVideoSettings& vs)
 
 	for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); ++i)
 	{
+	  std::string shortFileName = URIUtils::GetFileName(vs.m_PlaceboShadersFilename[i]);
+
+	  // Create default entries in case we don't complete adding a new shader. all vectors must be kept in sink...
+	  //cl Maybe a class for all of this
+	  vs.m_PlaceboShadersHooks.m_FileNames.push_back(shortFileName);
+	  vs.m_PlaceboShadersHooks.m_Hooks.push_back(nullptr);
+	  vs.m_PlaceboShadersHooks.m_Valid.push_back(false);
 
 	  if (vs.m_PlaceboShadersFilename[i].empty())
-		return;
-
+	    return;
 	  CFile shaderFile;
 	  if (!shaderFile.Open(vs.m_PlaceboShadersFilename[i]))
 	  {
@@ -1163,41 +1169,38 @@ void CPLHelper::InitializeShaders(pl_gpu gpu, CVideoSettings& vs)
 
 	  // Read entire file to memory
 	  ULONGLONG fileSize = shaderFile.GetLength();
-	  if (fileSize > 0)
+	  if (fileSize == 0)
 	  {
-		BYTE* pBuffer = new BYTE[(size_t)fileSize];
-		UINT bytesRead = shaderFile.Read(pBuffer, (UINT)fileSize);
-
-		const pl_hook* pHook = pl_mpv_user_shader_parse(gpu, (const char*)pBuffer, (size_t)bytesRead);
-		delete[] pBuffer;
-		if (pHook)
-		{
-		  std::shared_ptr<const pl_hook> SharedHook(pHook, [](const pl_hook* p) { pl_mpv_user_shader_destroy(&p); });
-
-		  std::string shortFileName = URIUtils::GetFileName(vs.m_PlaceboShadersFilename[i]);
-		  vs.m_PlaceboShadersHooks.m_FileNames.push_back(shortFileName);
-		  vs.m_PlaceboShadersHooks.m_Hooks.push_back(SharedHook);
-		  vs.m_PlaceboShadersHooks.m_Valid.push_back(true);
-		  for (int j = 0; j < pHook->num_parameters; ++j)
-		  {
-			if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_FLOAT)
-			  pHook->parameters[j].data->f = std::get<float>(vs.m_PlaceboShadersParams[i][j].m_Value);
-			else if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_SINT)
-			  pHook->parameters[j].data->i = std::get<int>(vs.m_PlaceboShadersParams[i][j].m_Value);
-			else if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_UINT)
-			  pHook->parameters[j].data->u = std::get<unsigned int>(vs.m_PlaceboShadersParams[i][j].m_Value);
-		  }
-		}
-		else
-		{
-		  CLog::Log(LOGERROR, "{}: Error parsing shader file: {}", __FUNCTION__, vs.m_PlaceboShadersFilename[i]);
-		  std::string shortFileName = URIUtils::GetFileName(vs.m_PlaceboShadersFilename[i]);
-		  vs.m_PlaceboShadersHooks.m_FileNames.push_back(shortFileName);
-		  vs.m_PlaceboShadersHooks.m_Hooks.push_back(nullptr);
-		  vs.m_PlaceboShadersHooks.m_Valid.push_back(false);
-		}
+		CLog::Log(LOGERROR, "{}: Error parsing shader file: {}", __FUNCTION__, vs.m_PlaceboShadersFilename[i]);
+		return;
 	  }
+
+	  BYTE* pBuffer = new BYTE[(size_t)fileSize];
+	  UINT bytesRead = shaderFile.Read(pBuffer, (UINT)fileSize);
 	  shaderFile.Close();
+
+	  const pl_hook* pHook = pl_mpv_user_shader_parse(gpu, (const char*)pBuffer, (size_t)bytesRead);
+	  delete[] pBuffer;
+	  if (!pHook)
+	  {
+		CLog::Log(LOGERROR, "{}: Error parsing shader file: {}", __FUNCTION__, vs.m_PlaceboShadersFilename[i]);
+		return;
+	  }
+
+	  std::shared_ptr<const pl_hook> SharedHook(pHook, [](const pl_hook* p) { pl_mpv_user_shader_destroy(&p); });
+
+	  vs.m_PlaceboShadersHooks.m_FileNames[i] = shortFileName;
+	  vs.m_PlaceboShadersHooks.m_Hooks[i] = SharedHook;
+	  vs.m_PlaceboShadersHooks.m_Valid[i] = true;
+	  for (int j = 0; j < pHook->num_parameters; ++j)
+	  {
+		if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_FLOAT)
+		  pHook->parameters[j].data->f = std::get<float>(vs.m_PlaceboShadersParams[i][j].m_Value);
+		else if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_SINT)
+		  pHook->parameters[j].data->i = std::get<int>(vs.m_PlaceboShadersParams[i][j].m_Value);
+		else if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_UINT)
+		  pHook->parameters[j].data->u = std::get<unsigned int>(vs.m_PlaceboShadersParams[i][j].m_Value);
+	  }
 	}
   }
 }

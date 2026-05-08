@@ -5504,12 +5504,12 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
       settings.m_ToneMapParam = m_pDS->fv("TonemapParam").get_asFloat();
       settings.m_Orientation = m_pDS->fv("Orientation").get_asInt();
       settings.m_CenterMixLevel = m_pDS->fv("CenterMixLevel").get_asInt();
-      settings.m_subtitleVerticalPosition = m_pDS->fv("SubtitleVerticalPosition").get_asInt();
 
 
       if (libplaceboSaveToDatabase)
       {
         std::string str;
+        settings.m_subtitleVerticalPosition = m_pDS->fv("SubtitleVerticalPosition").get_asInt();
         settings.m_PlaceboSkinZoom = m_pDS->fv("PlaceboSkinZoom").get_asInt();
         settings.m_PlaceboLutFilename = m_pDS->fv("PlaceboLutFilename").get_asString(); CPLHelper::LoadLutFile(settings, settings.m_PlaceboLutFilename); //cl load depends on type...
         settings.m_PlaceboDisplayPeakLuminance = m_pDS->fv("PlaceboDisplayPeakLuminance").get_asFloat();
@@ -5678,7 +5678,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           "AudioStream=%i,SubtitleStream=%i,SubtitleDelay=%f,SubtitlesOn=%i,Brightness=%f,Contrast="
           "%f,Gamma=%f,"
           "VolumeAmplification=%f,AudioDelay=%f,Sharpness=%f,NoiseReduction=%f,NonLinStretch=%i,"
-          "PostProcess=%i,ScalingMethod=%i,Orientation=%i,CenterMixLevel=%i,SubtitleVerticalPosition=%i,",
+          "PostProcess=%i,ScalingMethod=%i,Orientation=%i,CenterMixLevel=%i,",
           settings.m_InterlaceMethod, settings.m_ViewMode,
           static_cast<double>(settings.m_CustomZoomAmount),
           static_cast<double>(settings.m_CustomPixelRatio),
@@ -5689,7 +5689,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_VolumeAmplification),
           static_cast<double>(settings.m_AudioDelay), static_cast<double>(settings.m_Sharpness),
           static_cast<double>(settings.m_NoiseReduction), settings.m_CustomNonLinStretch,
-          settings.m_PostProcess, settings.m_ScalingMethod, settings.m_Orientation, settings.m_CenterMixLevel, settings.m_subtitleVerticalPosition);
+          settings.m_PostProcess, settings.m_ScalingMethod, settings.m_Orientation, settings.m_CenterMixLevel);
       std::string strSQL2;
 
       strSQL2 = PrepareSQL("ResumeTime=%i,StereoMode=%i,StereoInvert=%i,VideoStream=%i,"
@@ -5704,7 +5704,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
       {
         strSQL = PrepareSQL(
           "update settings set "
-          "PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
           "PlaceboShaderApply=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
@@ -5730,6 +5730,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           "PlaceboDisableLinearScaling=%i,PlaceboDynamicConstant=%i,PlaceboErrorDiffusion='%s',PlaceboForceDither=%i,"
           "PlaceboForceLowBitDepthFbos=%i,PlaceboIgnoreIccProfiles=%i,PlaceboPreserveMixingCache=%i,PlaceboSkipAntiAliasing=%i,"
           "PlaceboSkipCachingSingleFrame=%i where idFile=%i\n",
+		  settings.m_subtitleVerticalPosition,
           settings.m_PlaceboSkinZoom,
           settings.m_PlaceboLutFilename.c_str(),  //cl check handling of  single/double quotes...
           static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
@@ -5842,7 +5843,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
                 "AudioStream,SubtitleStream,SubtitleDelay,SubtitlesOn,Brightness,"
                 "Contrast,Gamma,VolumeAmplification,AudioDelay,"
                 "ResumeTime,"
-                "Sharpness,NoiseReduction,NonLinStretch,PostProcess,ScalingMethod,StereoMode,StereoInvert,VideoStream,TonemapMethod,TonemapParam,Orientation,CenterMixLevel,SubtitleVerticalPosition) "
+                "Sharpness,NoiseReduction,NonLinStretch,PostProcess,ScalingMethod,StereoMode,StereoInvert,VideoStream,TonemapMethod,TonemapParam,Orientation,CenterMixLevel) "
         "VALUES ";
       strSQL += PrepareSQL(
           "(%i,%i,%i,%f,%f,%f,%i,%i,%f,%i,%f,%f,%f,%f,%f,%i,%f,%f,%i,%i,%i,%i,%i,%i,%i,%f,%i,%i,%i)",
@@ -5859,14 +5860,14 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           settings.m_CustomNonLinStretch, settings.m_PostProcess, settings.m_ScalingMethod,
           settings.m_StereoMode, settings.m_StereoInvert, settings.m_VideoStream,
           settings.m_ToneMapMethod, static_cast<double>(settings.m_ToneMapParam),
-          settings.m_Orientation, settings.m_CenterMixLevel, settings.m_subtitleVerticalPosition);
+          settings.m_Orientation, settings.m_CenterMixLevel);
       m_pDS->exec(strSQL);
       m_pDS->close();
       if (libplaceboSaveToDatabase)
       {
         strSQL = PrepareSQL(
           "update settings set "
-          "PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
           "PlaceboShaderApply=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
@@ -5892,6 +5893,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           "PlaceboDisableLinearScaling=%i,PlaceboDynamicConstant=%i,PlaceboErrorDiffusion='%s',PlaceboForceDither=%i,"
           "PlaceboForceLowBitDepthFbos=%i,PlaceboIgnoreIccProfiles=%i,PlaceboPreserveMixingCache=%i,PlaceboSkipAntiAliasing=%i,"
           "PlaceboSkipCachingSingleFrame=%i where idFile=%i\n",
+		  settings.m_subtitleVerticalPosition,
           settings.m_PlaceboSkinZoom,
           settings.m_PlaceboLutFilename.c_str(), //cl check handling of  single/double quotes...
           static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
