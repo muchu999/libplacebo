@@ -1042,7 +1042,7 @@ void CPLHelper::SerializeShaders(const CVideoSettings& vs, TiXmlNode* pNode)
 	  {
 		XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "sint:" + std::to_string(std::get<int>(vs.m_PlaceboShadersParams[i][j].m_Value)));
 	  }
-	  if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_UINT)
+	  else if (vs.m_PlaceboShadersParams[i][j].m_Type == PL_VAR_UINT)
 	  {
 		XMLUtils::SetString(pNode, ("placeboShaderParamValue" + StringUtils::Format("_{:02}", i) + StringUtils::Format("_{:02}", j)).c_str(), "uint:" + std::to_string(std::get<unsigned int>(vs.m_PlaceboShadersParams[i][j].m_Value)));
 	  }
