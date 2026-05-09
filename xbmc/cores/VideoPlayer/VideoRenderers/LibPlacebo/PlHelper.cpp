@@ -155,7 +155,7 @@ bool PL::PLInstance::Init()
   pl_cache_params cacheParams{};
   cacheParams.log = PL::PLInstance::Get()->m_plLog;
   cacheParams.max_object_size = 0; // No limit on individual object size
-  cacheParams.max_total_size = 100 * 1024 * 1024; // 100 MB total cache size limit
+  cacheParams.max_total_size = 1 << 30; //cl 1 GB total cache size limit ?
   cacheParams.set = pl_cache_set_file;
   cacheParams.get = pl_cache_get_file;
   static const std::string cacheDir = CSpecialProtocol::TranslatePath(cacheDirectory);
@@ -1158,8 +1158,11 @@ void CPLHelper::InitializeShaders(pl_gpu gpu)
   auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
   CVideoSettings vs = appPlayer->GetVideoSettings();
-  InitializeShaders(gpu, vs);
-  appPlayer->SetVideoSettings(vs);
+  if(vs.m_PlaceboShadersHooks.m_bInit == false)
+  {
+	InitializeShaders(gpu, vs);
+    appPlayer->SetVideoSettings(vs);
+  }
 }
 
 void CPLHelper::InitializeShaders(pl_gpu gpu, CVideoSettings& vs)
