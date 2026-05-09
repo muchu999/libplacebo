@@ -5674,7 +5674,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
       //cl deinterlaceMode not actually used in database, instead the deinterlaceMethod is stored in the DB column bool Deinterlace, which is a bug, corrected here... column Deinterlace becomes useless, disabled by using method none...
       strSQL = PrepareSQL(
           "update settings set "
-          "DeinterlaceMode=%i,ViewMode=%i,ZoomAmount=%f,PixelRatio=%f,VerticalShift=%f,"
+          "DeinterlaceMode=%i,ViewMode=%i,ZoomAmount=%f,PixelRatio=%f,VerticalShift=%f,"                  //cl missing from the list is deinterlace which is unused in the code, which makes 29columns since they are created when database is created with it
           "AudioStream=%i,SubtitleStream=%i,SubtitleDelay=%f,SubtitlesOn=%i,Brightness=%f,Contrast="
           "%f,Gamma=%f,"
           "VolumeAmplification=%f,AudioDelay=%f,Sharpness=%f,NoiseReduction=%f,NonLinStretch=%i,"
@@ -5846,7 +5846,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
                 "Sharpness,NoiseReduction,NonLinStretch,PostProcess,ScalingMethod,StereoMode,StereoInvert,VideoStream,TonemapMethod,TonemapParam,Orientation,CenterMixLevel) "
         "VALUES ";
       strSQL += PrepareSQL(
-          "(%i,%i,%i,%f,%f,%f,%i,%i,%f,%i,%f,%f,%f,%f,%f,%i,%f,%f,%i,%i,%i,%i,%i,%i,%i,%f,%i,%i,%i)",
+          "(%i,%i,%i,%f,%f,%f,%i,%i,%f,%i,%f,%f,%f,%f,%f,%i,%f,%f,%i,%i,%i,%i,%i,%i,%i,%f,%i,%i)",
         idFile, settings.m_InterlaceMethod, settings.m_ViewMode,
           static_cast<double>(settings.m_CustomZoomAmount),
           static_cast<double>(settings.m_CustomPixelRatio),
