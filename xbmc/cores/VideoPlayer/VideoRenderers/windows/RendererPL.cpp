@@ -19,11 +19,31 @@
 #include "utils/memcpy_sse2.h"
 #include "windowing/GraphicContext.h"
 
+#include "RendererBase.h"
+#include <ServiceBroker.h>
+#include <VideoRenderers/DebugInfo.h>
+#include <VideoRenderers/LibPlacebo/PlHelper.h>
+#include <VideoRenderers/VideoShaders/WinVideoFilter.h>
+#include <commons/ilog.h>
+#include <cores/VideoSettings.h>
+#include <dxgicommon.h>
+#include <dxgiformat.h>
+#include <libavutil/pixfmt.h>
+#include <libplacebo/cache.h>
 #include <libplacebo/common.h>
 #include <libplacebo/gpu.h>
+#include <libplacebo/renderer.h>
 #include <libplacebo/shaders/custom.h>
+#include <libplacebo/swapchain.h>
+#include <libplacebo/utils/libav.h>
+#include <memory>
 #include <ppl.h>
+#include <rendering/dx/DeviceResources.h>
+#include <rendering/dx/DirectXHelper.h>
+#include <utils/Geometry.h>
+#include <utils/StringUtils.h>
 #include <vector>
+#include <VideoRenderers/RenderInfo.h>
 
 using namespace XFILE;
 using namespace Microsoft::WRL;
@@ -41,6 +61,10 @@ CRendererPL::~CRendererPL()
   else
 	DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
 
+  pl_cache_destroy(PL::PLInstance::Get()->GetCache());
+  
+  pl_renderer renderer = PL::PLInstance::Get()->GetRenderer();
+  pl_renderer_destroy(&renderer);
 }
 
 void CRendererPL::UpdateVideoFilters()
@@ -136,6 +160,7 @@ CRendererPL::CRendererPL(CVideoSettings& videoSettings) : CRendererHQ(videoSetti
   m_renderMethodName = "LibPlacebo";
   m_colorSpace = {};
   m_chromaLocation = PL_CHROMA_UNKNOWN;
+
 
 }
 
@@ -432,6 +457,7 @@ void CRendererPL::ApplyTargetOptions(pl_color_space* target_csp, struct pl_frame
 void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags)
 {
   CLog::Log(LOGDEBUG, "RenderImpl: Enter");
+  CPLHelper::InitializeShaders(PL::PLInstance::Get()->GetGpu());  //cl here for now, race condition with the loading of videoSettings...
 
   pl_frame frameOut{};
   pl_frame frameIn{};

@@ -61,6 +61,8 @@
 #include <utils/log.h>
 #include <variant>
 #include <vector>
+#include <filesystem/SpecialProtocol.h>
+#include <libplacebo/cache.h>
 
 
 using namespace XFILE;
@@ -131,6 +133,7 @@ bool PL::PLInstance::Init()
   //this was added to libplacebo to handle multi threaded rendering for kodi
 
 
+  // D3D11
   m_plD3d11 = pl_d3d11_create(m_plLog, &d3d_param);
   if (!m_plD3d11)
 	return false;
@@ -142,12 +145,31 @@ bool PL::PLInstance::Init()
   if (!m_plSwapchain)
 	return false;
 
+  //Renderer
   m_plRenderer = pl_renderer_create(m_plLog, m_plD3d11->gpu);
-  CPLHelper::InitializeShaders(GetGpu());
+
+  // Cache
+  std::string cacheDirectory = "special://temp/LibplaceboCache/";
+  if(!XFILE::CDirectory::Exists(cacheDirectory))
+	XFILE::CDirectory::Create(cacheDirectory);
+  pl_cache_params cacheParams{};
+  cacheParams.log = PL::PLInstance::Get()->m_plLog;
+  cacheParams.max_object_size = 0; // No limit on individual object size
+  cacheParams.max_total_size = 100 * 1024 * 1024; // 100 MB total cache size limit
+  cacheParams.set = pl_cache_set_file;
+  cacheParams.get = pl_cache_get_file;
+  static const std::string cacheDir = CSpecialProtocol::TranslatePath(cacheDirectory);
+  cacheParams.priv = (void*)cacheDir.c_str();
+
+  m_plCache = pl_cache_create(&cacheParams);
+  pl_gpu_set_cache(PL::PLInstance::Get()->GetGpu(), m_plCache);
+
+
   return true;
 }
 void PL::PLInstance::Reset()
 {
+  //cl???
   m_plSwapchain = nullptr;
   m_plLog = nullptr;
   m_plD3d11 = nullptr;
@@ -955,6 +977,7 @@ void CPLHelper::LoadShaderSettings(CVideoSettings& vs, const TiXmlElement* pElem
 {
   int numShaders;
   XMLUtils::GetInt(pElement, "placeboShadersCount", numShaders);
+  CLog::LogF(LOGDEBUG,"LoadShaderSettings from node, numShaders = {}",numShaders);
   for (int i = 0; i < numShaders; i++)
   {
 	bool bValue;
@@ -988,7 +1011,7 @@ void CPLHelper::LoadShaderSettings(CVideoSettings& vs, const TiXmlElement* pElem
 	  {
 		value = std::stoi(valueStr.substr(valueStr.find(':') + 1));
 	  }
-	  if (type == PL_VAR_UINT)
+	  else if (type == PL_VAR_UINT)
 	  {
 		value = std::stoul(valueStr.substr(valueStr.find(':') + 1));
 	  }
@@ -1147,6 +1170,7 @@ void CPLHelper::InitializeShaders(pl_gpu gpu, CVideoSettings& vs)
   if (vs.m_PlaceboShadersHooks.m_bInit == false)
   {
 	vs.m_PlaceboShadersHooks.m_bInit = true;
+	CLog::Log(LOGDEBUG,"InitializeShaders number of shaders ={}",vs.m_PlaceboShadersFilename.size());
 
 	for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); ++i)
 	{

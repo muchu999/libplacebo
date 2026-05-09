@@ -38,6 +38,7 @@ extern "C" {
 #include <dxgiformat.h>
 #include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
+#include <libplacebo/cache.h>
 
 #define MAX_FRAME_PASSES 256
 #define MAX_BLEND_PASSES 8
@@ -69,7 +70,9 @@ namespace PL
 	pl_swapchain GetSwapchain() { return m_plSwapchain; }
 	pl_renderer GetRenderer() { return m_plRenderer; }
 	pl_gpu GetGpu() { return m_plD3d11->gpu; }
+	pl_cache* GetCache() { return &m_plCache; }
 
+	pl_cache m_plCache;
 	pl_log m_plLog;
 	pl_d3d11 m_plD3d11;
 	pl_swapchain m_plSwapchain;

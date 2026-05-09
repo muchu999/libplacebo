@@ -1661,6 +1661,8 @@ void CGUIDialogVideoSettings::InitializeShaderMenu(CVideoSettings& vs, const std
 {
   for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); i++)
   {
+	if(!vs.m_PlaceboShadersHooks.m_bInit)
+	  return; //cl hooks not initialized yet, should not happen but it did, fix applied but in case we change the code...
 	std::string settingId;
     CreateGroup(group, category);
 	if (!vs.m_PlaceboShadersHooks.m_Valid[i])
