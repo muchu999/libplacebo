@@ -1140,11 +1140,6 @@ void CPLHelper::AddShaderFile(pl_gpu gpu, CVideoSettings& vs, const std::string&
   shaderFile.Close();
 }
 
-
-
-
-
-
 void CPLHelper::ResetShaders(CVideoSettings& vs)
 {
   vs.m_PlaceboShadersHooks.clear();

@@ -25420,5 +25420,15 @@ msgctxt "#55341"
 msgid "***The shader is invalid***"
 msgstr ""
 
+msgctxt "#55342"
+msgid "Maximum number of DXVA2 surfaces"
+msgstr ""
+
+msgctxt "#55343"
+msgid "This puts an upper limit on the amount of GPU memory used for DXVA2 decoding"
+msgstr ""
+
+
+
 
 

@@ -405,6 +405,7 @@ void CSettingConditions::Initialize()
 #if defined(TARGET_WINDOWS)
   m_simpleConditions.emplace("has_dx");
   m_simpleConditions.emplace("hasdxva2");
+  m_simpleConditions.emplace("haslibplacebo");
 #endif
 #if defined(TARGET_WEBOS)
   m_simpleConditions.emplace("have_webos");

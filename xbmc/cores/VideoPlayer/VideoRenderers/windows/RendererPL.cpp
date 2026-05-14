@@ -181,7 +181,9 @@ bool CRendererPL::Configure(const VideoPicture& picture, float fps, unsigned ori
   //Log initiation
 
 
+  // Init logs and other stuff
   PL::PLInstance::Get()->Init();
+
   // Set up color space based on picture metadata
   m_colorSpace = pl_color_space{
 	.primaries = pl_primaries_from_av(picture.color_primaries),
@@ -449,6 +451,71 @@ void CRendererPL::ApplyTargetOptions(pl_color_space* target_csp, struct pl_frame
   //
 }
 
+#define PL_ALIGN2(x, align) (((x) + (align) - 1) & ~((align) - 1))
+#define PL_ALIGN_MEM(size) PL_ALIGN2(size, alignof(max_align_t))
+#define PL_PRIV(pub) (const void *) ((uintptr_t) (pub) + PL_ALIGN_MEM(sizeof(*(pub))))
+
+struct d3d_format {
+  DXGI_FORMAT dxfmt;
+  int minor; // The D3D11 minor version number which supports this format
+  struct pl_fmt_t fmt;
+};
+
+static inline DXGI_FORMAT fmt_to_dxgi(const pl_fmt fmt)
+{
+  const struct d3d_format** fmtp = (const d3d_format * *)PL_PRIV(fmt);
+  return (*fmtp)->dxfmt;
+}
+
+
+bool CRendererPL::InitializeFrame(pl_frame &frameOut)
+{
+  pl_gpu gpu = PL::PLInstance::Get()->GetGpu();
+
+  DXGI_SWAP_CHAIN_DESC desc;
+  HRESULT hr = DX::DeviceResources::Get()->GetSwapChain()->GetDesc(&desc);
+  DXGI_FORMAT fmt = desc.BufferDesc.Format;
+
+  pl_fmt outFormat = NULL;
+  for(int i = 0; i < gpu->num_formats; i++) 
+  {
+	DXGI_FORMAT target_fmt = fmt_to_dxgi(gpu->formats[i]);
+
+	if(fmt == target_fmt) 
+	{
+	  outFormat = gpu->formats[i];
+	  break;
+	}
+  }
+  if(!outFormat) {
+	CLog::LogF(LOGERROR,"CRendererPL::Could not find a suitable pl_fmt ({}) for wrapped resource ", fmt);
+	return false;
+  }
+
+  
+  int bits = 0;
+  for(int i = 0; i < outFormat->num_components; i++)
+	bits = std::max(bits,outFormat->component_depth[i]);
+
+  int num_comps = outFormat->num_components;
+  frameOut = {
+	.num_planes = 1,
+	.planes = {{
+		.texture = NULL,
+		.flipped = false,
+		.components = num_comps,
+		.component_mapping = {0,1,2,3},}},
+		.repr = {
+	  .sys = PL_COLOR_SYSTEM_RGB,
+	  .levels = PL_COLOR_LEVELS_FULL,
+	  .alpha = PL_ALPHA_UNKNOWN,
+	  .bits = {.sample_depth = bits,.color_depth = bits}},
+	  .color = {},
+	  //.crop = {0,0,fbo->params.w,fbo->params.h},
+  };
+  return true;
+}
+
 
 //---------------------------------------------------
 //
@@ -456,7 +523,6 @@ void CRendererPL::ApplyTargetOptions(pl_color_space* target_csp, struct pl_frame
 //---------------------------------------------------
 void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags)
 {
-  CLog::Log(LOGDEBUG, "RenderImpl: Enter");
   CPLHelper::InitializeShaders(PL::PLInstance::Get()->GetGpu());  //cl here for now, race condition with the loading of videoSettings...
 
   pl_frame frameOut{};
@@ -713,19 +779,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   pl_swapchain_colorspace_hint(PL::PLInstance::Get()->GetSwapchain(), &hint);
 
-  // Need to start a frame to get the actual swapchain framebuffer, which may have a different format than the hint, 
-  // also fills in the frameOut.repr with the actual swapchain framebuffer format, which is needed for the conversion
-  struct pl_swapchain_frame swframe;
-  if (!pl_swapchain_start_frame(PL::PLInstance::Get()->GetSwapchain(), &swframe))
-  {
+  if(!CRendererPL::InitializeFrame(frameOut))
 	return;
-  }
-  pl_frame_from_swapchain(&frameOut, &swframe);
-  //frameOut.color.primaries = PL_COLOR_PRIM_BT_709;
-  //frameOut.color.transfer = PL_COLOR_TRC_SRGB;
-  //frameOut.color.hdr.max_luma = 100.0f;
-
-  bool valid = false;
 
   // Calculate target
 
@@ -787,7 +842,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   frameOut.planes[0].component_mapping[1] = PL_CHANNEL_G;
   frameOut.planes[0].component_mapping[2] = PL_CHANNEL_B;
   frameOut.planes[0].component_mapping[3] = PL_CHANNEL_A;
-
+  
   frameOut.crop.x0 = dst.x1;
   frameOut.crop.x1 = dst.x2;
   frameOut.crop.y0 = dst.y1;
@@ -854,11 +909,10 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   /////////////////////////////////
 
-  CLog::Log(LOGDEBUG, "RenderImpl: pl_render_image start");
   bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, &params);
-  pl_swapchain_submit_frame(PL::PLInstance::Get()->GetSwapchain());
-  CLog::Log(LOGDEBUG, "RenderImpl: pl_swapchain_submit_frame exit");
   pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes[0].texture);
+   
+  
   //pl_render_error err = pl_renderer_get_errors(PL::PLInstance::Get()->GetRenderer()).errors;
 
   //pl_swapchain_swap_buffers(PL::PLInstance::Get()->GetSwapchain()); // cl don't, vsync controled from kodi...
@@ -870,18 +924,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //}
 
   sourceRect = dst; //cl?
-  CLog::Log(LOGDEBUG, "RenderImpl: Exit");
 }
 
-
-
-//---------------------------------------------------
-//
-//
-//---------------------------------------------------
+//cl called on every frame before render
 void CRendererPL::ProcessHDR(CRenderBuffer* rb)
 {
-  //todo fix this one sometimes it crash because we dont release texture correctly during the swap
+  
   if (m_AutoSwitchHDR && rb->primaries == AVCOL_PRI_BT2020 &&
 	(rb->color_transfer == AVCOL_TRC_SMPTE2084 || rb->color_transfer == AVCOL_TRC_ARIB_STD_B67) &&
 	!DX::Windowing()->IsHDROutput())
@@ -889,8 +937,9 @@ void CRendererPL::ProcessHDR(CRenderBuffer* rb)
 	DX::Windowing()->ToggleHDR(); // Toggle display HDR ON
   }
   m_HdrType = HDR_TYPE::HDR_HDR10; //cl
+  
 
-
+  //cl  m_HdrType used a bit is base class...to look into
   if (!DX::Windowing()->IsHDROutput())
   {
 	if (m_HdrType != HDR_TYPE::HDR_NONE_SDR)
@@ -900,9 +949,6 @@ void CRendererPL::ProcessHDR(CRenderBuffer* rb)
 	}
 	return;
   }
-
-
-
 
   CRenderBufferImpl* rbpl = static_cast<CRenderBufferImpl*>(rb);
   if(0)

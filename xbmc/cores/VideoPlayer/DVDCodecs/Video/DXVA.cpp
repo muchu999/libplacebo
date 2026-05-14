@@ -1406,12 +1406,14 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, enum AVPixel
   if (avctx->active_thread_type & FF_THREAD_FRAME)
     m_refs += avctx->thread_count;
 
+
+  int maxSurfaces = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_NOOFDXVA2SURFACES);
   // Limit decoder surfaces to 32 maximum in any case. Since with some 16 cores / 32 threads
   // new CPU's (Ryzen 5950x) this number may be higher than what the graphics card can handle.
-  if (m_refs > 32)
+  if (m_refs > maxSurfaces)
   {
-    CLog::LogF(LOGWARNING, "The number of decoder surfaces has been limited from {} to 32.", m_refs);
-    m_refs = 32;
+    CLog::LogF(LOGWARNING, "The number of decoder surfaces has been limited from {} to {}.", m_refs,maxSurfaces);
+    m_refs = maxSurfaces;
   }
 
   // Check if available video memory is sufficient for 4K decoding (is need ~3000 MB)

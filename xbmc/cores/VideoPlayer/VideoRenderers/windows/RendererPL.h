@@ -83,6 +83,7 @@ protected:
   void CheckVideoParameters() override;
   void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags) override;
   void ApplyTargetOptions(pl_color_space* target_csp, struct pl_frame* target, float min_luma, bool hint);
+  bool InitializeFrame(pl_frame& frameOut);
   CRenderBuffer* CreateBuffer() override;
 
   //important to override we need to let libplacebo set the swapchain csp or we would get issues with HDR

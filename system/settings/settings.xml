@@ -189,7 +189,23 @@
           <default>true</default>
           <control type="toggle" />
         </setting>
-        <setting id="videoplayer.usevtb" type="boolean" label="13429" help="36160">
+		<setting id="videoplayer.noofdxva2surfaces" type="integer" label="55342" help="55343">
+		  <requirement>HasDXVA2</requirement>
+		  <dependencies>
+			<dependency type="enable">
+			  <condition setting="videoplayer.usedxva2" operator="is">true</condition>
+		    </dependency>
+		  </dependencies>
+		  <level>2</level>
+		  <default>16</default>
+		  <constraints>
+			<minimum>10</minimum>
+			<step>2</step>
+			<maximum>32</maximum>
+		  </constraints>
+		  <control type="list" format="string" />
+		</setting>
+		<setting id="videoplayer.usevtb" type="boolean" label="13429" help="36160">
           <requirement>HasVTB</requirement>
           <level>2</level>
           <default>true</default>
@@ -298,6 +314,12 @@
       </group>
 	  <group id="6" label="55327">
 		<setting id="videoplayer.libplacebosavetodb" type="boolean" label="55328" help="55329">
+		  <requirement>HasLibplacebo</requirement>
+		  <dependencies>
+			<dependency type="enable">
+			  <condition setting="videoplayer.rendermethod" operator="is">5</condition> <!-- RENDER_METHOD_LIBPLACEBO -->
+			</dependency>
+		  </dependencies>
 		  <level>3</level>
 		  <default>false</default>
 		  <control type="toggle" />
