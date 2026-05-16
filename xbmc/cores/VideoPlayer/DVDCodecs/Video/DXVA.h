@@ -41,6 +41,7 @@ public:
 
   virtual void Initialize(CDecoder* decoder);
   virtual HRESULT GetResource(ID3D11Resource** ppResource);
+  virtual bool CopyBack(ID3D11Resource** ppResource,ID3D11Resource** ppStagingTexture);
   virtual unsigned GetIdx();
 
   ID3D11View* view = nullptr;
@@ -62,6 +63,7 @@ class CVideoBufferShared : public CVideoBuffer
 
 public:
   HRESULT GetResource(ID3D11Resource** ppResource) override;
+  bool CopyBack(ID3D11Resource** ppResource,ID3D11Resource** ppStagingTexture);
   void Initialize(CDecoder* decoder) override;
   virtual ~CVideoBufferShared();
 
@@ -105,15 +107,17 @@ protected:
   Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_pDeviceContext;
 };
 
-class CContext
+class CContext 
 {
 public:
+  friend class CDecoder;
   typedef std::shared_ptr<CContext> shared_ptr;
   typedef std::weak_ptr<CContext> weak_ptr;
 
   ~CContext();
 
   static shared_ptr EnsureContext(CDecoder* decoder);
+  static void InvalidateContext();
   bool GetFormatAndConfig(AVCodecContext* avctx, D3D11_VIDEO_DECODER_DESC& format, D3D11_VIDEO_DECODER_CONFIG& config) const;
   bool CreateSurfaces(const D3D11_VIDEO_DECODER_DESC& format, uint32_t count, uint32_t alignment,
                       ID3D11VideoDecoderOutputView** surfaces, HANDLE* pHandle, bool trueShared) const;
@@ -216,6 +220,7 @@ public:
   const std::string Name() override { return "d3d11va"; }
   unsigned GetAllowedReferences() override;
   void Reset() override;
+  void InvalidateDecoder() override;
 
   bool OpenDecoder();
   int GetBuffer(AVCodecContext* avctx, AVFrame* pic);

@@ -410,6 +410,7 @@ void CSettings::InitializeOptionFillers()
       "temperatureunits", [](const std::shared_ptr<const CSetting>& setting,
                              StringSettingOptions& list, std::string& current)
       { CLangInfo::SettingOptionsTemperatureUnitsFiller(setting, list, current, g_langInfo); });
+  GetSettingsManager()->RegisterSettingOptionsFiller("dxva2adapters",CBaseRenderer::SettingOptionsDxva2AdaptersFiller);
   GetSettingsManager()->RegisterSettingOptionsFiller("rendermethods", CBaseRenderer::SettingOptionsRenderMethodsFiller);
   GetSettingsManager()->RegisterSettingOptionsFiller("modes", CDisplaySettings::SettingOptionsModesFiller);
   GetSettingsManager()->RegisterSettingOptionsFiller("resolutions", CDisplaySettings::SettingOptionsResolutionsFiller);

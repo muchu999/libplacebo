@@ -36,6 +36,7 @@ extern "C"
 #include <dxgidebug.h>
 #pragma comment(lib, "dxgi.lib")
 #endif // _DEBUG
+#include <utils/TimeUtils.h>
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -92,6 +93,7 @@ DX::DeviceResources::DeviceResources()
   , m_bDeviceCreated(false)
   , m_IsHDROutput(false)
   , m_IsTransferPQ(false)
+  , m_dxva2DecoderAdapter(-1)
 {
 }
 
@@ -107,12 +109,17 @@ void DX::DeviceResources::Release()
   DestroySwapChain();
 
   m_adapter = nullptr;
+  m_adapterDecoder = nullptr;
   m_dxgiFactory = nullptr;
   m_output = nullptr;
   m_deferrContext = nullptr;
+  m_deferrContextDecoder = nullptr;
   m_d3dContext = nullptr;
+  m_d3dContextDecoder = nullptr;
   m_d3dDevice = nullptr;
+  m_d3dDeviceDecoder = nullptr;
   m_bDeviceCreated = false;
+  m_dxva2DecoderAdapter = -1;
 #ifdef _DEBUG
   if (m_d3dDebug)
   {
@@ -163,6 +170,21 @@ DXGI_ADAPTER_DESC DX::DeviceResources::GetAdapterDesc() const
   // GPU is AMD to apply workarounds in DXVA.cpp CheckCompatibility() same as desktop
   if (CSysInfo::GetWindowsDeviceFamily() == CSysInfo::Xbox)
     desc.VendorId = PCIV_AMD;
+
+  return desc;
+}
+
+DXGI_ADAPTER_DESC DX::DeviceResources::GetAdapterDecoderDesc() const
+{
+  DXGI_ADAPTER_DESC desc{};
+
+  if(m_adapterDecoder)
+	m_adapterDecoder->GetDesc(&desc);
+
+  // GetDesc() returns VendorId == 0 in Xbox however, we need to know that
+  // GPU is AMD to apply workarounds in DXVA.cpp CheckCompatibility() same as desktop
+  if(CSysInfo::GetWindowsDeviceFamily() == CSysInfo::Xbox)
+	desc.VendorId = PCIV_AMD;
 
   return desc;
 }
@@ -335,6 +357,142 @@ bool DX::DeviceResources::SetFullScreen(bool fullscreen, RESOLUTION_INFO& res)
 void DX::DeviceResources::CreateDeviceIndependentResources()
 {
 }
+
+// Configures the Direct3D device, and stores handles to it and the device context.
+void DX::DeviceResources::CreateDecoderDeviceResources()
+{
+  CLog::LogF(LOGDEBUG,"creating decoder DirectX 11 device.");
+
+  CreateFactory();
+
+  UINT creationFlags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+#if defined(_DEBUG)
+  if(DX::SdkLayersAvailable())
+  {
+	// If the project is in a debug build, enable debugging via SDK Layers with this flag.
+	creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
+  }
+#endif
+
+  // This array defines the set of DirectX hardware feature levels this app will support.
+  // Note the ordering should be preserved.
+  // Don't forget to declare your application's minimum required feature level in its
+  // description.  All applications are assumed to support 9.1 unless otherwise stated.
+  std::vector<D3D_FEATURE_LEVEL> featureLevels;
+  if(CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin10))
+  {
+	featureLevels.push_back(D3D_FEATURE_LEVEL_12_1);
+	featureLevels.push_back(D3D_FEATURE_LEVEL_12_0);
+  }
+  featureLevels.push_back(D3D_FEATURE_LEVEL_11_1);
+  featureLevels.push_back(D3D_FEATURE_LEVEL_11_0);
+  featureLevels.push_back(D3D_FEATURE_LEVEL_10_1);
+  featureLevels.push_back(D3D_FEATURE_LEVEL_10_0);
+  featureLevels.push_back(D3D_FEATURE_LEVEL_9_3);
+  featureLevels.push_back(D3D_FEATURE_LEVEL_9_2);
+  featureLevels.push_back(D3D_FEATURE_LEVEL_9_1);
+
+  // Create the Direct3D 11 API device object and a corresponding context.
+  ComPtr<ID3D11Device> device;
+  ComPtr<ID3D11DeviceContext> context;
+
+  D3D_DRIVER_TYPE drivertType = m_adapterDecoder != nullptr ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE;
+  HRESULT hr = D3D11CreateDevice(
+	m_adapterDecoder.Get(),    // Create a device on specified adapter.
+	drivertType,               // Create a device using scepcified driver.
+	nullptr,                   // Should be 0 unless the driver is D3D_DRIVER_TYPE_SOFTWARE.
+	creationFlags,             // Set debug and Direct2D compatibility flags.
+	featureLevels.data(),      // List of feature levels this app can support.
+	featureLevels.size(),      // Size of the list above.
+	D3D11_SDK_VERSION,         // Always set this to D3D11_SDK_VERSION for Windows Store apps.
+	&device,                   // Returns the Direct3D device created.
+	&m_d3dFeatureLevelDecoder, // Returns feature level of device created.
+	&context                   // Returns the device immediate context.
+  );
+
+  if(FAILED(hr))
+  {
+	CLog::LogF(LOGERROR,"unable to create hardware device with video decoder support, error {}",
+	  CWIN32Util::FormatHRESULT(hr));
+	CLog::LogF(LOGERROR,"trying to create hardware device without video decoder support.");
+
+	creationFlags &= ~D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
+
+	hr = D3D11CreateDevice(m_adapterDecoder.Get(),drivertType,nullptr,creationFlags,
+	  featureLevels.data(),featureLevels.size(),D3D11_SDK_VERSION,&device,
+	  &m_d3dFeatureLevelDecoder,&context);
+
+	if(FAILED(hr))
+	{
+	  CLog::LogF(LOGERROR,"unable to create hardware decoder device, error {}",
+		CWIN32Util::FormatHRESULT(hr));
+	  CLog::LogF(LOGERROR,"trying to create WARP device.");
+
+	  hr = D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,creationFlags,
+		featureLevels.data(),featureLevels.size(),D3D11_SDK_VERSION,&device,
+		&m_d3dFeatureLevelDecoder,&context);
+
+	  if(FAILED(hr))
+	  {
+		CLog::LogF(LOGFATAL,"unable to create WARP device. Rendering is not possible. Error {}",
+		  CWIN32Util::FormatHRESULT(hr));
+		CHECK_ERR();
+	  }
+	}
+  }
+
+  // Store pointers to the Direct3D 11.1 API device and immediate context.
+  hr = device.As(&m_d3dDeviceDecoder); CHECK_ERR();
+
+  // Check shared textures support
+  CheckNV12SharedTexturesSupport(); //cl 
+
+#if 0 //cl def _DEBUG
+  if(SUCCEEDED(m_d3dDevice.As(&m_d3dDebug)))
+  {
+	ComPtr<ID3D11InfoQueue> d3dInfoQueue;
+	if(SUCCEEDED(m_d3dDebug.As(&d3dInfoQueue)))
+	{
+	  std::vector<D3D11_MESSAGE_ID> hide =
+	  {
+		D3D11_MESSAGE_ID_GETVIDEOPROCESSORFILTERRANGE_UNSUPPORTED,        // avoid GETVIDEOPROCESSORFILTERRANGE_UNSUPPORTED (dx bug)
+		D3D11_MESSAGE_ID_DEVICE_RSSETSCISSORRECTS_NEGATIVESCISSOR         // avoid warning for some labels out of screen
+																		  // Add more message IDs here as needed
+	  };
+
+	  D3D11_INFO_QUEUE_FILTER filter = {};
+	  filter.DenyList.NumIDs = hide.size();
+	  filter.DenyList.pIDList = hide.data();
+	  d3dInfoQueue->AddStorageFilterEntries(&filter);
+	}
+  }
+#endif
+
+  hr = context.As(&m_d3dContextDecoder); CHECK_ERR();
+  hr = m_d3dDeviceDecoder->CreateDeferredContext1(0,&m_deferrContextDecoder); CHECK_ERR();
+
+  if(!m_adapterDecoder)
+  {
+	ComPtr<IDXGIDevice1> dxgiDevice;
+	ComPtr<IDXGIAdapter> adapter;
+	hr = m_d3dDeviceDecoder.As(&dxgiDevice); CHECK_ERR();
+	hr = dxgiDevice->GetAdapter(&adapter); CHECK_ERR();
+	hr = adapter.As(&m_adapterDecoder); CHECK_ERR();
+  }
+
+  DXGI_ADAPTER_DESC aDesc;
+  m_adapterDecoder->GetDesc(&aDesc);
+
+  CLog::LogF(LOGINFO,"Decoder device is created on adapter '{}' with {}",
+	KODI::PLATFORM::WINDOWS::FromW(aDesc.Description),
+	GetFeatureLevelDescription(m_d3dFeatureLevelDecoder));
+
+  CheckDXVA2SharedDecoderSurfaces();
+
+  m_bDeviceCreated = true;
+}
+
+
 
 // Configures the Direct3D device, and stores handles to it and the device context.
 void DX::DeviceResources::CreateDeviceResources()
@@ -1004,7 +1162,10 @@ void DX::DeviceResources::Present()
   // to sleep until the next VSync. This ensures we don't waste any cycles rendering
   // frames that will never be displayed to the screen.
   DXGI_PRESENT_PARAMETERS parameters = {};
+  int64_t start = CurrentHostCounter();
   HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
+  int64_t end = CurrentHostCounter();
+  CLog::LogF(LOGDEBUG,"DX::DeviceResources::Present duration = {}", end-start);
 
   // If the device was removed either by a disconnection or a driver upgrade, we
   // must recreate all device resources.
@@ -1038,6 +1199,74 @@ void DX::DeviceResources::ClearRenderTarget(ID3D11RenderTargetView* pRTView, flo
   m_deferrContext->ClearRenderTargetView(pRTView, color);
 }
 
+std::string WCharToString(const WCHAR* wstr)  //cl
+{
+  if(!wstr) return "";
+
+  // Determine the length of the resulting string in UTF-8
+  int sizeNeeded = WideCharToMultiByte(CP_UTF8,0,wstr,-1,NULL,0,NULL,NULL);
+  if(sizeNeeded <= 0) return "";
+
+  // Allocate a buffer and do the actual conversion
+  std::vector<char> buffer(sizeNeeded);
+  WideCharToMultiByte(CP_UTF8,0,wstr,-1,&buffer[0],sizeNeeded,NULL,NULL);
+
+  return std::string(&buffer[0]);
+}
+
+void DX::DeviceResources::AppendListOfAdapters(std::vector<IntegerSettingOption>& list)
+{
+  DXGI_ADAPTER_DESC desc = {};
+
+  ComPtr<IDXGIFactory1> factory;
+  CreateDXGIFactory1(IID_IDXGIFactory1,&factory);
+
+  ComPtr<IDXGIAdapter1> adapter;
+  for(int i = 0; factory->EnumAdapters1(i,adapter.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; i++) 
+  {
+	adapter->GetDesc(&desc);
+	if(WCharToString(desc.Description) != "Microsoft Basic Render Driver")  //cl list filtering?
+	  list.emplace_back(IntegerSettingOption(WCharToString(desc.Description), i));
+  }
+}
+
+bool DX::DeviceResources::InitializeDecoderResources(int dxva2Adapter)
+{
+  if(dxva2Adapter != m_dxva2DecoderAdapter)
+  {
+	if(dxva2Adapter != -1)
+	{
+	  DXGI_ADAPTER_DESC desc = {};
+
+	  ComPtr<IDXGIFactory1> factory;
+	  CreateDXGIFactory1(IID_IDXGIFactory1,&factory);
+
+	  ComPtr<IDXGIAdapter1> adapter;
+	  if(factory->EnumAdapters1(dxva2Adapter,adapter.ReleaseAndGetAddressOf()) == DXGI_ERROR_NOT_FOUND)
+	  {
+		return false;
+	  }
+
+	  adapter->GetDesc(&desc);
+	  m_adapterDecoder = adapter;
+	  m_dxva2DecoderAdapter = dxva2Adapter;
+
+	  CLog::LogF(LOGDEBUG,"selected {} adapter for decoding. ",KODI::PLATFORM::WINDOWS::FromW(desc.Description));
+
+	  // if(!m_d3dDeviceDecoder) //cl
+	  CreateDecoderDeviceResources();
+	}
+  	else
+	{
+	  //cl release
+	}
+  }
+
+  m_dxva2DecoderAdapter = dxva2Adapter;
+  return true;
+}
+
+
 void DX::DeviceResources::HandleOutputChange(const std::function<bool(DXGI_OUTPUT_DESC)>& cmpFunc)
 {
   DXGI_ADAPTER_DESC currentDesc = {};
@@ -1050,7 +1279,7 @@ void DX::DeviceResources::HandleOutputChange(const std::function<bool(DXGI_OUTPU
   CreateDXGIFactory1(IID_IDXGIFactory1, &factory);
 
   ComPtr<IDXGIAdapter1> adapter;
-  for (int i = 0; factory->EnumAdapters1(i, adapter.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; i++)
+  for (int i = 0; factory->EnumAdapters1(i, adapter.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; i++) //cl 
   {
     adapter->GetDesc(&foundDesc);
     ComPtr<IDXGIOutput> output;
@@ -1109,7 +1338,21 @@ bool DX::DeviceResources::CreateFactory()
 
 void DX::DeviceResources::SetMonitor(HMONITOR monitor)
 {
-  HandleOutputChange([monitor](DXGI_OUTPUT_DESC outputDesc) {
+  
+  int newDecoderAdapter = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_DXVA2ADAPTER);
+  if(newDecoderAdapter != -1 && (newDecoderAdapter != m_dxva2DecoderAdapter))
+  {
+    if(!InitializeDecoderResources(newDecoderAdapter))
+	{
+	  CLog::LogF(LOGINFO,"DX::DeviceResources::SetMonitor could not use dxva2Adapter {}, changing to output adapter",newDecoderAdapter);
+	  CServiceBroker::GetSettingsComponent()->GetSettings()->SetInt(CSettings::SETTING_VIDEOPLAYER_DXVA2ADAPTER, -1);
+	  newDecoderAdapter = -1;
+	}
+  }
+  m_dxva2DecoderAdapter = newDecoderAdapter;
+
+  HandleOutputChange([monitor](DXGI_OUTPUT_DESC outputDesc) 
+  {
     return outputDesc.Monitor == monitor;
   });
 }
@@ -1170,11 +1413,11 @@ void DX::DeviceResources::CheckDXVA2SharedDecoderSurfaces()
   const DXGI_ADAPTER_DESC ad = GetAdapterDesc();
 
   m_DXVA2SharedDecoderSurfaces =
-      ad.VendorId == PCIV_Intel ||
-      (ad.VendorId == PCIV_QUALCOMM && driver.valid && driver.majorVersion >= 31) ||
-      (ad.VendorId == PCIV_NVIDIA && driver.valid && driver.majorVersion >= 465) ||
-      (ad.VendorId == PCIV_AMD && driver.valid && driver.majorVersion >= 30 &&
-       m_d3dFeatureLevel >= D3D_FEATURE_LEVEL_12_1);
+    ad.VendorId == PCIV_Intel ||
+    (ad.VendorId == PCIV_QUALCOMM && driver.valid && driver.majorVersion >= 31) ||
+    (ad.VendorId == PCIV_NVIDIA && driver.valid && driver.majorVersion >= 465) ||
+    (ad.VendorId == PCIV_AMD && driver.valid && driver.majorVersion >= 30 &&
+     m_d3dFeatureLevel >= D3D_FEATURE_LEVEL_12_1);
 
   CLog::LogF(LOGINFO, "DXVA2 shared decoder surfaces is{}supported",
              m_DXVA2SharedDecoderSurfaces ? " " : " NOT ");
@@ -1229,6 +1472,13 @@ void DX::DeviceResources::SetWindow(HWND window)
 
   CreateDeviceIndependentResources();
   CreateDeviceResources();
+  
+  m_dxva2DecoderAdapter = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_DXVA2ADAPTER);
+  if(m_dxva2DecoderAdapter != -1)
+  {
+	CreateDecoderDeviceResources();
+  }
+
 }
 #elif defined(TARGET_WINDOWS_STORE)
 // This method is called when the CoreWindow is created (or re-created).

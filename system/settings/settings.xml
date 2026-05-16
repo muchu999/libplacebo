@@ -189,6 +189,21 @@
           <default>true</default>
           <control type="toggle" />
         </setting>
+		<setting id="videoplayer.dxva2adapter" type="integer" label="55344" help="55345">
+		  <requirement>HasDXVA2</requirement>
+		  <dependencies>
+			<dependency type="enable">
+			  <condition setting="videoplayer.usedxva2" operator="is">true</condition>
+			</dependency>
+		  </dependencies>
+		  <level>2</level>
+		  <default>-1</default>
+		  <!-- DECODER_DEVICE_SAME_AS_OUTPUT -->
+		  <constraints>
+			<options>dxva2adapters</options>
+		  </constraints>
+		  <control type="list" format="string" />
+		</setting>
 		<setting id="videoplayer.noofdxva2surfaces" type="integer" label="55342" help="55343">
 		  <requirement>HasDXVA2</requirement>
 		  <dependencies>

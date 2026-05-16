@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <cstdlib> // std::abs(int) prototype
+#include <rendering/dx/DeviceResources.h>
 
 
 CBaseRenderer::CBaseRenderer()
@@ -512,6 +513,19 @@ void CBaseRenderer::EnableAlwaysClip()
 void CBaseRenderer::SetVideoSettings(const CVideoSettings &settings)
 {
   m_videoSettings = settings;
+}
+
+
+void CBaseRenderer::SettingOptionsDxva2AdaptersFiller(
+  const std::shared_ptr<const CSetting>& setting,
+  std::vector<IntegerSettingOption>& list,
+  int& current)
+{
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(55346), -1);
+  
+#ifdef HAS_DX
+  DX::DeviceResources::Get()->AppendListOfAdapters(list);
+#endif
 }
 
 void CBaseRenderer::SettingOptionsRenderMethodsFiller(

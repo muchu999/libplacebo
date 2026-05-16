@@ -253,7 +253,7 @@ static const dxva2_mode_t* dxva2_find_mode(const GUID* guid)
 // DXVA Context
 //-----------------------------------------------------------------------------
 
-CContext::weak_ptr CContext::m_context;
+CContext::weak_ptr CContext::m_context; 
 CCriticalSection CContext::m_section;
 
 CContext::~CContext()
@@ -299,6 +299,14 @@ CContext::shared_ptr CContext::EnsureContext(CDecoder* decoder)
   return EnsureContext(decoder);
 }
 
+void CContext::InvalidateContext()
+{
+  auto context = m_context.lock();
+  context->DestroyContext();
+  context->CreateContext();
+
+}
+
 bool CContext::CreateContext()
 {
   HRESULT hr = E_FAIL;
@@ -335,15 +343,35 @@ bool CContext::CreateContext()
     featureLevels.push_back(D3D_FEATURE_LEVEL_9_2);
     featureLevels.push_back(D3D_FEATURE_LEVEL_9_1);
 
-    hr = D3D11CreateDevice(DX::DeviceResources::Get()->GetAdapter(), D3D_DRIVER_TYPE_UNKNOWN,
-                           nullptr, creationFlags, featureLevels.data(), featureLevels.size(),
-                           D3D11_SDK_VERSION, &pD3DDevice, &d3dFeatureLevel, &pD3DDeviceContext);
-    if (SUCCEEDED(hr))
+	if(DX::DeviceResources::Get()->GetDxvaDecoderAdapter() == -1)
+	{
+	  hr = D3D11CreateDevice(DX::DeviceResources::Get()->GetAdapter(),D3D_DRIVER_TYPE_UNKNOWN,
+		nullptr,creationFlags,featureLevels.data(),featureLevels.size(),
+		D3D11_SDK_VERSION,& pD3DDevice,& d3dFeatureLevel,& pD3DDeviceContext);
+	}
+	else
+	{
+	  hr = D3D11CreateDevice(DX::DeviceResources::Get()->GetAdapterDecoder(),D3D_DRIVER_TYPE_UNKNOWN,
+		nullptr,creationFlags,featureLevels.data(),featureLevels.size(),
+		D3D11_SDK_VERSION,&pD3DDevice,&d3dFeatureLevel,&pD3DDeviceContext);
+	}
+	if (SUCCEEDED(hr))
     {
+	  if(DX::DeviceResources::Get()->GetDxvaDecoderAdapter() == -1)
+	  {
       CLog::LogF(
           LOGINFO, "device for decoding created on adapter '{}' with {}",
-          KODI::PLATFORM::WINDOWS::FromW(DX::DeviceResources::Get()->GetAdapterDesc().Description),
+		  KODI::PLATFORM::WINDOWS::FromW(DX::DeviceResources::Get()->GetAdapterDesc().Description),
           DX::GetFeatureLevelDescription(d3dFeatureLevel));
+	  }
+	  else
+	  {
+		CLog::LogF(
+		  LOGINFO,"device for decoding created on adapter '{}' with {}",
+		  KODI::PLATFORM::WINDOWS::FromW(DX::DeviceResources::Get()->GetAdapterDecoderDesc().Description),
+		  DX::GetFeatureLevelDescription(d3dFeatureLevel));
+	  }
+
 
 #ifdef _DEBUG
       if (FAILED(pD3DDevice.As(&m_d3d11Debug)))
@@ -633,7 +661,7 @@ bool CContext::CreateSurfaces(const D3D11_VIDEO_DECODER_DESC& format, uint32_t c
   float clearColor[] = {0.f, 127.f, 127.f, 255.f}; // black color in YUV
 
   size_t i;
-  for (i = 0; i < count; ++i)
+  for (i = 0; i < count; ++i)  //cl almost 1GB here
   {
     vdovDesc.Texture2D.ArraySlice = D3D11CalcSubresource(0, i, texDesc.MipLevels);
     hr = m_pD3D11Device->CreateVideoDecoderOutputView(texture.Get(), &vdovDesc, &surfaces[i]);
@@ -759,7 +787,7 @@ void DXVA::CVideoBuffer::Initialize(CDecoder* decoder)
 HRESULT DXVA::CVideoBuffer::GetResource(ID3D11Resource** ppResource)
 {
   if (!view)
-    return E_NOT_SET;
+	return E_NOT_SET;
 
   view->GetResource(ppResource);
   return S_OK;
@@ -793,46 +821,91 @@ CVideoBufferShared::~CVideoBufferShared()
     CloseHandle(m_handleFence);
 }
 
+bool DXVA::CVideoBuffer::CopyBack(ID3D11Resource** ppResource,ID3D11Resource** ppStagingTexture)
+{
+  return false;
+}
+
+bool CVideoBufferShared::CopyBack(ID3D11Resource** ppResource, ID3D11Resource** ppStagingTexture)
+{
+  HRESULT hr;
+  ComPtr<ID3D11Texture2D> pTexture;
+  D3D11_TEXTURE2D_DESC desc;
+
+  hr = m_sharedRes->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&pTexture);
+  pTexture->GetDesc(&desc); 
+
+  ComPtr<ID3D11Texture2D> stagingTexture = nullptr;
+  CD3D11_TEXTURE2D_DESC stagingDesc(desc);
+  stagingDesc.Usage = D3D11_USAGE_STAGING;
+  stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+  stagingDesc.BindFlags = 0;
+  stagingDesc.MiscFlags = 0;
+  stagingDesc.ArraySize = 1;
+
+  DX::DeviceResources::Get()->GetD3DDeviceDecoder()->CreateTexture2D(&stagingDesc, nullptr, &stagingTexture);
+  DX::DeviceResources::Get()->GetImmediateContextDecoder()->CopyResource(stagingTexture.Get(), pTexture.Get());
+
+  D3D11_MAPPED_SUBRESOURCE mappedResource;
+  hr = DX::DeviceResources::Get()->GetImmediateContextDecoder()->Map(stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mappedResource);
+
+  ComPtr<ID3D11Texture2D> pDestTexture = nullptr;
+  hr = DX::DeviceResources::Get()->GetD3DDevice()->CreateTexture2D(&desc, nullptr, &pDestTexture);
+  DX::DeviceResources::Get()->GetImmediateContext()->UpdateSubresource(pDestTexture.Get(), 0, nullptr, mappedResource.pData, mappedResource.RowPitch, mappedResource.DepthPitch);
+  DX::DeviceResources::Get()->GetImmediateContextDecoder()->Unmap(stagingTexture.Get(), 0);
+
+  pDestTexture.CopyTo(ppStagingTexture); 
+  return true;
+}
+
 HRESULT CVideoBufferShared::GetResource(ID3D11Resource** ppResource)
 {
   HRESULT hr = S_OK;
   if (handle == INVALID_HANDLE_VALUE)
-    return E_HANDLE;
+	return E_HANDLE;
 
   if (!m_sharedRes)
   {
-    // open resource on app device
-    ComPtr<ID3D11Device> pD3DDevice = DX::DeviceResources::Get()->GetD3DDevice();
-    if (FAILED(hr = pD3DDevice->OpenSharedResource(handle, __uuidof(ID3D11Resource), &m_sharedRes)))
-    {
+	// open resource on app device
+	ComPtr<ID3D11Device> pD3DDevice;
+	if(DX::DeviceResources::Get()->GetDxvaDecoderAdapter() == -1)
+	  pD3DDevice = DX::DeviceResources::Get()->GetD3DDevice();
+	else
+	  pD3DDevice = DX::DeviceResources::Get()->GetD3DDeviceDecoder();
+	if(FAILED(hr = pD3DDevice->OpenSharedResource(handle,__uuidof(ID3D11Resource),&m_sharedRes)))
+	{
       CLog::LogF(LOGDEBUG, "unable to open the shared resource, error description: {}",
-                 CWIN32Util::FormatHRESULT(hr));
-      return hr;
-    }
+		CWIN32Util::FormatHRESULT(hr));
+	  return hr;
+	}
 
-    // open fence on app device. Errors if any are not blocking, log only
+	// open fence on app device. Errors if any are not blocking, log only
     if (m_handleFence != INVALID_HANDLE_VALUE)
-    {
-      ComPtr<ID3D11DeviceContext1> context1 = DX::DeviceResources::Get()->GetImmediateContext();
-      ComPtr<ID3D11Device5> device5;
+	{
+	  ComPtr<ID3D11DeviceContext1> context1;
+	  if(DX::DeviceResources::Get()->GetDxvaDecoderAdapter() == -1)
+		context1 = DX::DeviceResources::Get()->GetImmediateContext();
+	  else
+	    context1 = DX::DeviceResources::Get()->GetImmediateContextDecoder();
+	  ComPtr<ID3D11Device5> device5;
       if (FAILED(hr = context1.As(&m_appContext4)))
-      {
+	  {
         CLog::LogF(LOGDEBUG, "ID3D11DeviceContext4 is not available, error description: {}",
-                   CWIN32Util::FormatHRESULT(hr));
-      }
+		  CWIN32Util::FormatHRESULT(hr));
+	  }
       else if (FAILED(hr = pD3DDevice.As(&device5)))
-      {
+	  {
         CLog::LogF(LOGDEBUG, "ID3D11Device5 is not available, error description: {}",
-                   CWIN32Util::FormatHRESULT(hr));
-        m_appContext4 = nullptr;
-      }
+		  CWIN32Util::FormatHRESULT(hr));
+		m_appContext4 = nullptr;
+	  }
       else if (FAILED(hr = device5->OpenSharedFence(m_handleFence, IID_PPV_ARGS(&m_appFence))))
-      {
+	  {
         CLog::LogF(LOGDEBUG, "unable to open the shared fence, error description: {}",
-                   CWIN32Util::FormatHRESULT(hr));
-        m_appContext4 = nullptr;
-      }
-    }
+		  CWIN32Util::FormatHRESULT(hr));
+		m_appContext4 = nullptr;
+	  }
+	}
   }
 
   if (m_appFence)
@@ -1351,7 +1424,11 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, enum AVPixel
   m_refs = 2 + m_shared; // 1 decode + 1 safety + display
   m_surface_alignment = 16;
 
-  const DXGI_ADAPTER_DESC ad = DX::DeviceResources::Get()->GetAdapterDesc();
+  DXGI_ADAPTER_DESC ad;
+  if(DX::DeviceResources::Get()->GetDxvaDecoderAdapter() == -1)
+	ad = DX::DeviceResources::Get()->GetAdapterDesc();   
+  else
+    ad = DX::DeviceResources::Get()->GetAdapterDecoderDesc();
 
   size_t videoMem = ad.SharedSystemMemory + ad.DedicatedVideoMemory + ad.DedicatedSystemMemory;
   CLog::LogF(LOGINFO, "Total video memory available is {} MB (dedicated = {} MB, shared = {} MB)",
@@ -1533,6 +1610,12 @@ void CDecoder::Reset()
   }
 }
 
+void CDecoder::InvalidateDecoder()
+{
+  CContext::InvalidateContext();
+}
+
+
 CDVDVideoCodec::VCReturn CDecoder::Check(AVCodecContext* avctx)
 {
   std::unique_lock lock(m_section);
@@ -1651,7 +1734,7 @@ bool CDecoder::OpenDecoder()
 
   if (m_dxvaContext->IsContextShared())
   {
-    if (trueShared)
+    if (trueShared && (DX::DeviceResources::Get()->GetDxvaDecoderAdapter() == -1)) //cl?
       m_bufferPool = std::make_shared<CVideoBufferPoolTyped<CVideoBufferShared>>();
     else
       m_bufferPool = std::make_shared<CVideoBufferPoolTyped<CVideoBufferCopy>>();

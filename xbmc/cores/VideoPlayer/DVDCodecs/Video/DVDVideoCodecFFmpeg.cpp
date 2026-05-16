@@ -51,6 +51,7 @@ extern "C" {
 #include <math.h>
 #define RINT lrint
 #endif
+#include <rendering/dx/DeviceResources.h>
 
 enum DecoderState
 {
@@ -288,15 +289,31 @@ enum AVPixelFormat CDVDVideoCodecFFmpeg::GetFormat(struct AVCodecContext * avctx
   while (*cur != AV_PIX_FMT_NONE)
   {
     pixFmtName = av_get_pix_fmt_name(*cur);
-
     auto hwaccels = CDVDFactoryCodec::GetHWAccels();
-    for (auto &hwaccel : hwaccels)
+	int adapter = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_DXVA2ADAPTER);
+
+	// Check before possible change
+	bool bInvalidateDecoder = false;
+	if(DX::DeviceResources::Get()->GetDxvaDecoderAdapter() != adapter)
+	  bInvalidateDecoder = true;
+
+	if(!DX::DeviceResources::Get()->InitializeDecoderResources(adapter))  //cl right place here?
+	{
+	  CLog::Log(LOGINFO,"DX::DeviceResources::SetMonitor could not use dxva2Adapter {}, changing to output adapter",adapter);
+	  CServiceBroker::GetSettingsComponent()->GetSettings()->SetInt(CSettings::SETTING_VIDEOPLAYER_DXVA2ADAPTER,-1);
+	  DX::DeviceResources::Get()->InitializeDecoderResources(-1);
+	  bInvalidateDecoder = true;
+	}
+	
+	for (auto &hwaccel : hwaccels)
     {
-      IHardwareDecoder *pDecoder(CDVDFactoryCodec::CreateVideoCodecHWAccel(hwaccel, ctx->m_hints,
+	  IHardwareDecoder *pDecoder(CDVDFactoryCodec::CreateVideoCodecHWAccel(hwaccel, ctx->m_hints,
                                                                            ctx->m_processInfo, *cur));
       if (pDecoder)
       {
-        if (pDecoder->Open(avctx, ctx->m_pCodecContext, *cur))
+		if(bInvalidateDecoder) //cl
+		  pDecoder->InvalidateDecoder();
+		if (pDecoder->Open(avctx, ctx->m_pCodecContext, *cur))
         {
           ctx->m_processInfo.SetVideoPixelFormat(pixFmtName ? pixFmtName : "");
           ctx->SetHardware(pDecoder);

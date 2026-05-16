@@ -1178,8 +1178,6 @@ bool CRendererPL::CRenderBufferImpl::UploadWrapPlanes()
   hr = pResource->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&pTexture);
   pTexture->GetDesc(&desc);
 
-
-
   // Wrap the plane of the D3D11 texture
   for (int i = 0; i < plFormat.num_planes; i++)
   {
@@ -1211,97 +1209,3 @@ bool CRendererPL::CRenderBufferImpl::HasHdrData()
 }
 
 
-/*
-* Garbage
-*   if(1)
-  {
-	if (buffer->isInterlaced)
-	{
-	  if(lastBufferIndex==-1)
-	  {
-		lastBufferIndex = m_iBufferIndex;
-		return;
-	  }
-
-	  if ((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_TOP))
-	  {
-		frameIn.field = PL_FIELD_TOP;
-		frameIn.first_field = PL_FIELD_TOP;
-	  }
-	  else if ((flags & RENDER_FLAG_FIELD1) && (flags & RENDER_FLAG_BOT))
-	  {
-		frameIn.field = PL_FIELD_BOTTOM;
-		frameIn.first_field = PL_FIELD_TOP;
-	  }
-	  else if ((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_BOT))
-	  {
-		frameIn.field = PL_FIELD_BOTTOM;
-		frameIn.first_field = PL_FIELD_BOTTOM;
-	  }
-	  else if ((flags & RENDER_FLAG_FIELD1) && (flags & RENDER_FLAG_TOP))
-	  {
-		frameIn.field = PL_FIELD_TOP;
-		frameIn.first_field = PL_FIELD_BOTTOM;
-	  }
-	  else
-	  {
-		frameIn.field = PL_FIELD_NONE;
-		frameIn.first_field = PL_FIELD_NONE;
-	  }
-	  frameIn.prev = &prevFrame;
-	  prevFrame = frameIn;
-	}
-	else
-	{
-	  frameIn.field = PL_FIELD_NONE;
-	  frameIn.first_field = PL_FIELD_NONE;
-	  frameIn.prev = NULL;
-	}
-
-  else
-  {
-  struct pl_frame_mix mix { 0 };
-
-  pl_frame* tmp_frame[2];
-  uint64_t(tmp_sig)[2];
-  float tmp_ts[2];
-
-
-	pl_frame frameIn2{};
-	CRenderBuffer* buf2 = m_renderBuffers[ (m_iBufferIndex - 1) % m_iNumBuffers]; //cltest
-	if (!buf2)
-	  return;
-	CRenderBufferImpl* buffer2 = static_cast<CRenderBufferImpl*>(buf2);
-	if (!buffer2->GetLibplaceboFrame(frameIn2))
-	  return;
-	if(buffer2->m_signature == 0)
-	  return;
-	frameIn.prev = &frameIn2;
-	frameIn.next = NULL;
-
-	mix.num_frames = 2;
-
-	tmp_frame[0] = &frameIn;
-	tmp_frame[1] = &frameIn2;
-	tmp_ts[0] = buf->pts/1000000.0;
-	tmp_ts[1] = (buf->pts+buf->duration/2.0) / 1000000.0;
-	tmp_sig[0] = buffer->m_signature;
-	tmp_sig[1] = buffer2->m_signature;
-
-  }
-  else
-  {
-	mix.num_frames = 1;
-	tmp_frame[0] = &frameIn;
-	tmp_sig[0] = buffer->m_signature;
-	tmp_ts[0] = buf->pts / 1000000.0;
-  }
-
-  mix.frames = const_cast<const pl_frame**>(tmp_frame);
-  mix.signatures = tmp_sig;
-  mix.timestamps = tmp_ts;
-  mix.vsync_duration = 1.0; //buf->duration/1000000.0;
-
-  bool res = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, &params);
-  }
-*/

@@ -20,7 +20,7 @@
 #include <vector>
 
 #define MAX_FIELDS 3
-#define NUM_BUFFERS 6 //cl num of video buffers
+#define NUM_BUFFERS 6 //cl num of video buffers, went down to 3...
 
 class CSetting;
 struct IntegerSettingOption;
@@ -91,6 +91,9 @@ public:
   static void SettingOptionsRenderMethodsFiller(const std::shared_ptr<const CSetting>& setting,
                                                 std::vector<IntegerSettingOption>& list,
                                                 int& current);
+  static void SettingOptionsDxva2AdaptersFiller(const std::shared_ptr<const CSetting>& setting,
+	std::vector<IntegerSettingOption>& list,
+	int& current);
 
   void SetVideoSettings(const CVideoSettings &settings);
 

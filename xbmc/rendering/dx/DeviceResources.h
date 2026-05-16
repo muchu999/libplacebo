@@ -20,6 +20,7 @@
 #include <winrt/windows.foundation.h>
 #include <wrl.h>
 #include <wrl/client.h>
+#include <settings/lib/SettingDefinitions.h>
 
 struct RESOLUTION_INFO;
 struct DEBUG_INFO_RENDER;
@@ -60,6 +61,8 @@ namespace DX
     void HandleDeviceLost(bool removed);
     bool Begin();
     void Present();
+	void AppendListOfAdapters(std::vector<IntegerSettingOption>& list);
+	int GetDxvaDecoderAdapter() {return(m_dxva2DecoderAdapter);}
 
     // The size of the render target, in pixels.
     winrt::Windows::Foundation::Size GetOutputSize() const { return m_outputSize; }
@@ -72,12 +75,16 @@ namespace DX
     // D3D Accessors.
     bool HasValidDevice() const { return m_bDeviceCreated; }
     ID3D11Device1* GetD3DDevice() const { return m_d3dDevice.Get(); }
-    ID3D11DeviceContext1* GetD3DContext() const { return m_deferrContext.Get(); }
-    ID3D11DeviceContext1* GetImmediateContext() const { return m_d3dContext.Get(); }
-    IDXGISwapChain1* GetSwapChain() const { return m_swapChain.Get(); }
+	ID3D11Device1* GetD3DDeviceDecoder() const { return m_d3dDeviceDecoder.Get(); }
+	ID3D11DeviceContext1* GetD3DContext() const { return m_deferrContext.Get(); }
+	ID3D11DeviceContext1* GetD3DContextDecoder() const { return m_deferrContextDecoder.Get(); }
+	ID3D11DeviceContext1* GetImmediateContext() const { return m_d3dContext.Get(); }
+	ID3D11DeviceContext1* GetImmediateContextDecoder() const { return m_d3dContextDecoder.Get(); }
+	IDXGISwapChain1* GetSwapChain() const { return m_swapChain.Get(); }
     IDXGIFactory2* GetIDXGIFactory2() const { return m_dxgiFactory.Get(); }
     IDXGIAdapter1* GetAdapter() const { return m_adapter.Get(); }
-    ID3D11DepthStencilView* GetDSV() const { return m_d3dDepthStencilView.Get(); }
+	IDXGIAdapter1* GetAdapterDecoder() const { return m_adapterDecoder.Get(); }
+	ID3D11DepthStencilView* GetDSV() const { return m_d3dDepthStencilView.Get(); }
     D3D_FEATURE_LEVEL GetDeviceFeatureLevel() const { return m_d3dFeatureLevel; }
     CD3DTexture& GetBackBuffer() { return m_backBufferTex; }
 
@@ -91,7 +98,8 @@ namespace DX
     */
     void GetCachedOutputAndDesc(IDXGIOutput** output, DXGI_OUTPUT_DESC* outputDesc) const;
     DXGI_ADAPTER_DESC GetAdapterDesc() const;
-    void GetDisplayMode(DXGI_MODE_DESC *mode) const;
+	DXGI_ADAPTER_DESC GetAdapterDecoderDesc() const;
+	void GetDisplayMode(DXGI_MODE_DESC *mode) const;
 
     D3D11_VIEWPORT GetScreenViewport() const { return m_screenViewport; }
     void SetViewPort(D3D11_VIEWPORT& viewPort) const;
@@ -152,6 +160,7 @@ namespace DX
     std::vector<DXGI_COLOR_SPACE_TYPE> GetSwapChainColorSpaces() const;
     bool SetMultithreadProtected(bool enabled) const;
     bool IsGCNOrOlder() const;
+	bool InitializeDecoderResources(int dxva2Adapter);
 
   private:
     class CBackBuffer : public CD3DTexture
@@ -166,12 +175,13 @@ namespace DX
     void DestroySwapChain();
     void CreateDeviceIndependentResources();
     void CreateDeviceResources();
-    void CreateWindowSizeDependentResources();
+	void CreateDecoderDeviceResources();
+	void CreateWindowSizeDependentResources();
     void UpdateRenderTargetSize();
     void OnDeviceLost(bool removed);
     void OnDeviceRestored();
     void HandleOutputChange(const std::function<bool(DXGI_OUTPUT_DESC)>& cmpFunc);
-    bool CreateFactory();
+	bool CreateFactory();
     void CheckNV12SharedTexturesSupport();
     VideoDriverInfo GetVideoDriverVersion() const;
     void CheckDXVA2SharedDecoderSurfaces();
@@ -182,13 +192,17 @@ namespace DX
 #endif
     Microsoft::WRL::ComPtr<IDXGIFactory2> m_dxgiFactory;
     Microsoft::WRL::ComPtr<IDXGIAdapter1> m_adapter;
-    Microsoft::WRL::ComPtr<IDXGIOutput1> m_output;
+	Microsoft::WRL::ComPtr<IDXGIAdapter1> m_adapterDecoder;
+	Microsoft::WRL::ComPtr<IDXGIOutput1> m_output;
     DXGI_OUTPUT_DESC m_outputDesc{};
 
     Microsoft::WRL::ComPtr<ID3D11Device1> m_d3dDevice;
-    Microsoft::WRL::ComPtr<ID3D11DeviceContext1> m_d3dContext;
-    Microsoft::WRL::ComPtr<ID3D11DeviceContext1> m_deferrContext;
-    Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain;
+	Microsoft::WRL::ComPtr<ID3D11Device1> m_d3dDeviceDecoder;
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext1> m_d3dContext;
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext1> m_d3dContextDecoder;
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext1> m_deferrContext;
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext1> m_deferrContextDecoder;
+	Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain;
 #ifdef _DEBUG
     Microsoft::WRL::ComPtr<ID3D11Debug> m_d3dDebug;
 #endif
@@ -199,7 +213,8 @@ namespace DX
 
     // Cached device properties.
     D3D_FEATURE_LEVEL m_d3dFeatureLevel;
-    winrt::Windows::Foundation::Size m_outputSize;
+	D3D_FEATURE_LEVEL m_d3dFeatureLevelDecoder;
+	winrt::Windows::Foundation::Size m_outputSize;
     winrt::Windows::Foundation::Size m_logicalSize;
     float m_dpi;
 
@@ -213,6 +228,7 @@ namespace DX
     Concurrency::critical_section m_resourceSection;
     std::vector<ID3DResource*> m_resources;
 
+	int m_dxva2DecoderAdapter;
     bool m_stereoEnabled;
     bool m_bDeviceCreated;
     bool m_IsHDROutput;

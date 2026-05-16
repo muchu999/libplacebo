@@ -25428,6 +25428,18 @@ msgctxt "#55343"
 msgid "This puts an upper limit on the amount of GPU memory used for DXVA2 decoding"
 msgstr ""
 
+msgctxt "#55344"
+msgid "DXVA2 adapter"
+msgstr ""
+
+msgctxt "#55345"
+msgid "Adapter to use for DXVA2 decoding"
+msgstr ""
+
+msgctxt "#55346"
+msgid "Default: output adapter"
+msgstr ""
+
 
 
 

@@ -16,9 +16,11 @@
 #include "cores/VideoPlayer/Buffers/VideoBuffer.h"
 #include "rendering/dx/DirectXHelper.h"
 #include "rendering/dx/RenderContext.h"
+#include "settings/SettingsComponent.h"
 #include "utils/MemUtils.h"
 #include "utils/log.h"
 #include "windowing/GraphicContext.h"
+#include <settings/Settings.h>
 
 using namespace Microsoft::WRL;
 
@@ -70,11 +72,21 @@ HRESULT CRenderBuffer::GetResource(ID3D11Resource** ppResource, unsigned* index)
     return E_NOT_SET;
 
   ComPtr<ID3D11Resource> pResource;
-  const HRESULT hr = dxva->GetResource(&pResource);
+  HRESULT hr = dxva->GetResource(&pResource);
   if (SUCCEEDED(hr))
   {
-    *ppResource = pResource.Detach();
-    *index = dxva->GetIdx();
+	if(DX::DeviceResources::Get()->GetDxvaDecoderAdapter() == -1)
+	{
+	  *ppResource = pResource.Detach();
+      *index = dxva->GetIdx();
+	}
+	else
+	{
+	  ComPtr <ID3D11Resource> pTexture;
+	  hr = dxva->CopyBack(ppResource, &pTexture);
+	  *ppResource = pTexture.Detach();
+	  *index = dxva->GetIdx(); //cl 
+	}
   }
 
   return hr;

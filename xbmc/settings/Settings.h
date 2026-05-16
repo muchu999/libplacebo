@@ -131,6 +131,7 @@ public:
   static constexpr auto SETTING_VIDEOPLAYER_USEVDPAUMPEG4 = "videoplayer.usevdpaumpeg4";
   static constexpr auto SETTING_VIDEOPLAYER_USEVDPAUVC1 = "videoplayer.usevdpauvc1";
   static constexpr auto SETTING_VIDEOPLAYER_USEDXVA2 = "videoplayer.usedxva2";
+  static constexpr auto SETTING_VIDEOPLAYER_DXVA2ADAPTER = "videoplayer.dxva2adapter";
   static constexpr auto SETTING_VIDEOPLAYER_NOOFDXVA2SURFACES = "videoplayer.noofdxva2surfaces";
   static constexpr auto SETTING_VIDEOPLAYER_USEVTB = "videoplayer.usevtb";
   static constexpr auto SETTING_VIDEOPLAYER_USEPRIMEDECODER = "videoplayer.useprimedecoder";

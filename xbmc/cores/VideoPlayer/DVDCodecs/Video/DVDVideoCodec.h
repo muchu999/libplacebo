@@ -277,6 +277,7 @@ public:
   virtual bool GetPicture(AVCodecContext* avctx, VideoPicture* picture) = 0;
   virtual CDVDVideoCodec::VCReturn Check(AVCodecContext* avctx) = 0;
   virtual void Reset() {}
+  virtual void InvalidateDecoder() {}
   virtual unsigned GetAllowedReferences() { return 0; }
   virtual bool CanSkipDeint() {return false; }
   virtual const std::string Name() = 0;
