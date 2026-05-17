@@ -529,11 +529,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   pl_frame frameIn{};
   pl_render_params params = m_videoSettings.m_placeboOptions->getPlOptions()->params;
 
-  CRect src = sourceRect;
-  CRect dst = HasHQScaler() ? sourceRect : ApplyTransforms(CRect(destPoints[0], destPoints[2]));
-  const CRect trg(0.0f, 0.0f, static_cast<float>(target.GetWidth()), static_cast<float>(target.GetHeight()));
-  CWIN32Util::CropSource(src, dst, trg, m_renderOrientation);
-
   CRenderBuffer* buf = m_renderBuffers[m_iBufferIndex];
   if (!buf || !buf->IsLoaded())
 	return;
@@ -843,6 +838,14 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   frameOut.planes[0].component_mapping[2] = PL_CHANNEL_B;
   frameOut.planes[0].component_mapping[3] = PL_CHANNEL_A;
   
+  CRect src = sourceRect;
+  CRect dst = ApplyTransforms(CRect(destPoints[0],destPoints[2])); //uses m_renderOrientation
+
+  frameIn.crop.x0 = src.x1;
+  frameIn.crop.x1 = src.x2;
+  frameIn.crop.y0 = src.y1;
+  frameIn.crop.y1 = src.y2;
+
   frameOut.crop.x0 = dst.x1;
   frameOut.crop.x1 = dst.x2;
   frameOut.crop.y0 = dst.y1;
