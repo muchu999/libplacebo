@@ -34,7 +34,7 @@ public:
     m_placeboOptions = pl_options_alloc(NULL);
     if (m_placeboOptions && other.m_placeboOptions) 
     {
-      //cl deep ???
+      //copy it
       //std::memcpy(m_placeboOptions, other.m_placeboOptions, sizeof(pl_options_t));
       *m_placeboOptions = *other.m_placeboOptions;
     }

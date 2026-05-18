@@ -254,7 +254,7 @@ CRect CRendererDXVA::ApplyTransforms(const CRect& destRect) const
   return result;
 }
 
-void CRendererDXVA::FillBuffersSet(CRenderBuffer* (&buffers)[8])   //cl
+void CRendererDXVA::FillBuffersSet(CRenderBuffer* (&buffers)[8])
 {
   int past = 0;
   int future = 0;

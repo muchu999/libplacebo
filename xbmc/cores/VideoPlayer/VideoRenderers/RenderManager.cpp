@@ -971,7 +971,7 @@ bool CRenderManager::AddVideoPicture(const VideoPicture& picture, volatile std::
 
 
   // set fieldsync if picture is interlaced
-  EFIELDSYNC displayField = FS_NONE; //cl
+  EFIELDSYNC displayField = FS_NONE;
   if (picture.iFlags & DVP_FLAG_INTERLACED)
   {
     if (deintMethod != EINTERLACEMETHOD::VS_INTERLACEMETHOD_NONE)
@@ -1177,9 +1177,9 @@ void CRenderManager::PrepareNextRender()
 
   CLog::LogFC(LOGDEBUG, LOGAVTIMING,
               "frameOnScreen: {:f} renderPts: {:f} nextFramePts: {:f} -> diff: {:f}  render: {} "
-              "forceNext: {} Queued: {} Discard: {} Free: {}",
+              "forceNext: {}",
               frameOnScreen, renderPts, nextFramePts, (renderPts - nextFramePts),
-              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size());
+              renderPts >= nextFramePts, m_forceNext);
 
   bool combined = false;
   if (m_presentsourcePast >= 0)
