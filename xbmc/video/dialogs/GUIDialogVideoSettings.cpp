@@ -1586,7 +1586,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_LINEAR_KNEE, 55272, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantLinearKnee, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55272, usePopup);
 	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_REINHARD_CONTRAST, 55273, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantReinhardContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55273, usePopup);
 	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_OFFSET, 55274, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeOffset, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55274, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING, 55275, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeTuning, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55275, usePopup);
+	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING, 55275, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeTuning, "{0:4.2f}", (float)0.0, (float)0.1, (float)10.0, 55275, usePopup);
 	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST, 55276, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSplineContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.5, 55276, usePopup);
 
 	// Gamut mapping constants
