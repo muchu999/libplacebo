@@ -337,7 +337,7 @@ void CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings& vs)
 
   vs.m_PlaceboColorMapEnabled = m_placeboOptions->params.color_map_params != NULL;
   vs.m_PlaceboColorMapGamutMapping = m_placeboOptions->color_map_params.gamut_mapping == NULL ? -1 : CPLHelper::getGamutMapIndexFromDescription(m_placeboOptions->color_map_params.gamut_mapping->description);
-  vs.m_PlaceboColorMapToneMapping = m_placeboOptions->color_map_params.tone_mapping_function == NULL ? -1 : CPLHelper::getGamutMapIndexFromDescription(m_placeboOptions->color_map_params.tone_mapping_function->description);
+  vs.m_PlaceboColorMapToneMapping = m_placeboOptions->color_map_params.tone_mapping_function == NULL ? -1 : CPLHelper::getToneMapIndexFromDescription(m_placeboOptions->color_map_params.tone_mapping_function->description);
   vs.m_PlaceboColorMapContrastRecovery = m_placeboOptions->color_map_params.contrast_recovery;
   vs.m_PlaceboColorMapContrastSmoothness = m_placeboOptions->color_map_params.contrast_smoothness;
   vs.m_PlaceboColorMapGamutExpansion = m_placeboOptions->color_map_params.gamut_expansion;
