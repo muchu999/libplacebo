@@ -1582,18 +1582,23 @@ int CApplication::Run()
     // Animate and render a frame
 
     lastFrameTime = std::chrono::steady_clock::now();
-    Process();
+	//cl CLog::Log(LOGDEBUG, "Processing frame...");
+	Process();
 
     bool renderGUI = GetComponent<CApplicationPowerHandling>()->GetRenderGUI();
     if (!m_bStop)
     {
-      FrameMove(true, renderGUI);
+	  //cl CLog::Log(LOGDEBUG,"FrameMove...");
+	  FrameMove(true, renderGUI);
     }
 
     if (renderGUI && !m_bStop)
     {
-      Render();
-    }
+	  //CLog::Log(LOGDEBUG,"Render in");  //cl This is where the loop receives its timing (block/unblocks somewhere in the call on every frame..., 
+	                                    //cl sometimes takes a long time, currently investigating stutering and render takes a long time in this case (a few frames)
+	  Render();
+	  //CLog::Log(LOGDEBUG,"Render out");
+	}
     else if (!renderGUI)
     {
       auto now = std::chrono::steady_clock::now();
