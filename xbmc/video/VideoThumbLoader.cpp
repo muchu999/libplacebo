@@ -652,6 +652,8 @@ void CVideoThumbLoader::DetectAndAddMissingItemData(CFileItem &item)
       path = item.GetVideoInfoTag()->GetPath();
 
     // check for custom stereomode setting in video settings
+
+	//cl this is killing us, we need to open the database for every single item (tested at 11ms per thumb but still...)
     CVideoSettings itemVideoSettings;
     m_videoDatabase->Open();
     if (m_videoDatabase->GetVideoSettings(item, itemVideoSettings) &&

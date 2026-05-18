@@ -424,7 +424,7 @@ bool CProcessorHD::Render(CRect src, CRect dst, ID3D11Resource* target, CRenderB
   stream_data.InputFrameOrField = frameIdx + (secondField ? 1 : 0);
   stream_data.OutputIndex = secondField;
 
-  // Render() gets called once for each displayed frame, following the pattern necessary to adapt
+  // Render() gets called once for each displayed frame, following the pattern necessary to adapt  //cl
   // the source fps to the display fps, with repetitions as needed (ex. 3:2 for 23.98fps at 59Hz)
   // However there is no need to render the same frame more than once, the intermediate target is
   // not cleared and the output of the previous processing is still there.

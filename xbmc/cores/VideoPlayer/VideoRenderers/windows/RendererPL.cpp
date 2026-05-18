@@ -348,7 +348,7 @@ struct pl_color_space MpDxgiDescToColorSpace(const DXGI_OUTPUT_DESC1* desc)
   if (!desc)
 	return ret;
 
-  ret.hdr.max_luma = desc->MaxLuminance;
+  ret.hdr.max_luma = 400; //desc->MaxLuminance;
   ret.hdr.min_luma = desc->MinLuminance;
   ret.hdr.max_fall = desc->MaxFullFrameLuminance;
   ret.hdr.prim.blue.x = desc->BluePrimary[0];
