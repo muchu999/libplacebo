@@ -183,6 +183,7 @@ void CBaseRenderer::CalcDestRect(float offsetX,
   float posY = (height - newHeight) / 2;
   float posX = (width - newWidth) / 2;
 
+#if 1
   // vertical shift range -1 to 1 shifts within the top and bottom black bars
   // if there are no top and bottom black bars, this range does nothing
   float blackBarSize = std::max((height - newHeight) / 2.0f, 0.0f);
@@ -196,6 +197,9 @@ void CBaseRenderer::CalcDestRect(float offsetX,
     posY += shiftRange * (verticalShift - 1.0f);
   else if (verticalShift < -1.0f)
     posY += shiftRange * (verticalShift + 1.0f);
+#else
+  posY += verticalShift*100.0; //cl works more intuitively with shifting by +/-1 pixel per lowest slider tick but more limited range, would need bigger range, non linear shift or 2 sliders, 1 coarse, 1 fine...
+#endif
 
   destRect.x1 = static_cast<float>(MathUtils::round_int(static_cast<double>(posX + offsetX)));
   destRect.x2 = destRect.x1 + MathUtils::round_int(static_cast<double>(newWidth));

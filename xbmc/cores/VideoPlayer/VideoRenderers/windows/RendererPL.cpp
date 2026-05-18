@@ -815,12 +815,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   if (false && target_pq)
 	frameOut.color.transfer = PL_COLOR_TRC_SRGB;
 
-  //////////////////////////
-
-  //TODO
-  //Add icc profile
-  //add cache for saving time during the compiling of glsl shaders
-
   //wrap the intermediate texture onthe output frame
   pl_d3d11_wrap_params d3dparams =
   {
@@ -907,10 +901,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	//  .num_parts = 1,
   //};
   //frameOut.overlays = &a;
-
   //std::string stats = "Codec: H264\nFPS: 60\nDropped: 0";
-
-  /////////////////////////////////
 
   bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, &params);
   pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes[0].texture);
@@ -1162,12 +1153,14 @@ bool CRendererPL::CRenderBufferImpl::UploadWrapPlanes()
   D3D11_TEXTURE2D_DESC desc;
   HRESULT hr;
   unsigned arrayIdx;
+  //CLog::Log(LOGERROR,"Before");
 
   if (FAILED(GetResource(&pResource, &arrayIdx)))
   {
 	CLog::LogF(LOGERROR, "unable to open d3d11va resource.");
 	return false;
   }
+  //CLog::Log(LOGERROR,"After");
 
   if (plFormat.num_planes==-1)
   {

@@ -74,6 +74,7 @@ namespace DX
 
     // D3D Accessors.
     bool HasValidDevice() const { return m_bDeviceCreated; }
+	bool HasValidDecoderDevice() const {return m_bDecoderDeviceCreated;}
     ID3D11Device1* GetD3DDevice() const { return m_d3dDevice.Get(); }
 	ID3D11Device1* GetD3DDeviceDecoder() const { return m_d3dDeviceDecoder.Get(); }
 	ID3D11DeviceContext1* GetD3DContext() const { return m_deferrContext.Get(); }
@@ -231,6 +232,7 @@ namespace DX
 	int m_dxva2DecoderAdapter;
     bool m_stereoEnabled;
     bool m_bDeviceCreated;
+	bool m_bDecoderDeviceCreated;
     bool m_IsHDROutput;
     bool m_IsTransferPQ;
     bool m_NV12SharedTexturesSupport{false};

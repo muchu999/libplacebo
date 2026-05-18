@@ -91,6 +91,7 @@ DX::DeviceResources::DeviceResources()
   , m_deviceNotify(nullptr)
   , m_stereoEnabled(false)
   , m_bDeviceCreated(false)
+  , m_bDecoderDeviceCreated(false)
   , m_IsHDROutput(false)
   , m_IsTransferPQ(false)
   , m_dxva2DecoderAdapter(-1)
@@ -119,6 +120,7 @@ void DX::DeviceResources::Release()
   m_d3dDevice = nullptr;
   m_d3dDeviceDecoder = nullptr;
   m_bDeviceCreated = false;
+  m_bDecoderDeviceCreated = false;
   m_dxva2DecoderAdapter = -1;
 #ifdef _DEBUG
   if (m_d3dDebug)
@@ -489,7 +491,7 @@ void DX::DeviceResources::CreateDecoderDeviceResources()
 
   CheckDXVA2SharedDecoderSurfaces();
 
-  m_bDeviceCreated = true;
+  m_bDecoderDeviceCreated = true;
 }
 
 
@@ -1162,10 +1164,10 @@ void DX::DeviceResources::Present()
   // to sleep until the next VSync. This ensures we don't waste any cycles rendering
   // frames that will never be displayed to the screen.
   DXGI_PRESENT_PARAMETERS parameters = {};
-  int64_t start = CurrentHostCounter();
+  //int64_t start = CurrentHostCounter();
   HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
-  int64_t end = CurrentHostCounter();
-  CLog::LogF(LOGDEBUG,"DX::DeviceResources::Present duration = {}", end-start);
+  //int64_t end = CurrentHostCounter();
+  //CLog::LogF(LOGDEBUG,"DX::DeviceResources::Present duration = {}", end-start);
 
   // If the device was removed either by a disconnection or a driver upgrade, we
   // must recreate all device resources.
