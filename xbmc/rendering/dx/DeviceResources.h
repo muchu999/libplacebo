@@ -153,7 +153,7 @@ namespace DX
       IDXGIOutput6* last_matched_output;
     };
 
-      bool get_output_desc_from_ctx(struct mp_dxgi_factory_ctx* ctx, DXGI_OUTPUT_DESC1* desc);
+      bool get_output_desc1_from_ctx(struct mp_dxgi_factory_ctx* ctx, DXGI_OUTPUT_DESC1* desc);
 
 
     // Gets debug info from swapchain

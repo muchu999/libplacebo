@@ -5048,8 +5048,10 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
         if ((str = a->records[i]->at(col).get_asString()) == "SubtitleVerticalPosition") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboSkinZoom") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboLutFilename") { list.push_back(str); continue; }
-        if ((str = a->records[i]->at(col).get_asString()) == "PlaceboDisplayPeakLuminance") { list.push_back(str); continue; }
-        if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHint") { list.push_back(str); continue; }
+		if ((str = a->records[i]->at(col).get_asString()) == "PlaceboDisplayPeakLuminance") { list.push_back(str); continue; }  //cl renamed but we want to remove it
+		if ((str = a->records[i]->at(col).get_asString()) == "PlaceboDisplayHdrPeakLuminance") { list.push_back(str); continue; }
+		if ((str = a->records[i]->at(col).get_asString()) == "PlaceboDisplaySdrPeakLuminance") { list.push_back(str); continue; }
+		if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHint") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboTargetColorspaceHintMode") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboShaderApply") { list.push_back(str); continue; }
 
@@ -5171,8 +5173,9 @@ static std::vector<std::string> LibplaceboColumnslist = {
 								   "SubtitleVerticalPosition",
                                    "PlaceboSkinZoom",
                                    "PlaceboLutFilename",
-                                   "PlaceboDisplayPeakLuminance",
-                                   "PlaceboTargetColorspaceHint",
+                                   "PlaceboDisplayHdrPeakLuminance",
+								   "PlaceboDisplaySdrPeakLuminance",
+								   "PlaceboTargetColorspaceHint",
                                    "PlaceboTargetColorspaceHintMode",
                                    "PlaceboShaderApply",
 
@@ -5315,8 +5318,9 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
         if (list[i] == "SubtitleVerticalPosition") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN SubtitleVerticalPosition                integer NOT NULL DEFAULT %i", vs.m_subtitleVerticalPosition); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboSkinZoom") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSkinZoom                                  integer NOT NULL DEFAULT %i", vs.m_PlaceboSkinZoom); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboLutFilename") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboLutFilename                            text NOT NULL DEFAULT '%s'", vs.m_PlaceboLutFilename.c_str()); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboDisplayPeakLuminance") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisplayPeakLuminance          float NOT NULL DEFAULT   %f", vs.m_PlaceboDisplayPeakLuminance); m_pDS->exec(strSQL2); }
-        if (list[i] == "PlaceboTargetColorspaceHint") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHint          integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHint); m_pDS->exec(strSQL2); }
+        if (list[i] == "PlaceboDisplayHdrPeakLuminance") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisplayHdrPeakLuminance    float NOT NULL DEFAULT   %f", vs.m_PlaceboDisplayHdrPeakLuminance); m_pDS->exec(strSQL2); }
+		if (list[i] == "PlaceboDisplaySdrPeakLuminance") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboDisplaySdrPeakLuminance    float NOT NULL DEFAULT   %f", vs.m_PlaceboDisplaySdrPeakLuminance); m_pDS->exec(strSQL2); }
+		if (list[i] == "PlaceboTargetColorspaceHint") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHint          integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHint); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboTargetColorspaceHintMode") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboTargetColorspaceHintMode  integer NOT NULL DEFAULT %i", vs.m_PlaceboTargetColorspaceHintMode); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboShaderApply") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboShaderApply                            bool NOT NULL DEFAULT  %i", vs.m_PlaceboShaderApply); m_pDS->exec(strSQL2); }
 
@@ -5512,8 +5516,9 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         settings.m_subtitleVerticalPosition = m_pDS->fv("SubtitleVerticalPosition").get_asInt();
         settings.m_PlaceboSkinZoom = m_pDS->fv("PlaceboSkinZoom").get_asInt();
         settings.m_PlaceboLutFilename = m_pDS->fv("PlaceboLutFilename").get_asString(); CPLHelper::LoadLutFile(settings, settings.m_PlaceboLutFilename); //cl load depends on type...
-        settings.m_PlaceboDisplayPeakLuminance = m_pDS->fv("PlaceboDisplayPeakLuminance").get_asFloat();
-        settings.m_PlaceboTargetColorspaceHint = m_pDS->fv("PlaceboTargetColorspaceHint").get_asInt();
+        settings.m_PlaceboDisplayHdrPeakLuminance = m_pDS->fv("PlaceboDisplayHdrPeakLuminance").get_asFloat();
+		settings.m_PlaceboDisplaySdrPeakLuminance = m_pDS->fv("PlaceboDisplaySdrPeakLuminance").get_asFloat();
+		settings.m_PlaceboTargetColorspaceHint = m_pDS->fv("PlaceboTargetColorspaceHint").get_asInt();
         settings.m_PlaceboTargetColorspaceHintMode = m_pDS->fv("PlaceboTargetColorspaceHintMode").get_asInt();
         settings.m_PlaceboShaderApply = m_pDS->fv("PlaceboShaderApply").get_asBool();
 
@@ -5704,7 +5709,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
       {
         strSQL = PrepareSQL(
           "update settings set "
-          "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayHdrPeakLuminance=%f,PlaceboDisplaySdrPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
           "PlaceboShaderApply=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
@@ -5733,8 +5738,9 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
 		  settings.m_subtitleVerticalPosition,
           settings.m_PlaceboSkinZoom,
           settings.m_PlaceboLutFilename.c_str(),  //cl check handling of  single/double quotes...
-          static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
-          settings.m_PlaceboTargetColorspaceHint,
+          static_cast<double>(settings.m_PlaceboDisplayHdrPeakLuminance),
+		  static_cast<double>(settings.m_PlaceboDisplaySdrPeakLuminance),
+		  settings.m_PlaceboTargetColorspaceHint,
           settings.m_PlaceboTargetColorspaceHintMode,
           settings.m_PlaceboShaderApply,
           settings.m_PlaceboColorAdjustmentEnabled,
@@ -5867,7 +5873,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
       {
         strSQL = PrepareSQL(
           "update settings set "
-          "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
+          "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayHdrPeakLuminance=%f,PlaceboDisplaySdrPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
           "PlaceboShaderApply=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
           "PlaceboPeakDetectEnabled=%i,PlaceboPeakDetectSmoothingPeriod=%f,PlaceboPeakDetectSceneThresholdLow=%f,PlaceboPeakDetectSceneThresholdHigh=%f,"
           "PlaceboPeakDetectPercentile=%f,PlaceboPeakDetectBlackCutoff=%f,PlaceboPeakDetectAllowDelayed=%i,"
@@ -5896,8 +5902,9 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
 		  settings.m_subtitleVerticalPosition,
           settings.m_PlaceboSkinZoom,
           settings.m_PlaceboLutFilename.c_str(), //cl check handling of  single/double quotes...
-          static_cast<double>(settings.m_PlaceboDisplayPeakLuminance),
-          settings.m_PlaceboTargetColorspaceHint,
+          static_cast<double>(settings.m_PlaceboDisplayHdrPeakLuminance),
+		  static_cast<double>(settings.m_PlaceboDisplaySdrPeakLuminance),
+		  settings.m_PlaceboTargetColorspaceHint,
           settings.m_PlaceboTargetColorspaceHintMode,
           settings.m_PlaceboShaderApply,
           settings.m_PlaceboColorAdjustmentEnabled,

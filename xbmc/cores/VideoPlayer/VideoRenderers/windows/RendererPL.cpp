@@ -18,6 +18,7 @@
 #include "utils/log.h"
 #include "utils/memcpy_sse2.h"
 #include "windowing/GraphicContext.h"
+#include "utils/TimeUtils.h"
 
 #include "RendererBase.h"
 #include <ServiceBroker.h>
@@ -211,6 +212,7 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
   info.metaLight = StringUtils::Format("Video: Matrix:{} Primaries:{} Transfer:{}", pl_color_primaries_name(m_colorSpace.primaries)
 	, pl_color_transfer_name(m_colorSpace.transfer)
 	, pl_color_system_name(m_videoMatrix));
+  info.render = StringUtils::Format("out max Luma: {}, out max FALL: {}, render duration: {:4.1f}ms",plbuffer->m_OutputDesc1.MaxLuminance, plbuffer->m_OutputDesc1.MaxFullFrameLuminance, plbuffer->m_RenderDuration / 1000.0);
   if (plbuffer->hasHDR10PlusMetadata)
   {
 	info.shader = "Primaries (meta): ";
@@ -218,7 +220,7 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	  "R({:.3f} {:.3f}), G({:.3f} {:.3f}), B({:.3f} {:.3f}), WP({:.3f} {:.3f})", hdr.prim.red.x, hdr.prim.red.y,
 	  hdr.prim.green.x, hdr.prim.green.y, hdr.prim.blue.x, hdr.prim.blue.y, hdr.prim.white.x, hdr.prim.white.y);
 
-	info.render = StringUtils::Format("HDR light (meta): max ML: {:.0f}, min ML: {:.4f}", hdr.max_luma, hdr.min_luma);
+	info.render += StringUtils::Format(", HDR light (meta): max luma: {:.0f}, min luma: {:.4f}", hdr.max_luma, hdr.min_luma);
 	info.render += StringUtils::Format(", max CLL: {}, max FALL: {}", hdr.max_cll, hdr.max_fall);
   }
   //line 1 std::string videoSource;
@@ -342,25 +344,25 @@ static void ApplyTargetContrast(struct pl_color_space* color, float min_luma, fl
 //------------------------------------------
 //
 //------------------------------------------
-struct pl_color_space MpDxgiDescToColorSpace(const DXGI_OUTPUT_DESC1* desc)
+struct pl_color_space MpDxgiDesc1ToColorSpace(const DXGI_OUTPUT_DESC1* desc1)
 {
   struct pl_color_space ret = { };
-  if (!desc)
+  if (!desc1)
 	return ret;
 
-  ret.hdr.max_luma = desc->MaxLuminance;
-  ret.hdr.min_luma = desc->MinLuminance;
-  ret.hdr.max_fall = desc->MaxFullFrameLuminance;
-  ret.hdr.prim.blue.x = desc->BluePrimary[0];
-  ret.hdr.prim.blue.y = desc->BluePrimary[1];
-  ret.hdr.prim.green.x = desc->GreenPrimary[0];
-  ret.hdr.prim.green.y = desc->GreenPrimary[1];
-  ret.hdr.prim.red.x = desc->RedPrimary[0];
-  ret.hdr.prim.red.y = desc->RedPrimary[1];
-  ret.hdr.prim.white.x = desc->WhitePoint[0];
-  ret.hdr.prim.white.y = desc->WhitePoint[1];
+  ret.hdr.max_luma = desc1->MaxLuminance;
+  ret.hdr.min_luma = desc1->MinLuminance;
+  ret.hdr.max_fall = desc1->MaxFullFrameLuminance;
+  ret.hdr.prim.blue.x = desc1->BluePrimary[0];
+  ret.hdr.prim.blue.y = desc1->BluePrimary[1];
+  ret.hdr.prim.green.x = desc1->GreenPrimary[0];
+  ret.hdr.prim.green.y = desc1->GreenPrimary[1];
+  ret.hdr.prim.red.x = desc1->RedPrimary[0];
+  ret.hdr.prim.red.y = desc1->RedPrimary[1];
+  ret.hdr.prim.white.x = desc1->WhitePoint[0];
+  ret.hdr.prim.white.y = desc1->WhitePoint[1];
 
-  switch (desc->ColorSpace) {
+  switch (desc1->ColorSpace) {
   case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709:
 	ret.primaries = PL_COLOR_PRIM_BT_709;
 	ret.transfer = PL_COLOR_TRC_SRGB;
@@ -412,8 +414,16 @@ void CRendererPL::ApplyTargetOptions(pl_color_space* target_csp, struct pl_frame
   if (target_csp->transfer && (!target->color.transfer || !hint))
 	target->color.transfer = target_csp->transfer;
 
-  if (m_videoSettings.m_PlaceboDisplayPeakLuminance && (!target->color.hdr.max_luma || !hint))
-	target->color.hdr.max_luma = m_videoSettings.m_PlaceboDisplayPeakLuminance;
+  if(pl_color_transfer_is_hdr(target_csp->transfer))
+  {
+	if (m_videoSettings.m_PlaceboDisplayHdrPeakLuminance && (!target->color.hdr.max_luma || !hint))
+	  target->color.hdr.max_luma = m_videoSettings.m_PlaceboDisplayHdrPeakLuminance;
+  }
+  else
+  {
+  	if (m_videoSettings.m_PlaceboDisplaySdrPeakLuminance && (!target->color.hdr.max_luma || !hint))
+	  target->color.hdr.max_luma = m_videoSettings.m_PlaceboDisplaySdrPeakLuminance;
+  }
 
   //if (opts->hdr_reference_white && (!target->color.hdr.max_luma || !hint) &&
   //  !pl_color_transfer_is_hdr(target->color.transfer)) {
@@ -613,10 +623,9 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   }
 
   pl_color_space target_csp{ };
-  DXGI_OUTPUT_DESC1 desc;
-  static DX::DeviceResources::mp_dxgi_factory_ctx ctx = {0}; //cl
-  if (DX::DeviceResources::Get()->get_output_desc_from_ctx(&ctx, &desc))
-	target_csp = MpDxgiDescToColorSpace(&desc);
+    static DX::DeviceResources::mp_dxgi_factory_ctx ctx = {0}; //cl
+  if (DX::DeviceResources::Get()->get_output_desc1_from_ctx(&ctx, &buffer->m_OutputDesc1))
+	target_csp = MpDxgiDesc1ToColorSpace(&buffer->m_OutputDesc1);
 
   if (target_csp.primaries == PL_COLOR_PRIM_UNKNOWN)
 	target_csp.primaries = MpGetBestPrimContainer(&target_csp.hdr.prim);
@@ -712,9 +721,16 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	//if (opts->target_trc)
 	//  hint.transfer = opts->target_trc;
 
-	if (m_videoSettings.m_PlaceboDisplayPeakLuminance)
-	  if (hint.hdr.max_luma > m_videoSettings.m_PlaceboDisplayPeakLuminance) //cl problems with sdr when peak setting set to e.g 400 for hdr but peak calculated at e.g. 203 for sdr, image is way overblown and constant untill reaching 203 (something kinks in at 203...
-		hint.hdr.max_luma = m_videoSettings.m_PlaceboDisplayPeakLuminance;
+	if(pl_color_transfer_is_hdr(hint.transfer))
+	{
+	  if (m_videoSettings.m_PlaceboDisplayHdrPeakLuminance)
+	    if (hint.hdr.max_luma > m_videoSettings.m_PlaceboDisplayHdrPeakLuminance) //cl problems with sdr when peak setting set to e.g 400 for hdr but peak calculated at e.g. 203 for sdr, image is way overblown and constant untill reaching 203 (something kinks in at 203...
+		  hint.hdr.max_luma = m_videoSettings.m_PlaceboDisplayHdrPeakLuminance;
+	}
+	else
+	{
+	  hint.hdr.max_luma = m_videoSettings.m_PlaceboDisplaySdrPeakLuminance;
+	}
 
 
 	//if (opts->hdr_reference_white && !pl_color_transfer_is_hdr(hint.transfer))
@@ -903,13 +919,15 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //frameOut.overlays = &a;
   //std::string stats = "Codec: H264\nFPS: 60\nDropped: 0";
 
+  int64_t start = CurrentHostCounter();
   bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, &params);
+  int64_t end = CurrentHostCounter();
+  buffer->m_RenderDuration = end - start;
+  
   pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes[0].texture);
    
   
   //pl_render_error err = pl_renderer_get_errors(PL::PLInstance::Get()->GetRenderer()).errors;
-
-  //pl_swapchain_swap_buffers(PL::PLInstance::Get()->GetSwapchain()); // cl don't, vsync controled from kodi...
 
   // cl unclear, libplacebo disabled peak detection for dolby vision in renderer.c
   //if (vo->params) {

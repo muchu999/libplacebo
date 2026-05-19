@@ -341,7 +341,8 @@ public:
   int m_PlaceboSkinZoomHint;
 
   std::string m_PlaceboLutFilename;
-  float m_PlaceboDisplayPeakLuminance;
+  float m_PlaceboDisplayHdrPeakLuminance;
+  float m_PlaceboDisplaySdrPeakLuminance;
   int m_PlaceboTargetColorspaceHint;
   int m_PlaceboTargetColorspaceHintMode;
   bool m_PlaceboShaderApply;

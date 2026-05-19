@@ -1662,7 +1662,7 @@ void DX::DeviceResources::ApplyDisplaySettings()
   CreateWindowSizeDependentResources();
 }
 
-bool DX::DeviceResources::get_output_desc_from_ctx(struct mp_dxgi_factory_ctx* ctx, DXGI_OUTPUT_DESC1* pDesc)
+bool DX::DeviceResources::get_output_desc1_from_ctx(struct mp_dxgi_factory_ctx* ctx, DXGI_OUTPUT_DESC1* pDesc)
 {
   struct mp_dxgi_factory_ctx tmp = { 0 };
   if (!ctx)

@@ -211,7 +211,8 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_PRESERVE_MIXING_CACHE               "video.libplacebo.preserve_mixing_cache"
 #define SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING                  "video.libplacebo.skip_anti_aliasing"
 #define SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME           "video.libplacebo.skip_caching_single_frame"
-#define SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE              "video.libplacebo.display_peak_luminance"
+#define SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE          "video.libplacebo.display_hdr_peak_luminance"
+#define SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE          "video.libplacebo.display_sdr_peak_luminance"
 #define SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT              "video.libplacebo.target_colorspace_hint"
 #define SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT_MODE         "video.libplacebo.target_colorspace_hint_mode"
 #define SETTING_LIB_PLACEBO_SHADER_ADD                          "video.libplacebo.shader_add"
@@ -533,9 +534,14 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
 	CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
   }
-  else if (settingId == SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE)
+  else if (settingId == SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE)
   {
-	vs.m_PlaceboDisplayPeakLuminance = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	vs.m_PlaceboDisplayHdrPeakLuminance = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE)
+  {
+	vs.m_PlaceboDisplaySdrPeakLuminance = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SHADER_APPLY)
@@ -1507,7 +1513,8 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddButton(groupLpReset, SETTING_LIB_PLACEBO_LOAD_PRESET_HIGH_QUALITY, 55233, SettingLevel::Basic);
 
 	// Render Options
-	AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_PEAK_LUMINANCE, 55313, SettingLevel::Basic, videoSettings.m_PlaceboDisplayPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55313, usePopup);
+	AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE, 55313, SettingLevel::Basic, videoSettings.m_PlaceboDisplayHdrPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55313, usePopup);
+	AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE, 55347, SettingLevel::Basic, videoSettings.m_PlaceboDisplaySdrPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55347, usePopup);
 	entries.clear();
 	entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));
 	entries.emplace_back(55316, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::NO));

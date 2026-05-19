@@ -33,6 +33,7 @@ extern "C"
 #define PL_LIBAV_IMPLEMENTATION 0
 #include <libplacebo/utils/libav.h>
 #include "VideoRenderers/Libplacebo/PLHelper.h"
+#include <dxgi1_6.h>
 
 #define MAX_FRAME_PASSES 256
 #define MAX_BLEND_PASSES 8
@@ -139,7 +140,8 @@ public:
   AVDOVIDmData doviExt{ 0 };
   bool hasDoviExt = false;
 
-
+  DXGI_OUTPUT_DESC1 m_OutputDesc1 = {};
+  int64_t m_RenderDuration = 0;
   bool isInterlaced = false;
   uint64_t m_signature = 0;
   AVDynamicHDRPlus hdrMetadata;

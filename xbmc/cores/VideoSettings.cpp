@@ -81,7 +81,8 @@ void CVideoSettings::copy(const CVideoSettings& other)
 
   // LibPLacebo specific CVideoSettings only video settings
   m_PlaceboShaderApply = other.m_PlaceboShaderApply;
-  m_PlaceboDisplayPeakLuminance = other.m_PlaceboDisplayPeakLuminance;
+  m_PlaceboDisplayHdrPeakLuminance = other.m_PlaceboDisplayHdrPeakLuminance;
+  m_PlaceboDisplaySdrPeakLuminance = other.m_PlaceboDisplaySdrPeakLuminance;
   m_PlaceboTargetColorspaceHint = other.m_PlaceboTargetColorspaceHint;
   m_PlaceboTargetColorspaceHintMode = other.m_PlaceboTargetColorspaceHintMode;
   m_PlaceboLutFilename = other.m_PlaceboLutFilename;
@@ -141,7 +142,8 @@ CVideoSettings::CVideoSettings()
   m_PlaceboSkinZoomHint = 0;
 
   // LibPLacebo specific video settings
-  m_PlaceboDisplayPeakLuminance = 0;
+  m_PlaceboDisplayHdrPeakLuminance = 700;
+  m_PlaceboDisplaySdrPeakLuminance = 0;
   m_PlaceboShaderApply = true;
   m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::YES;
   m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC;
@@ -196,7 +198,8 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if (m_PlaceboSkinZoom != right.m_PlaceboSkinZoom) return true;
   //if (m_PlaceboSkinZoomHint != right.m_PlaceboSkinZoomHint) return true; //No!
   if (m_PlaceboShaderApply != right.m_PlaceboShaderApply) return true;
-  if (m_PlaceboDisplayPeakLuminance != right.m_PlaceboDisplayPeakLuminance) return true;
+  if (m_PlaceboDisplayHdrPeakLuminance != right.m_PlaceboDisplayHdrPeakLuminance) return true;
+  if(m_PlaceboDisplaySdrPeakLuminance != right.m_PlaceboDisplaySdrPeakLuminance) return true;
   if (m_PlaceboTargetColorspaceHint != right.m_PlaceboTargetColorspaceHint) return true;
   if (m_PlaceboTargetColorspaceHintMode != right.m_PlaceboTargetColorspaceHintMode) return true;
   if (m_PlaceboLutFilename != right.m_PlaceboLutFilename) return true;
