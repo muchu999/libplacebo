@@ -145,8 +145,8 @@ CVideoSettings::CVideoSettings()
   m_PlaceboDisplayHdrPeakLuminance = 700;
   m_PlaceboDisplaySdrPeakLuminance = 0;
   m_PlaceboShaderApply = true;
-  m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::YES;
-  m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::SOURCE_DYNAMIC;
+  m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::AUTO;
+  m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::TARGET;
   m_PlaceboLutFilename = "";
   m_PlaceboLut = nullptr;
 

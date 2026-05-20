@@ -129,9 +129,9 @@ public:
   bool map_frame(pl_gpu gpu, pl_tex* tex, struct pl_source_frame* src, struct pl_frame* out_frame);
   double getPts() { return pts; }
   bool HasHdrData();
-  pl_color_space hdrColorSpace; //< pl_color_space
-  pl_color_repr doviColorRepr;
-  pl_dovi_metadata doviPlMetadata;
+  pl_color_space hdrColorSpace = {}; //< pl_color_space
+  pl_color_repr doviColorRepr = {};
+  pl_dovi_metadata doviPlMetadata = {};
   pl_hdr_metadata hdrDoviRpu; //< pl_hdr_metadata
   bool hasHDR10PlusMetadata = false;
   bool hasDoviMetadata = false;
@@ -140,13 +140,19 @@ public:
   AVDOVIDmData doviExt{ 0 };
   bool hasDoviExt = false;
 
+  // For debugInfo
   DXGI_OUTPUT_DESC1 m_OutputDesc1 = {};
-  int64_t m_RenderDuration = 0;
-  bool isInterlaced = false;
+  pl_hdr_metadata m_PeakDetectMetadata = {};
+  bool m_bHasPeakDetectMetadata = false;
+  float m_RenderDuration = 0.0;
+  pl_color_space m_FrameInColor = {};
+  pl_color_space m_FrameOutColor = {};
+
+  bool m_bIsInterlaced = false;
   uint64_t m_signature = 0;
-  AVDynamicHDRPlus hdrMetadata;
-  bool disable_residual_flag;
-  AVDOVIMetadata doviMetadata;
+  AVDynamicHDRPlus hdrMetadata = {};
+  bool disable_residual_flag = true;
+  AVDOVIMetadata doviMetadata = {};
   PL::pl_d3d_format plFormat = {};
   //planes are used to create the frame
   pl_plane plplanes[3] = {};

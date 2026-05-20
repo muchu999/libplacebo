@@ -176,11 +176,35 @@ CRenderInfo CRendererPL::GetRenderInfo()
 
 bool CRendererPL::Configure(const VideoPicture& picture, float fps, unsigned orientation)
 {
-  if (!__super::Configure(picture, fps, orientation))
-	return false;
 
-  //Log initiation
+  m_iNumBuffers = 0;
+  m_iBufferIndex = 0;
 
+  m_sourceWidth = picture.iWidth;
+  m_sourceHeight = picture.iHeight;
+  m_fps = fps;
+  m_renderOrientation = orientation;
+
+  std::tie(m_useDithering, m_ditherDepth) = DX::Windowing()->GetDitherSettings();
+
+  m_lastHdr10 = {};
+  m_HdrType = HDR_TYPE::HDR_INVALID;
+  m_useHLGtoPQ = false;
+  m_AutoSwitchHDR = DX::Windowing()->IsHDRDisplaySettingEnabled();
+
+  // Auto switch HDR only if supported and "Settings/Player/Use HDR display capabilities" = ON
+  if (m_AutoSwitchHDR)
+  {
+    m_initialHdrEnabled = DX::Windowing()->IsHDROutput();
+    CLog::LogF(LOGDEBUG, "Storing Windows HDR state: {}", m_initialHdrEnabled ? "ON" : "OFF");
+
+    const bool streamIsHDR = (picture.color_primaries == AVCOL_PRI_BT2020) &&
+                             (picture.color_transfer == AVCOL_TRC_SMPTE2084 ||
+                              picture.color_transfer == AVCOL_TRC_ARIB_STD_B67);
+
+    if (streamIsHDR != DX::Windowing()->IsHDROutput())
+      DX::Windowing()->ToggleHDR();
+  }
 
   // Init logs and other stuff
   PL::PLInstance::Get()->Init();
@@ -212,7 +236,13 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
   info.metaLight = StringUtils::Format("Video: Matrix:{} Primaries:{} Transfer:{}", pl_color_primaries_name(m_colorSpace.primaries)
 	, pl_color_transfer_name(m_colorSpace.transfer)
 	, pl_color_system_name(m_videoMatrix));
-  info.render = StringUtils::Format("out max Luma: {}, out max FALL: {}, render duration: {:4.1f}ms",plbuffer->m_OutputDesc1.MaxLuminance, plbuffer->m_OutputDesc1.MaxFullFrameLuminance, plbuffer->m_RenderDuration / 1000.0);
+  
+  info.render = StringUtils::Format("display maxLuma: {}, maxFALL: {}, plRender: {:0>4.1f}ms",plbuffer->m_OutputDesc1.MaxLuminance, plbuffer->m_OutputDesc1.MaxFullFrameLuminance, plbuffer->m_RenderDuration *1000.0);
+  if(plbuffer->m_bHasPeakDetectMetadata)
+    info.render += StringUtils::Format(", peakDetect maxPqy: {:4.2f}, avgPqy: {:4.2f}", plbuffer->m_PeakDetectMetadata.max_pq_y, plbuffer->m_PeakDetectMetadata.avg_pq_y);
+  info.render += StringUtils::Format(", frameIn maxLuma: {:5.0f}, maxPqy: {:4.2f}, avgPqy: {:4.2f} frameOut maxLuma: {:5.0f}, maxPqy: {:4.2f}, avgPqy: {:4.2f}", plbuffer->m_FrameInColor.hdr.max_luma, plbuffer->m_FrameInColor.hdr.max_pq_y, 
+	                                                                   plbuffer->m_FrameInColor.hdr.avg_pq_y,plbuffer->m_FrameOutColor.hdr.max_luma,plbuffer->m_FrameOutColor.hdr.max_pq_y,plbuffer->m_FrameOutColor.hdr.avg_pq_y);
+
   if (plbuffer->hasHDR10PlusMetadata)
   {
 	info.shader = "Primaries (meta): ";
@@ -593,7 +623,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
 
   // Interlacing
-  if (buffer->isInterlaced)
+  if (buffer->m_bIsInterlaced)
   {
 	if ((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_TOP))
 	{
@@ -724,7 +754,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	if(pl_color_transfer_is_hdr(hint.transfer))
 	{
 	  if (m_videoSettings.m_PlaceboDisplayHdrPeakLuminance)
-	    if (hint.hdr.max_luma > m_videoSettings.m_PlaceboDisplayHdrPeakLuminance) //cl problems with sdr when peak setting set to e.g 400 for hdr but peak calculated at e.g. 203 for sdr, image is way overblown and constant untill reaching 203 (something kinks in at 203...
+	    if (hint.hdr.max_luma > m_videoSettings.m_PlaceboDisplayHdrPeakLuminance)
 		  hint.hdr.max_luma = m_videoSettings.m_PlaceboDisplayHdrPeakLuminance;
 	}
 	else
@@ -919,11 +949,21 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //frameOut.overlays = &a;
   //std::string stats = "Codec: H264\nFPS: 60\nDropped: 0";
 
+  buffer->m_FrameInColor = frameIn.color;
+  buffer->m_FrameOutColor = frameOut.color;
+  
+  // Render Image
+  LARGE_INTEGER frequency;
+  QueryPerformanceFrequency(&frequency);
   int64_t start = CurrentHostCounter();
   bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, &params);
   int64_t end = CurrentHostCounter();
-  buffer->m_RenderDuration = end - start;
-  
+  buffer->m_RenderDuration = (end - start)/(float)frequency.QuadPart;
+
+
+  buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(),&buffer->m_PeakDetectMetadata);
+
+  //
   pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes[0].texture);
    
   
@@ -934,8 +974,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //  // Augment metadata with peak detection max_pq_y / avg_pq_y
   //  vo->has_peak_detect_values = pl_renderer_get_hdr_metadata(p->rr, &vo->params->color.hdr);
   //}
-
-  sourceRect = dst; //cl?
 }
 
 //cl called on every frame before render
@@ -961,31 +999,6 @@ void CRendererPL::ProcessHDR(CRenderBuffer* rb)
 	}
 	return;
   }
-
-  CRenderBufferImpl* rbpl = static_cast<CRenderBufferImpl*>(rb);
-  if(0)
-  {
-	if (rbpl->hasDoviMetadata)
-	{
-	  //cl not valid if residual==false
-	  if (rbpl->HasHdrData())
-		pl_swapchain_colorspace_hint(PL::PLInstance::Get()->GetSwapchain(), &m_colorSpace);
-	}
-
-	if (rbpl->hasHDR10PlusMetadata)
-	{
-	  pl_av_hdr_metadata metadata = {};
-	  pl_hdr_metadata out = {};
-	  metadata.clm = &rbpl->lightMetadata;
-	  metadata.mdm = &rbpl->displayMetadata;
-	  metadata.dhp = &rbpl->hdrMetadata;
-	  rbpl->hdrColorSpace = m_colorSpace;
-
-	  pl_map_hdr_metadata(&rbpl->hdrColorSpace.hdr, &metadata);
-	  pl_swapchain_colorspace_hint(PL::PLInstance::Get()->GetSwapchain(), &rbpl->hdrColorSpace);
-	}
-  }
-
 }
 
 bool CRendererPL::Supports(ERENDERFEATURE feature) const
@@ -1073,7 +1086,7 @@ void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
   }
   pts = picture.pts;
   duration = picture.iDuration;
-  isInterlaced = picture.iFlags & DVP_FLAG_INTERLACED;
+  m_bIsInterlaced = picture.iFlags & DVP_FLAG_INTERLACED;
 }
 
 bool CRendererPL::CRenderBufferImpl::GetLibplaceboFrame(pl_frame& frame)
