@@ -36,6 +36,7 @@ protected:
   void OnSettingChanged(const std::shared_ptr<const CSetting>& setting) override;
   void OnSettingAction(const std::shared_ptr<const CSetting>& setting) override;
   void InitializeToneMappingMenuHdr(CVideoSettings& videoSettings, const std::shared_ptr<CSettingGroup> group);
+  void InitializeToneMappingMenuSdr(CVideoSettings& videoSettings, const std::shared_ptr<CSettingGroup> group);
   void InitializeShaderMenu(CVideoSettings& vs, const std::shared_ptr<CSettingCategory>& category);
   void AddVideoStreams(const std::shared_ptr<CSettingGroup>& group, const std::string& settingId);
 

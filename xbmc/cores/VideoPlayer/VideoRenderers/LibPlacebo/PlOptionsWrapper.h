@@ -95,7 +95,7 @@ public:
   }
 
   
-  pl_options  getPlOptions() const { return m_placeboOptions; }
+  pl_options  getPlOptions() { return m_placeboOptions; }
 
   enum reset_type 
   {
@@ -118,9 +118,13 @@ public:
         pl_options_reset(m_placeboOptions, &pl_render_high_quality_params);
         break;
     }
+
     // Change some default options for Kodi
-    // enable deinterlacing by default
-    m_placeboOptions->params.deinterlace_params = &m_placeboOptions->deinterlace_params;
+    m_placeboOptions->params.deinterlace_params = &m_placeboOptions->deinterlace_params; // enable deinterlacing by default
+	//m_placeboOptions->color_map_params.visualize_rect.x0 = 0.5;
+	//m_placeboOptions->color_map_params.visualize_rect.y0 = 0.5;
+	//m_placeboOptions->color_map_params.visualize_rect.x1 = 1.0;
+	//m_placeboOptions->color_map_params.visualize_rect.y1 = 1.0;
   }
 
 

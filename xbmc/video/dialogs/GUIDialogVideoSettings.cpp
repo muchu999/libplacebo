@@ -111,6 +111,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_SKIN_ZOOM             "video.libplacebo.skin_zoom"
 #define SETTING_LIB_PLACEBO_COLOR_ADJUSTMENT_ENABLED "video.libplacebo.color_adjustment.enabled"
 #define SETTING_LIB_PLACEBO_SATURATION            "video.libplacebo.color_adjustment.saturation"
+#define SETTING_LIB_PLACEBO_SDR_SATURATION        "video.libplacebo.color_adjustment.sdr_saturation"
 #define SETTING_LIB_PLACEBO_HUE                   "video.libplacebo.hue"
 #define SETTING_LIB_PLACEBO_TEMPERATURE           "video.libplacebo.color_adjustment.temperature"
 #define SETTING_LIB_PLACEBO_PEAK_DETECT_PARAMS_ENABLED              "video.libplacebo.peak_detect_params.enabled"
@@ -125,9 +126,13 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_PLANE_UPSCALER                          "video.libplacebo.plane_upscaler"
 #define SETTING_LIB_PLACEBO_PLANE_DOWNSCALER                        "video.libplacebo.plane_dowsnscaler"
 #define SETTING_LIB_PLACEBO_FRAME_MIXER                             "video.libplacebo.frame_mixer"
-#define SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING                 "video.libplacebo.gammut_map_funtion"
+#define SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING                 "video.libplacebo.gamut_map_funtion"
+#define SETTING_LIB_PLACEBO_SDR_COLOR_MAP_INTENT  			        "video.libplacebo.sdr_gamut_map_intent"
+#define SETTING_LIB_PLACEBO_SDR_COLOR_MAP_GAMUT_MAPPING             "video.libplacebo.sdr_gamut_map_funtion"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING                  "video.libplacebo.tone_map_funtion"
+#define SETTING_LIB_PLACEBO_SDR_COLOR_MAP_TONE_MAPPING              "video.libplacebo.sdr_tone_map_funtion"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING_PARAMETER        "video.libplacebo.tone_map_function_parameter"
+#define SETTING_LIB_PLACEBO_SDR_COLOR_MAP_TONE_MAPPING_PARAMETER    "video.libplacebo.sdr_tone_map_function_parameter"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY             "video.libplacebo.color_map_contrast_recovery"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS           "video.libplacebo.color_map_contrast_smoothness"
 #define SETTING_LIB_PLACEBO_LOAD_PRESET_DEFAULT                     "video.libplacebo.load_preset_default"
@@ -170,17 +175,26 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_DEFAULT             "video.libplacebo.tone_constants_knee_default"
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MAXIMUM             "video.libplacebo.tone_constants_knee_maximum"
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MINIMUM             "video.libplacebo.tone_constants_knee_minimum"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_KNEE_MAXIMUM         "video.libplacebo.sdr_tone_constants_knee_maximum"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_KNEE_MINIMUM         "video.libplacebo.sdr_tone_constants_knee_minimum"
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_OFFSET              "video.libplacebo.tone_constants_knee_offset"
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_LINEAR_KNEE              "video.libplacebo.tone_constants_linear_knee"
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_REINHARD_CONTRAST        "video.libplacebo.tone_constants_reinhard_contrast"
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_OFFSET             "video.libplacebo.tone_constants_slope_offset"
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING             "video.libplacebo.tone_constants_slope_tuning"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_SLOPE_OFFSET         "video.libplacebo.sdr_tone_constants_slope_offset"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_SLOPE_TUNING         "video.libplacebo.sdr_tone_constants_slope_tuning"
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST          "video.libplacebo.tone_constants_spline_contrast"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA      "video.libplacebo.gamut_constants_colorimetric_gamma"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE     "video.libplacebo.gamut_constants_perceptual_deadzone"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH     "video.libplacebo.gamut_constants_perceptual_strength"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT          "video.libplacebo.gamut_constants_softclip_desat"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_KNEE           "video.libplacebo.gamut_constants_softclip_knee"
+#define SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA      "video.libplacebo.sdr_gamut_constants_colorimetric_gamma"
+#define SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE     "video.libplacebo.sdr_gamut_constants_perceptual_deadzone"
+#define SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH     "video.libplacebo.sdr_gamut_constants_perceptual_strength"
+#define SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_SOFTCLIP_DESAT          "video.libplacebo.sdr_gamut_constants_softclip_desat"
+#define SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_SOFTCLIP_KNEE           "video.libplacebo.sdr_gamut_constants_softclip_knee"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_EXPANSION                   "video.libplacebo.gamut_constants_expansion"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_HUE          "video.libplacebo.color_map_visualize_hue"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_LUT          "video.libplacebo.color_map_visualize_lut"
@@ -322,7 +336,7 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   else if (settingId == SETTING_VIDEO_CONTRAST)
   {
 	vs.m_Contrast = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
-	m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.0;
+	m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.99;
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_GAMMA)
@@ -370,7 +384,12 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   else if (settingId == SETTING_LIB_PLACEBO_SATURATION)
   {
 	vs.m_PlaceboSaturation = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-	m_placeboOptions->color_adjustment.saturation = vs.m_PlaceboSaturation;
+	m_placeboOptions->color_adjustment.saturation = pow(10.0, (vs.m_PlaceboSaturation - 50.0) / 40.0);
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_SATURATION)
+  {
+	vs.m_PlaceboSdrSaturation = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_HUE)
@@ -471,6 +490,12 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	appPlayer->SetVideoSettings(vs);
 	SetupView();
   }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_COLOR_MAP_GAMUT_MAPPING)
+  {
+	vs.m_PlaceboSdrColorMapGamutMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
+	SetupView();
+	}
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING)
   {
 	vs.m_PlaceboColorMapToneMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
@@ -498,6 +523,36 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 		vs.m_PlaceboColorMapToneMapParameter = vs.m_PlaceboToneConstantExposure;
 	  else if(desc == "Knee point")
 		vs.m_PlaceboColorMapToneMapParameter = vs.m_PlaceboToneConstantLinearKnee;
+	}
+	appPlayer->SetVideoSettings(vs);
+	SetupView();
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_COLOR_MAP_TONE_MAPPING)
+  {
+	vs.m_PlaceboSdrColorMapToneMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
+
+	vs.m_PlaceboSdrColorMapToneMapParameter = 0.0;
+	if(vs.m_PlaceboSdrColorMapToneMapping != -1)
+	{
+	  std::string desc = {};
+	  std::string funcDesc = {};
+	  if(pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->param_desc)
+		desc = pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->param_desc;
+	  if(pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->description)
+		funcDesc = pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->description;
+
+	  if(desc == "Knee point target")
+		vs.m_PlaceboSdrColorMapToneMapParameter = vs.m_PlaceboSdrToneConstantKneeAdaptation;
+	  else if(desc == "Knee offset")
+		vs.m_PlaceboSdrColorMapToneMapParameter = vs.m_PlaceboSdrToneConstantKneeOffset;
+	  else if((desc == "Contrast") && (funcDesc == "Single-pivot polynomial spline"))
+		vs.m_PlaceboSdrColorMapToneMapParameter = vs.m_PlaceboSdrToneConstantSplineContrast;
+	  else if((desc == "Contrast") && (funcDesc == "Reinhard"))
+		vs.m_PlaceboSdrColorMapToneMapParameter = vs.m_PlaceboSdrToneConstantReinhardContrast;
+	  else if(desc == "Exposure")
+		vs.m_PlaceboSdrColorMapToneMapParameter = vs.m_PlaceboSdrToneConstantExposure;
+	  else if(desc == "Knee point")
+		vs.m_PlaceboSdrColorMapToneMapParameter = vs.m_PlaceboSdrToneConstantLinearKnee;
 	}
 	appPlayer->SetVideoSettings(vs);
 	SetupView();
@@ -550,6 +605,49 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	  appPlayer->SetVideoSettings(vs);
 	}
   }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_COLOR_MAP_TONE_MAPPING_PARAMETER)
+  {
+	vs.m_PlaceboSdrColorMapToneMapParameter = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+
+	std::string desc = {};
+	std::string funcDesc = {};
+	if(pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->param_desc)
+	  desc = pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->param_desc;
+	if(pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->description)
+	  funcDesc = pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->description;
+
+	if(desc == "Knee point target")
+	{
+	  vs.m_PlaceboSdrToneConstantKneeAdaptation = vs.m_PlaceboSdrColorMapToneMapParameter;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if(desc == "Knee offset")
+	{
+	  vs.m_PlaceboSdrToneConstantKneeOffset = vs.m_PlaceboSdrColorMapToneMapParameter;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if((desc == "Contrast") && (funcDesc == "Single-pivot polynomial spline"))
+	{
+	  vs.m_PlaceboSdrToneConstantSplineContrast = vs.m_PlaceboSdrColorMapToneMapParameter;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if((desc == "Contrast") && (funcDesc == "Reinhard"))
+	{
+	  vs.m_PlaceboSdrToneConstantReinhardContrast = vs.m_PlaceboSdrColorMapToneMapParameter;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if(desc == "Exposure")
+	{
+	  vs.m_PlaceboSdrToneConstantExposure = vs.m_PlaceboSdrColorMapToneMapParameter;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if(desc == "Knee point")
+	{
+	  vs.m_PlaceboSdrToneConstantLinearKnee = vs.m_PlaceboSdrColorMapToneMapParameter;
+	  appPlayer->SetVideoSettings(vs);
+	}
+  }
+
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_ENABLED)
   {
 	vs.m_PlaceboDebandEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
@@ -761,6 +859,16 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	m_placeboOptions->color_map_params.tone_constants.knee_minimum = vs.m_PlaceboToneConstantKneeMinimum;
 	appPlayer->SetVideoSettings(vs);
   }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_KNEE_MAXIMUM)
+  {
+	vs.m_PlaceboSdrToneConstantKneeMaximum = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_KNEE_MINIMUM)
+  {
+	vs.m_PlaceboSdrToneConstantKneeMinimum = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_OFFSET)
   {
 	vs.m_PlaceboToneConstantKneeOffset = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
@@ -789,6 +897,16 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   {
 	vs.m_PlaceboToneConstantSlopeTuning = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	m_placeboOptions->color_map_params.tone_constants.slope_tuning = vs.m_PlaceboToneConstantSlopeTuning;
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_SLOPE_OFFSET)
+  {
+	vs.m_PlaceboSdrToneConstantSlopeOffset = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_SLOPE_TUNING)
+  {
+	vs.m_PlaceboSdrToneConstantSlopeTuning = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST)
@@ -827,7 +945,8 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	m_placeboOptions->color_map_params.visualize_rect.y1 = vs.m_PlaceboColorMapVisualizeRectY1;
 	appPlayer->SetVideoSettings(vs);
   }
-  else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_HUE)
+
+  if(settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_HUE) //cl break "elses" because of compiler limitations on else if statements
   {
 	vs.m_PlaceboColorMapVisualizeHue = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	m_placeboOptions->color_map_params.visualize_hue = fmod(vs.m_PlaceboColorMapVisualizeHue, 360.0) * M_PI / 180.0;;
@@ -887,6 +1006,31 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	m_placeboOptions->color_map_params.gamut_constants.softclip_knee = vs.m_PlaceboGamutConstantsSoftclipKnee;
 	appPlayer->SetVideoSettings(vs);
   }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA)
+  {
+	vs.m_PlaceboSdrGamutConstantsColorimetricGamma = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE)
+  {
+	vs.m_PlaceboSdrGamutConstantsPerceptualDeadzone = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH)
+  {
+	vs.m_PlaceboSdrGamutConstantsPerceptualStrength = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_SOFTCLIP_DESAT)
+  {
+	vs.m_PlaceboSdrGamutConstantsSoftclipDesat = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_SOFTCLIP_KNEE)
+  {
+	vs.m_PlaceboSdrGamutConstantsSoftclipKnee = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_INVERSE_TONE_MAPPING)
   {
 	vs.m_PlaceboColorMapInverseToneMapping = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
@@ -935,6 +1079,11 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	m_placeboOptions->color_map_params.intent = (pl_rendering_intent)vs.m_PlaceboColorMapIntent;
 	appPlayer->SetVideoSettings(vs);
   }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_COLOR_MAP_INTENT)
+  {
+	vs.m_PlaceboColorMapIntent = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	}
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_FORCE_TONE_MAPPING_LUT)
   {
 	vs.m_PlaceboColorMapForceToneMappingLut = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
@@ -1117,7 +1266,7 @@ void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetti
   {
 	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55231), CVariant(55339)))
 	{
-	  vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::DEFAULT);
+	  vs.ResetRenderSettings(PlOptionsWrapper::DEFAULT);
 	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
 	  appPlayer->SetVideoSettings(vs);
 	  SetupView();
@@ -1127,7 +1276,7 @@ void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetti
   {
 	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55232), CVariant(55339)))
 	{
-	  vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::FAST);
+	  vs.ResetRenderSettings(PlOptionsWrapper::FAST);
 	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
 	  appPlayer->SetVideoSettings(vs);
 	  SetupView();
@@ -1137,7 +1286,7 @@ void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetti
   {
 	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55233), CVariant(55339)))
 	{
-	  vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::HIGH_QUALITY);
+	  vs.ResetRenderSettings(PlOptionsWrapper::HIGH_QUALITY);
 	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
 	  appPlayer->SetVideoSettings(vs);
 	  SetupView();
@@ -1207,7 +1356,8 @@ void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetti
   {
 	if (CGUIDialogYesNo::ShowAndGetInput(CVariant(55261), CVariant(55339)))
 	{
-	  m_placeboOptions->dither_params = pl_dither_default_params;
+	  m_placeboOptions->dither_params = pl_dither_default_params; //cl move to ResetDitherSettings()
+	  vs.ResetDitherSettings(PlOptionsWrapper::DEFAULT);
 	  CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(vs);
 	  appPlayer->SetVideoSettings(vs);
 	  SetupView();
@@ -1215,7 +1365,7 @@ void CGUIDialogVideoSettings::OnSettingAction(const std::shared_ptr<const CSetti
   }
   else if (settingId == SETTING_LIB_PLACEBO_LOAD_FROM_FILE)
   {
-    vs.m_placeboOptions->resetPlOptions(PlOptionsWrapper::DEFAULT); //make sure all options are set, even if not present in the file
+    vs.ResetRenderSettings(PlOptionsWrapper::DEFAULT); //make sure all options are set, even if not present in the file
 	CPLHelper::LoadLibplaceboSettings(vs);
 	appPlayer->SetVideoSettings(vs);
 	SetupView();
@@ -1408,6 +1558,7 @@ bool CGUIDialogVideoSettings::OnBack(int actionID)
 //-------------------------------------------------------
 void CGUIDialogVideoSettings::InitializeSettings()
 {
+  bool bHdr = true;
   CGUIDialogSettingsManualBase::InitializeSettings();
 
   int renderMethod = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_RENDERMETHOD);
@@ -1419,6 +1570,10 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
   if (renderMethod == RENDER_METHOD_LIBPLACEBO)
   {
+	VideoStreamInfo info;
+	appPlayer->GetVideoStreamInfo(appPlayer->GetVideoStream(), info);
+	bHdr = info.hdrType != StreamHdrType::HDR_TYPE_NONE;
+
 	videoSettings.m_PlaceboSkinZoomHint = videoSettings.m_PlaceboSkinZoom;
 	appPlayer->SetVideoSettings(videoSettings);
 	CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
@@ -1445,6 +1600,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
   CreateGroup(groupColorMap, category);
   CreateGroup(groupToneMappingConstants, category);
   CreateGroup(groupGamutMappingConstants, category);
+  CreateGroup(groupSdr, category);
   CreateGroup(groupScaler, category);
   CreateGroup(groupDeband, category);
   CreateGroup(groupSigmoid, category);
@@ -1453,8 +1609,6 @@ void CGUIDialogVideoSettings::InitializeSettings()
   CreateGroup(groupDeinterlace, category);
   CreateGroup(groupMisc, category);
   CreateGroup(groupLut, category);
-
-
 
   auto skin = CServiceBroker::GetGUI()->GetSkinInfo();
   const bool usePopup = skin && skin->HasSkinFile("DialogSlider.xml");
@@ -1628,7 +1782,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, static_cast<int>(videoSettings.m_Contrast), 14047, 1, 465, usePopup);
 	AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, static_cast<int>(videoSettings.m_Gamma), 14047, 1, 466, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_HUE, 55222, SettingLevel::Basic, videoSettings.m_PlaceboHue, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55222, usePopup);
-	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSaturation, "{0:2.2f}", (float)0.0, (float)0.01, (float)100.0, 55210, usePopup);
+	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSaturation, "{0:4.1f}", (float)0.0, (float)0.5, (float)100.0, 55210, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_TEMPERATURE, 55212, SettingLevel::Basic, videoSettings.m_PlaceboTemperature, "{0:6.0f}K", (float)1700, (float)10.0, (float)10000, 55212, usePopup);
 
 	// Peak_Detection
@@ -1683,6 +1837,34 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	}
 	
 	InitializeToneMappingMenuHdr(videoSettings, groupColorMap);
+
+	AddInfoLabelButton(groupSdr, SETTING_LIB_PLACEBO_SHADER_INVALID, 55352, SettingLevel::Basic, "");
+	AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSdrSaturation, "{0:4.1f}", (float) 0.0, (float) 0.5, (float) 100.0, 55210, usePopup);
+	AddList(groupColorMap, SETTING_LIB_PLACEBO_SDR_COLOR_MAP_INTENT, 55298, SettingLevel::Basic, videoSettings.m_PlaceboSdrColorMapIntent, CPLHelper::PlColorMapIntentOptionFiller, 55298);
+	AddList(groupSdr, SETTING_LIB_PLACEBO_SDR_COLOR_MAP_GAMUT_MAPPING, 55228, SettingLevel::Basic, videoSettings.m_PlaceboSdrColorMapGamutMapping, CPLHelper::PlColorMapGamutMapFunctionOptionFiller, 55228);
+	if(videoSettings.m_PlaceboSdrColorMapGamutMapping != -1)
+	{
+	  std::string funcDesc = {};
+
+	  if(pl_gamut_map_functions [videoSettings.m_PlaceboSdrColorMapGamutMapping]->description)
+		funcDesc = pl_gamut_map_functions [videoSettings.m_PlaceboSdrColorMapGamutMapping]->description;
+
+	  if((funcDesc == "Absolute colorimetric clip") || (funcDesc == "Darken and clip") || (funcDesc == "Colorimetric clip"))
+	  {
+		AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA, 55286, SettingLevel::Basic, videoSettings.m_PlaceboSdrGamutConstantsColorimetricGamma, "{0:4.1f}", (float) 0.0, (float) 0.1, (float) 10.0, 55286, usePopup);
+	  }
+	  else if((funcDesc == "Perceptual mapping"))
+	  {
+		AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE, 55287, SettingLevel::Basic, videoSettings.m_PlaceboSdrGamutConstantsPerceptualDeadzone, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55287, usePopup);
+		AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH, 55349, SettingLevel::Basic, videoSettings.m_PlaceboSdrGamutConstantsPerceptualStrength, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55349, usePopup);
+	  }
+	  else if((funcDesc == "Soft clipping"))
+	  {
+		AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_SOFTCLIP_DESAT, 55288, SettingLevel::Basic, videoSettings.m_PlaceboSdrGamutConstantsSoftclipDesat, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55288, usePopup);
+		AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_SOFTCLIP_KNEE, 55289, SettingLevel::Basic, videoSettings.m_PlaceboSdrGamutConstantsSoftclipKnee, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55289, usePopup);
+	  }
+	}
+	InitializeToneMappingMenuSdr(videoSettings, groupSdr);
 
 	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY, 55284, SettingLevel::Basic, videoSettings.m_PlaceboColorMapContrastRecovery, "{0:4.2f}", (float)0.0, (float)0.01, (float)2.0, 55284, usePopup);
 	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS, 55285, SettingLevel::Basic, videoSettings.m_PlaceboColorMapContrastSmoothness, "{0:4.1f}", (float)1.0, (float)0.1, (float)32.0, 55285, usePopup);
@@ -1858,6 +2040,93 @@ void CGUIDialogVideoSettings::InitializeToneMappingMenuHdr(CVideoSettings& video
 	AddSlider(group, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING, "   Slope Tuning", SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeTuning, "{0:4.2f}", (float) 0.0, (float) 0.1, (float) 10.0);  //cl strings.po...
   }
 }
+
+void CGUIDialogVideoSettings::InitializeToneMappingMenuSdr(CVideoSettings& videoSettings, const std::shared_ptr<CSettingGroup> group)
+{
+  // Tone mapping
+  AddList(group, SETTING_LIB_PLACEBO_SDR_COLOR_MAP_TONE_MAPPING, 55236, SettingLevel::Basic, videoSettings.m_PlaceboSdrColorMapToneMapping, CPLHelper::PlColorMapToneMapFunctionOptionFiller, 55236);
+
+  std::string desc = {};
+  std::string funcDesc = {};
+  videoSettings.m_PlaceboSdrColorMapToneMapParameter = 0.0;
+  float paramMin = 0.0;
+  float paramMax = 1.0;
+  float paramStep = 0.01;
+  bool bHasParam = false;
+  if(videoSettings.m_PlaceboSdrColorMapToneMapping != -1)
+  {
+	if(pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_desc)
+	  desc = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_desc;
+	if(pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->description)
+	  funcDesc = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->description;
+
+	if(desc == "Knee point target")
+	{
+	  videoSettings.m_PlaceboSdrColorMapToneMapParameter = videoSettings.m_PlaceboSdrToneConstantKneeAdaptation;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if(desc == "Knee offset")
+	{
+	  videoSettings.m_PlaceboSdrColorMapToneMapParameter = videoSettings.m_PlaceboSdrToneConstantKneeOffset;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if((desc == "Contrast") && (funcDesc == "Single-pivot polynomial spline"))
+	{
+	  videoSettings.m_PlaceboSdrColorMapToneMapParameter = videoSettings.m_PlaceboSdrToneConstantSplineContrast;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if((desc == "Contrast") && (funcDesc == "Reinhard"))
+	{
+	  videoSettings.m_PlaceboSdrColorMapToneMapParameter = videoSettings.m_PlaceboSdrToneConstantReinhardContrast;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if(desc == "Exposure")
+	{
+	  videoSettings.m_PlaceboSdrColorMapToneMapParameter = videoSettings.m_PlaceboSdrToneConstantExposure;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if(desc == "Knee point")
+	{
+	  videoSettings.m_PlaceboSdrColorMapToneMapParameter = videoSettings.m_PlaceboSdrToneConstantLinearKnee;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+  }
+  if(bHasParam)
+  {
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_COLOR_MAP_TONE_MAPPING_PARAMETER, "   " + desc, SettingLevel::Basic, videoSettings.m_PlaceboSdrColorMapToneMapParameter, "{0:4.2f}", paramMin, paramStep, paramMax); //cl strings.po...
+  }
+  if(funcDesc == "Single-pivot polynomial spline" || (funcDesc == "SMPTE ST 2094-10 Annex B.2") || (funcDesc == "SMPTE ST 2094-40 Annex B"))
+  {
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_KNEE_MAXIMUM, 55269, SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantKneeMaximum, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0);
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_KNEE_MINIMUM, 55270, SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantKneeMinimum, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 0.5);
+  }
+
+  if(funcDesc == "Single-pivot polynomial spline")
+  {
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_SLOPE_OFFSET, "   Slope offset", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantSlopeOffset, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0);  //cl strings.po...
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_SLOPE_TUNING, "   Slope Tuning", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantSlopeTuning, "{0:4.2f}", (float) 0.0, (float) 0.1, (float) 10.0);  //cl strings.po...
+  }
+}
+
+
 
 void CGUIDialogVideoSettings::InitializeShaderMenu(CVideoSettings& vs, const std::shared_ptr<CSettingCategory>& category)
 {

@@ -25460,6 +25460,10 @@ msgctxt "#55351"
 msgid "Force HDR for SDR content"
 msgstr ""
 
+msgctxt "#55352"
+msgid "SDR to HDR mapping"
+msgstr ""
+
 
 
 

@@ -934,8 +934,29 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   
   if(videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(frameIn.color.transfer))
   {
-	videoSettings.m_placeboOptions->getPlOptions()->color_map_params.tone_mapping_function = &pl_tone_map_bt2446a;    
-	//videoSettings.m_placeboOptions->getPlOptions()->color_map_params.tone_constants.linear_knee = 1.0;
+	pl_options opt = videoSettings.m_placeboOptions->getPlOptions();
+
+	// Apply SDR to HDR specific settings
+	opt->color_adjustment.saturation = pow(10.0, (videoSettings.m_PlaceboSdrSaturation - 50.0) / 40.0);
+	opt->color_map_params.gamut_mapping = videoSettings.m_PlaceboSdrColorMapGamutMapping == -1 ? NULL : pl_gamut_map_functions [videoSettings.m_PlaceboSdrColorMapGamutMapping];
+	opt->color_map_params.tone_mapping_function = videoSettings.m_PlaceboSdrColorMapToneMapping == -1 ? NULL : pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping];
+	opt->color_map_params.intent = (pl_rendering_intent) videoSettings.m_PlaceboSdrColorMapIntent;
+	opt->color_map_params.tone_constants.exposure = videoSettings.m_PlaceboSdrToneConstantExposure;
+	opt->color_map_params.tone_constants.knee_adaptation = videoSettings.m_PlaceboSdrToneConstantKneeAdaptation;
+	opt->color_map_params.tone_constants.knee_default = videoSettings.m_PlaceboSdrToneConstantKneeDefault;
+	opt->color_map_params.tone_constants.knee_maximum = videoSettings.m_PlaceboSdrToneConstantKneeMaximum;
+	opt->color_map_params.tone_constants.knee_minimum = videoSettings.m_PlaceboSdrToneConstantKneeMinimum;
+	opt->color_map_params.tone_constants.knee_offset = videoSettings.m_PlaceboSdrToneConstantKneeOffset;
+	opt->color_map_params.tone_constants.linear_knee = videoSettings.m_PlaceboSdrToneConstantLinearKnee;
+	opt->color_map_params.tone_constants.reinhard_contrast = videoSettings.m_PlaceboSdrToneConstantReinhardContrast;
+	opt->color_map_params.tone_constants.slope_offset = videoSettings.m_PlaceboSdrToneConstantSlopeOffset;
+	opt->color_map_params.tone_constants.slope_tuning = videoSettings.m_PlaceboSdrToneConstantSlopeTuning;
+	opt->color_map_params.tone_constants.spline_contrast = videoSettings.m_PlaceboSdrToneConstantSplineContrast;
+	opt->color_map_params.gamut_constants.colorimetric_gamma = videoSettings.m_PlaceboSdrGamutConstantsColorimetricGamma;
+	opt->color_map_params.gamut_constants.perceptual_deadzone = videoSettings.m_PlaceboSdrGamutConstantsPerceptualDeadzone;
+	opt->color_map_params.gamut_constants.perceptual_strength = videoSettings.m_PlaceboSdrGamutConstantsPerceptualStrength;
+	opt->color_map_params.gamut_constants.softclip_desat = videoSettings.m_PlaceboSdrGamutConstantsSoftclipDesat;
+	opt->color_map_params.gamut_constants.softclip_knee = videoSettings.m_PlaceboSdrGamutConstantsSoftclipKnee;
   }
 
   //----------------

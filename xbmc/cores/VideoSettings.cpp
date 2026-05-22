@@ -43,6 +43,7 @@ CVideoSettings& CVideoSettings::operator=(const CVideoSettings& other)
   return *this;
 }
 
+
 void CVideoSettings::copy(const CVideoSettings& other)
 {
   // Kodi video settings
@@ -81,7 +82,28 @@ void CVideoSettings::copy(const CVideoSettings& other)
 
   // LibPLacebo specific CVideoSettings only video settings
   m_PlaceboShaderApply = other.m_PlaceboShaderApply;
-    m_PlaceboUseHdrForSdr = other.m_PlaceboUseHdrForSdr;
+  m_PlaceboUseHdrForSdr = other.m_PlaceboUseHdrForSdr;
+  m_PlaceboSdrSaturation = other.m_PlaceboSdrSaturation;
+  m_PlaceboSdrColorMapIntent = other.m_PlaceboSdrColorMapIntent;
+  m_PlaceboSdrColorMapGamutMapping = other.m_PlaceboSdrColorMapGamutMapping;
+  m_PlaceboSdrColorMapToneMapping = other.m_PlaceboSdrColorMapToneMapping;
+  m_PlaceboSdrToneConstantExposure = other.m_PlaceboSdrToneConstantExposure;
+  m_PlaceboSdrToneConstantKneeAdaptation = other.m_PlaceboSdrToneConstantKneeAdaptation;
+  m_PlaceboSdrToneConstantKneeDefault = other.m_PlaceboSdrToneConstantKneeDefault;
+  m_PlaceboSdrToneConstantKneeMaximum = other.m_PlaceboSdrToneConstantKneeMaximum;
+  m_PlaceboSdrToneConstantKneeMinimum = other.m_PlaceboSdrToneConstantKneeMinimum;
+  m_PlaceboSdrToneConstantKneeOffset = other.m_PlaceboSdrToneConstantKneeOffset;
+  m_PlaceboSdrToneConstantLinearKnee = other.m_PlaceboSdrToneConstantLinearKnee;
+  m_PlaceboSdrToneConstantReinhardContrast = other.m_PlaceboSdrToneConstantReinhardContrast;
+  m_PlaceboSdrToneConstantSlopeOffset = other.m_PlaceboSdrToneConstantSlopeOffset;
+  m_PlaceboSdrToneConstantSlopeTuning = other.m_PlaceboSdrToneConstantSlopeTuning;
+  m_PlaceboSdrToneConstantSplineContrast = other.m_PlaceboSdrToneConstantSplineContrast;
+  m_PlaceboSdrGamutConstantsColorimetricGamma = other.m_PlaceboSdrGamutConstantsColorimetricGamma;
+  m_PlaceboSdrGamutConstantsPerceptualDeadzone = other.m_PlaceboSdrGamutConstantsPerceptualDeadzone;
+  m_PlaceboSdrGamutConstantsPerceptualStrength = other.m_PlaceboSdrGamutConstantsPerceptualStrength;
+  m_PlaceboSdrGamutConstantsSoftclipDesat = other.m_PlaceboSdrGamutConstantsSoftclipDesat;
+  m_PlaceboSdrGamutConstantsSoftclipKnee = other.m_PlaceboSdrGamutConstantsSoftclipKnee;
+
   m_PlaceboDisplayHdrPeakLuminance = other.m_PlaceboDisplayHdrPeakLuminance;
   m_PlaceboDisplaySdrPeakLuminance = other.m_PlaceboDisplaySdrPeakLuminance;
   m_PlaceboTargetColorspaceHint = other.m_PlaceboTargetColorspaceHint;
@@ -92,7 +114,6 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboShadersEnabled = other.m_PlaceboShadersEnabled;
   m_PlaceboShadersFilename = other.m_PlaceboShadersFilename;
   m_PlaceboShadersParams = other.m_PlaceboShadersParams;
-
   m_PlaceboShadersHooks = other.m_PlaceboShadersHooks;
 
   // Shallow copy and deep copy of m_placeboOptions content
@@ -161,7 +182,47 @@ CVideoSettings::CVideoSettings()
   // m_placeboOptions already reset in constructor, just update
   CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(*this);
 
+  // Reset overriding default values for placebo specific settings
+  m_PlaceboSdrSaturation = m_PlaceboSaturation;
+  m_PlaceboSdrColorMapIntent = m_PlaceboColorMapIntent;
+  m_PlaceboSdrColorMapGamutMapping = m_PlaceboColorMapGamutMapping;
+  m_PlaceboSdrColorMapToneMapping = m_PlaceboColorMapToneMapping;
+  m_PlaceboSdrToneConstantExposure = m_PlaceboToneConstantExposure;
+  m_PlaceboSdrToneConstantKneeAdaptation = m_PlaceboToneConstantKneeAdaptation;
+  m_PlaceboSdrToneConstantKneeDefault = m_PlaceboToneConstantKneeDefault;
+  m_PlaceboSdrToneConstantKneeMaximum = m_PlaceboToneConstantKneeMaximum;
+  m_PlaceboSdrToneConstantKneeMinimum = m_PlaceboToneConstantKneeMinimum;
+  m_PlaceboSdrToneConstantKneeOffset = m_PlaceboToneConstantKneeOffset;
+  m_PlaceboSdrToneConstantLinearKnee = m_PlaceboToneConstantLinearKnee;
+  m_PlaceboSdrToneConstantReinhardContrast = m_PlaceboToneConstantReinhardContrast;
+  m_PlaceboSdrToneConstantSlopeOffset = m_PlaceboToneConstantSlopeOffset;
+  m_PlaceboSdrToneConstantSlopeTuning = m_PlaceboToneConstantSlopeTuning;
+  m_PlaceboSdrToneConstantSplineContrast = m_PlaceboToneConstantSplineContrast;
+  m_PlaceboSdrGamutConstantsColorimetricGamma = m_PlaceboGamutConstantsColorimetricGamma;
+  m_PlaceboSdrGamutConstantsPerceptualDeadzone = m_PlaceboGamutConstantsPerceptualDeadzone;
+  m_PlaceboSdrGamutConstantsPerceptualStrength = m_PlaceboGamutConstantsPerceptualStrength;
+  m_PlaceboSdrGamutConstantsSoftclipDesat = m_PlaceboGamutConstantsSoftclipDesat;
+  m_PlaceboSdrGamutConstantsSoftclipKnee = m_PlaceboGamutConstantsSoftclipKnee;
+
+  // Reset default values that are not part of libplacebo
+  ResetRenderSettings();
 }
+
+void CVideoSettings::ResetRenderSettings(PlOptionsWrapper::reset_type type)
+{
+  m_placeboOptions->resetPlOptions(type);
+
+  // Reset only the placebo options //cl rethink the whole thing
+  ResetDitherSettings(type);
+}
+
+void CVideoSettings::ResetDitherSettings(PlOptionsWrapper::reset_type type)
+{
+  // Reset only the placebo options //cl rethink the whole thing with settings...
+  m_PlaceboDitherDepth = 8;
+}
+
+
 
 bool CVideoSettings::operator!=(const CVideoSettings& right) const
 {
@@ -203,6 +264,28 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   //if (m_PlaceboSkinZoomHint != right.m_PlaceboSkinZoomHint) return true; //No!
   if (m_PlaceboShaderApply != right.m_PlaceboShaderApply) return true;
   if (m_PlaceboUseHdrForSdr != right.m_PlaceboUseHdrForSdr) return true;  
+
+  if(m_PlaceboSdrSaturation != right.m_PlaceboSdrSaturation) return true;
+  if(m_PlaceboSdrColorMapIntent != right.m_PlaceboSdrColorMapIntent) return true;
+  if(m_PlaceboSdrColorMapGamutMapping != right.m_PlaceboSdrColorMapGamutMapping) return true;
+  if(m_PlaceboSdrColorMapToneMapping != right.m_PlaceboSdrColorMapToneMapping) return true;
+  if(m_PlaceboSdrToneConstantExposure != right.m_PlaceboSdrToneConstantExposure) return true;
+  if(m_PlaceboSdrToneConstantKneeAdaptation != right.m_PlaceboSdrToneConstantKneeAdaptation) return true;
+  if(m_PlaceboSdrToneConstantKneeDefault != right.m_PlaceboSdrToneConstantKneeDefault) return true;
+  if(m_PlaceboSdrToneConstantKneeMaximum != right.m_PlaceboSdrToneConstantKneeMaximum) return true;
+  if(m_PlaceboSdrToneConstantKneeMinimum != right.m_PlaceboSdrToneConstantKneeMinimum) return true;
+  if(m_PlaceboSdrToneConstantKneeOffset != right.m_PlaceboSdrToneConstantKneeOffset) return true;
+  if(m_PlaceboSdrToneConstantLinearKnee != right.m_PlaceboSdrToneConstantLinearKnee) return true;
+  if(m_PlaceboSdrToneConstantReinhardContrast != right.m_PlaceboSdrToneConstantReinhardContrast) return true;
+  if(m_PlaceboSdrToneConstantSlopeOffset != right.m_PlaceboSdrToneConstantSlopeOffset) return true;
+  if(m_PlaceboSdrToneConstantSlopeTuning != right.m_PlaceboSdrToneConstantSlopeTuning) return true;
+  if(m_PlaceboSdrToneConstantSplineContrast != right.m_PlaceboSdrToneConstantSplineContrast) return true;
+  if(m_PlaceboSdrGamutConstantsColorimetricGamma != right.m_PlaceboSdrGamutConstantsColorimetricGamma) return true;
+  if(m_PlaceboSdrGamutConstantsPerceptualDeadzone != right.m_PlaceboSdrGamutConstantsPerceptualDeadzone) return true;
+  if(m_PlaceboSdrGamutConstantsPerceptualStrength != right.m_PlaceboSdrGamutConstantsPerceptualStrength) return true;
+  if(m_PlaceboSdrGamutConstantsSoftclipDesat != right.m_PlaceboSdrGamutConstantsSoftclipDesat) return true;
+  if(m_PlaceboSdrGamutConstantsSoftclipKnee != right.m_PlaceboSdrGamutConstantsSoftclipKnee) return true;
+
   if (m_PlaceboDisplayHdrPeakLuminance != right.m_PlaceboDisplayHdrPeakLuminance) return true;
   if(m_PlaceboDisplaySdrPeakLuminance != right.m_PlaceboDisplaySdrPeakLuminance) return true;
   if (m_PlaceboTargetColorspaceHint != right.m_PlaceboTargetColorspaceHint) return true;

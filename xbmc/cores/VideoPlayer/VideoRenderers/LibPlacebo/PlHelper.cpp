@@ -308,7 +308,7 @@ void CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings& vs)
   vs.m_Gamma = log10f(m_placeboOptions->color_adjustment.gamma * (1.0 - pow(10, -0.5)) + pow(10, -0.5)) * 40.0 + 20.0;
 
   vs.m_PlaceboColorAdjustmentEnabled = m_placeboOptions->params.color_adjustment != NULL;
-  vs.m_PlaceboSaturation = m_placeboOptions->color_adjustment.saturation;
+  vs.m_PlaceboSaturation = log10f(m_placeboOptions->color_adjustment.saturation) * 40.0 + 50.0;
   vs.m_PlaceboHue = fmod(m_placeboOptions->color_adjustment.hue * 180.0 / M_PI, 360.0);
   vs.m_PlaceboTemperature = m_placeboOptions->color_adjustment.temperature * 3500.0 + 6500.0;
 
@@ -411,6 +411,13 @@ void CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings& vs)
   vs.m_PlaceboSkipAntiAliasing = m_placeboOptions->params.skip_anti_aliasing;
   vs.m_PlaceboSkipCachingSingleFrame = m_placeboOptions->params.skip_caching_single_frame;
 
+  // Update overriden default values for placebo specific settings that are not directly stored in m_placeboOptions, but only in CVideoSettings
+  /* //cl no! we assume the param settings are always meant for HDR and overriden in the renderer function if needed, never need to update them
+  vs.m_PlaceboSdrSaturation = vs.m_PlaceboSaturation;
+  vs.m_PlaceboSdrColorMapGamutMapping = vs.m_PlaceboColorMapGamutMapping;
+  ...
+  */
+
 }
 
 void CPLHelper::UpdateLibPLaceboParamsFromVideoSettings(CVideoSettings& vs)
@@ -423,7 +430,7 @@ void CPLHelper::UpdateLibPLaceboParamsFromVideoSettings(CVideoSettings& vs)
   m_placeboOptions->color_adjustment.brightness = vs.m_Brightness / 50.0 - 1.0;
   m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.0;
   m_placeboOptions->color_adjustment.gamma = (pow(10.0, (vs.m_Gamma - 20.0) / 40.0) - pow(10, -0.5)) * 1.0 / (1.0 - pow(10, -0.5));
-  m_placeboOptions->color_adjustment.saturation = vs.m_PlaceboSaturation;
+  m_placeboOptions->color_adjustment.saturation = pow(10.0, (vs.m_PlaceboSaturation - 50.0) / 40.0);
   m_placeboOptions->color_adjustment.hue = fmod(vs.m_PlaceboHue, 360.0) * M_PI / 180.0;
   m_placeboOptions->color_adjustment.temperature = (vs.m_PlaceboTemperature - 6500.0) / 3500.0;
 
@@ -553,6 +560,27 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetInt(pNode, "placeboditherdepth", vs.m_PlaceboDitherDepth);
   XMLUtils::SetBoolean(pNode, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::SetBoolean(pNode, "placeboshaderapply", vs.m_PlaceboShaderApply);
+
+  XMLUtils::SetFloat(pNode, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
+  XMLUtils::SetInt(pNode, "placebosdrcolormapgamutmapping", vs.m_PlaceboSdrColorMapGamutMapping);
+  XMLUtils::SetInt(pNode, "placebosdrcolormaptone_mapping", vs.m_PlaceboSdrColorMapToneMapping);
+  XMLUtils::SetInt(pNode, "placebosdrcolormapintent", vs.m_PlaceboSdrColorMapIntent);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantexposure", vs.m_PlaceboSdrToneConstantExposure);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantkneeadaptation", vs.m_PlaceboSdrToneConstantKneeAdaptation);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantkneedefault", vs.m_PlaceboSdrToneConstantKneeDefault);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantkneemaximum", vs.m_PlaceboSdrToneConstantKneeMaximum);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantkneeminimum", vs.m_PlaceboSdrToneConstantKneeMinimum);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantkneeoffset", vs.m_PlaceboSdrToneConstantKneeOffset);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantlinearknee", vs.m_PlaceboSdrToneConstantLinearKnee);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantreinhardcontrast", vs.m_PlaceboSdrToneConstantReinhardContrast);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantslopeoffset", vs.m_PlaceboSdrToneConstantSlopeOffset);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantslopetuning", vs.m_PlaceboSdrToneConstantSlopeTuning);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantsplinecontrast", vs.m_PlaceboSdrToneConstantSplineContrast);
+  XMLUtils::SetFloat(pNode, "placebosdrgamutconstantscolorimetricgamma", vs.m_PlaceboSdrGamutConstantsColorimetricGamma);
+  XMLUtils::SetFloat(pNode, "placebosdrgamutconstantsperceptualdeadzone", vs.m_PlaceboSdrGamutConstantsPerceptualDeadzone);
+  XMLUtils::SetFloat(pNode, "placebosdrgamutconstantsperceptualstrength", vs.m_PlaceboSdrGamutConstantsPerceptualStrength);
+  XMLUtils::SetFloat(pNode, "placebosdrgamutconstantssoftclipdesat", vs.m_PlaceboSdrGamutConstantsSoftclipDesat);
+  XMLUtils::SetFloat(pNode, "placebosdrgamutconstantssoftclipknee", vs.m_PlaceboSdrGamutConstantsSoftclipKnee);
 
   XMLUtils::SetBoolean(pNode, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
   XMLUtils::SetFloat(pNode, "saturation", vs.m_PlaceboSaturation);
@@ -699,6 +727,27 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetInt(pElement, "placeboditherdepth", vs.m_PlaceboDitherDepth);
   XMLUtils::GetBoolean(pElement, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::GetBoolean(pElement, "placeboshaderapply", vs.m_PlaceboShaderApply);
+
+  XMLUtils::GetFloat(pElement, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
+  XMLUtils::GetInt(pElement,   "placebosdrcolormapgamutmapping", vs.m_PlaceboSdrColorMapGamutMapping);
+  XMLUtils::GetInt(pElement,   "placebosdrcolormaptoneMapping", vs.m_PlaceboSdrColorMapToneMapping);
+  XMLUtils::GetInt(pElement,   "placebosdrcolormapintent", vs.m_PlaceboSdrColorMapIntent);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantexposure", vs.m_PlaceboSdrToneConstantExposure);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneeadaptation", vs.m_PlaceboSdrToneConstantKneeAdaptation);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneedefault", vs.m_PlaceboSdrToneConstantKneeDefault);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneemaximum", vs.m_PlaceboSdrToneConstantKneeMaximum);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneeminimum", vs.m_PlaceboSdrToneConstantKneeMinimum);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneeoffset", vs.m_PlaceboSdrToneConstantKneeOffset);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantlinearknee", vs.m_PlaceboSdrToneConstantLinearKnee);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantreinhardcontrast", vs.m_PlaceboSdrToneConstantReinhardContrast);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantslopeoffset", vs.m_PlaceboSdrToneConstantSlopeOffset);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantslopetuning", vs.m_PlaceboSdrToneConstantSlopeTuning);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantsplinecontrast", vs.m_PlaceboSdrToneConstantSplineContrast);
+  XMLUtils::GetFloat(pElement, "placebosdrgamutconstantscolorimetricgamma", vs.m_PlaceboSdrGamutConstantsColorimetricGamma);
+  XMLUtils::GetFloat(pElement, "placebosdrgamutconstantsperceptualdeadzone", vs.m_PlaceboSdrGamutConstantsPerceptualDeadzone);
+  XMLUtils::GetFloat(pElement, "placebosdrgamutconstantsperceptualstrength", vs.m_PlaceboSdrGamutConstantsPerceptualStrength);
+  XMLUtils::GetFloat(pElement, "placebosdrgamutconstantssoftclipdesat", vs.m_PlaceboSdrGamutConstantsSoftclipDesat);
+  XMLUtils::GetFloat(pElement, "placebosdrgamutconstantssoftclipknee", vs.m_PlaceboSdrGamutConstantsSoftclipKnee);
 
   XMLUtils::GetBoolean(pElement, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
   XMLUtils::GetFloat(pElement, "saturation", vs.m_PlaceboSaturation);

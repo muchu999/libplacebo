@@ -302,10 +302,10 @@ public:
   CVideoSettings(const CVideoSettings& other);
   CVideoSettings& operator=(const CVideoSettings& other);
   void copy(const CVideoSettings& other);
-
-
-
   bool operator!=(const CVideoSettings& right) const;
+  void ResetRenderSettings(PlOptionsWrapper::reset_type type = PlOptionsWrapper::DEFAULT);
+  void ResetDitherSettings(PlOptionsWrapper::reset_type type);
+
 
   EINTERLACEMETHOD m_InterlaceMethod;
   ESCALINGMETHOD m_ScalingMethod;
@@ -461,6 +461,38 @@ public:
   CPlaceboShaders m_PlaceboShadersHooks;
 
   PlOptionsWrapper* m_placeboOptions;
+
+  // SDR overrides when using SDR source in HDR mode, mostly anything affecting colorspace conversion and 
+  // tone mapping, but also saturation as it can be used to mitigate desaturation from gamut mapping.
+  float m_PlaceboSdrSaturation;
+  int m_PlaceboSdrColorMapIntent;
+  int m_PlaceboSdrColorMapGamutMapping;
+  int m_PlaceboSdrColorMapToneMapping;
+  float m_PlaceboSdrColorMapToneMapParameter; //cl only used transitively
+
+  float m_PlaceboSdrToneConstantExposure;
+  float m_PlaceboSdrToneConstantKneeAdaptation;
+  float m_PlaceboSdrToneConstantKneeDefault;
+  float m_PlaceboSdrToneConstantKneeMaximum;
+  float m_PlaceboSdrToneConstantKneeMinimum;
+  float m_PlaceboSdrToneConstantKneeOffset;
+  float m_PlaceboSdrToneConstantLinearKnee;
+  float m_PlaceboSdrToneConstantReinhardContrast;
+  float m_PlaceboSdrToneConstantSlopeOffset;
+  float m_PlaceboSdrToneConstantSlopeTuning;
+  float m_PlaceboSdrToneConstantSplineContrast;
+
+  float m_PlaceboSdrGamutConstantsColorimetricGamma;
+  float m_PlaceboSdrGamutConstantsPerceptualDeadzone;
+  float m_PlaceboSdrGamutConstantsPerceptualStrength;
+  float m_PlaceboSdrGamutConstantsSoftclipDesat;
+  float m_PlaceboSdrGamutConstantsSoftclipKnee;
+
+
+
+
+
+
 };
 
 class CCriticalSection;
