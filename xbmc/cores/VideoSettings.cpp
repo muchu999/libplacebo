@@ -81,10 +81,12 @@ void CVideoSettings::copy(const CVideoSettings& other)
 
   // LibPLacebo specific CVideoSettings only video settings
   m_PlaceboShaderApply = other.m_PlaceboShaderApply;
+    m_PlaceboUseHdrForSdr = other.m_PlaceboUseHdrForSdr;
   m_PlaceboDisplayHdrPeakLuminance = other.m_PlaceboDisplayHdrPeakLuminance;
   m_PlaceboDisplaySdrPeakLuminance = other.m_PlaceboDisplaySdrPeakLuminance;
   m_PlaceboTargetColorspaceHint = other.m_PlaceboTargetColorspaceHint;
   m_PlaceboTargetColorspaceHintMode = other.m_PlaceboTargetColorspaceHintMode;
+  m_PlaceboDitherDepth = other.m_PlaceboDitherDepth;
   m_PlaceboLutFilename = other.m_PlaceboLutFilename;
   m_PlaceboLut = other.m_PlaceboLut;
   m_PlaceboShadersEnabled = other.m_PlaceboShadersEnabled;
@@ -145,11 +147,13 @@ CVideoSettings::CVideoSettings()
   m_PlaceboDisplayHdrPeakLuminance = 700;
   m_PlaceboDisplaySdrPeakLuminance = 0;
   m_PlaceboShaderApply = true;
+  m_PlaceboUseHdrForSdr = false;
   m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::AUTO;
   m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::TARGET;
+  m_PlaceboDitherDepth = 8;  //cl 
   m_PlaceboLutFilename = "";
   m_PlaceboLut = nullptr;
-
+  
   m_PlaceboShadersEnabled = {};
   m_PlaceboShadersFilename = {};
   m_PlaceboShadersParams = {};
@@ -198,10 +202,12 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if (m_PlaceboSkinZoom != right.m_PlaceboSkinZoom) return true;
   //if (m_PlaceboSkinZoomHint != right.m_PlaceboSkinZoomHint) return true; //No!
   if (m_PlaceboShaderApply != right.m_PlaceboShaderApply) return true;
+  if (m_PlaceboUseHdrForSdr != right.m_PlaceboUseHdrForSdr) return true;  
   if (m_PlaceboDisplayHdrPeakLuminance != right.m_PlaceboDisplayHdrPeakLuminance) return true;
   if(m_PlaceboDisplaySdrPeakLuminance != right.m_PlaceboDisplaySdrPeakLuminance) return true;
   if (m_PlaceboTargetColorspaceHint != right.m_PlaceboTargetColorspaceHint) return true;
   if (m_PlaceboTargetColorspaceHintMode != right.m_PlaceboTargetColorspaceHintMode) return true;
+  if(m_PlaceboDitherDepth != right.m_PlaceboDitherDepth) return true;
   if (m_PlaceboLutFilename != right.m_PlaceboLutFilename) return true;
 
   if (m_PlaceboShadersEnabled != right.m_PlaceboShadersEnabled) return true;
@@ -284,6 +290,7 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
 
   if (m_PlaceboGamutConstantsColorimetricGamma != right.m_PlaceboGamutConstantsColorimetricGamma) return true;
   if (m_PlaceboGamutConstantsPerceptualDeadzone != right.m_PlaceboGamutConstantsPerceptualDeadzone) return true;
+  if(m_PlaceboGamutConstantsPerceptualStrength != right.m_PlaceboGamutConstantsPerceptualStrength) return true;
   if (m_PlaceboGamutConstantsSoftclipDesat != right.m_PlaceboGamutConstantsSoftclipDesat) return true;
   if (m_PlaceboGamutConstantsSoftclipKnee != right.m_PlaceboGamutConstantsSoftclipKnee) return true;
 

@@ -127,6 +127,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_FRAME_MIXER                             "video.libplacebo.frame_mixer"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING                 "video.libplacebo.gammut_map_funtion"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING                  "video.libplacebo.tone_map_funtion"
+#define SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING_PARAMETER        "video.libplacebo.tone_map_function_parameter"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY             "video.libplacebo.color_map_contrast_recovery"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS           "video.libplacebo.color_map_contrast_smoothness"
 #define SETTING_LIB_PLACEBO_LOAD_PRESET_DEFAULT                     "video.libplacebo.load_preset_default"
@@ -177,6 +178,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST          "video.libplacebo.tone_constants_spline_contrast"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA      "video.libplacebo.gamut_constants_colorimetric_gamma"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE     "video.libplacebo.gamut_constants_perceptual_deadzone"
+#define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH     "video.libplacebo.gamut_constants_perceptual_strength"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT          "video.libplacebo.gamut_constants_softclip_desat"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_KNEE           "video.libplacebo.gamut_constants_softclip_knee"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_EXPANSION                   "video.libplacebo.gamut_constants_expansion"
@@ -214,7 +216,9 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE          "video.libplacebo.display_hdr_peak_luminance"
 #define SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE          "video.libplacebo.display_sdr_peak_luminance"
 #define SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT              "video.libplacebo.target_colorspace_hint"
+#define SETTING_LIB_PLACEBO_USE_HDR_FOR_SDR                     "video.libplacebo.use_hdr_for_sdr"
 #define SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT_MODE         "video.libplacebo.target_colorspace_hint_mode"
+#define SETTING_LIB_PLACEBO_DITHER_DEPTH                        "video.libplacebo.dither_depth"
 #define SETTING_LIB_PLACEBO_SHADER_ADD                          "video.libplacebo.shader_add"
 #define SETTING_LIB_PLACEBO_SHADER_REMOVE                       "video.libplacebo.shader_remove"
 #define SETTING_LIB_PLACEBO_SHADER_MOVE_UP                      "video.libplacebo.shader_move_up"
@@ -465,12 +469,86 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboColorMapGamutMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
 	m_placeboOptions->color_map_params.gamut_mapping = vs.m_PlaceboColorMapGamutMapping == -1 ? NULL : pl_gamut_map_functions[vs.m_PlaceboColorMapGamutMapping];
 	appPlayer->SetVideoSettings(vs);
+	SetupView();
   }
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING)
   {
 	vs.m_PlaceboColorMapToneMapping = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
 	m_placeboOptions->color_map_params.tone_mapping_function = vs.m_PlaceboColorMapToneMapping == -1 ? NULL : pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping];
+
+	vs.m_PlaceboColorMapToneMapParameter = 0.0;
+	if(vs.m_PlaceboColorMapToneMapping  != -1)
+	{
+	  std::string desc = {};
+	  std::string funcDesc = {};
+	  if(pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->param_desc)
+		desc = pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->param_desc;
+	  if(pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description)
+		funcDesc = pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description;
+
+	  if(desc == "Knee point target")
+		vs.m_PlaceboColorMapToneMapParameter = vs.m_PlaceboToneConstantKneeAdaptation;
+	  else if(desc == "Knee offset")
+		vs.m_PlaceboColorMapToneMapParameter = vs.m_PlaceboToneConstantKneeOffset;
+	  else if((desc == "Contrast") && (funcDesc == "Single-pivot polynomial spline"))
+		vs.m_PlaceboColorMapToneMapParameter = vs.m_PlaceboToneConstantSplineContrast;
+	  else if((desc == "Contrast") && (funcDesc == "Reinhard"))
+		vs.m_PlaceboColorMapToneMapParameter = vs.m_PlaceboToneConstantReinhardContrast;
+	  else if(desc == "Exposure")
+		vs.m_PlaceboColorMapToneMapParameter = vs.m_PlaceboToneConstantExposure;
+	  else if(desc == "Knee point")
+		vs.m_PlaceboColorMapToneMapParameter = vs.m_PlaceboToneConstantLinearKnee;
+	}
 	appPlayer->SetVideoSettings(vs);
+	SetupView();
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING_PARAMETER)
+  {
+	vs.m_PlaceboColorMapToneMapParameter = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+
+	std::string desc = {};
+	std::string funcDesc = {};
+	if(pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->param_desc)
+	  desc = pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->param_desc;
+	if(pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description)
+	  funcDesc = pl_tone_map_functions[vs.m_PlaceboColorMapToneMapping]->description;
+
+	if(desc == "Knee point target")
+	{
+	  vs.m_PlaceboToneConstantKneeAdaptation = vs.m_PlaceboColorMapToneMapParameter;
+	  m_placeboOptions->color_map_params.tone_constants.knee_adaptation = vs.m_PlaceboToneConstantKneeAdaptation;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if(desc == "Knee offset")
+	{
+	  vs.m_PlaceboToneConstantKneeOffset = vs.m_PlaceboColorMapToneMapParameter;
+	  m_placeboOptions->color_map_params.tone_constants.knee_offset = vs.m_PlaceboToneConstantKneeOffset;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if((desc == "Contrast") && (funcDesc == "Single-pivot polynomial spline"))
+	{
+	  vs.m_PlaceboToneConstantSplineContrast = vs.m_PlaceboColorMapToneMapParameter;
+	  m_placeboOptions->color_map_params.tone_constants.spline_contrast = vs.m_PlaceboToneConstantSplineContrast;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if((desc == "Contrast") && (funcDesc == "Reinhard"))
+	{
+	  vs.m_PlaceboToneConstantReinhardContrast = vs.m_PlaceboColorMapToneMapParameter;
+	  m_placeboOptions->color_map_params.tone_constants.reinhard_contrast = vs.m_PlaceboToneConstantReinhardContrast;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if(desc == "Exposure")
+	{
+	  vs.m_PlaceboToneConstantExposure = vs.m_PlaceboColorMapToneMapParameter;
+	  m_placeboOptions->color_map_params.tone_constants.exposure = vs.m_PlaceboToneConstantExposure;
+	  appPlayer->SetVideoSettings(vs);
+	}
+	else if(desc == "Knee point")
+	{
+	  vs.m_PlaceboToneConstantLinearKnee = vs.m_PlaceboColorMapToneMapParameter;
+	  m_placeboOptions->color_map_params.tone_constants.linear_knee = vs.m_PlaceboToneConstantLinearKnee;
+	  appPlayer->SetVideoSettings(vs);
+	}
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEBAND_ENABLED)
   {
@@ -549,6 +627,11 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboShaderApply = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
 	appPlayer->SetVideoSettings(vs);
   }
+  else if(settingId == SETTING_LIB_PLACEBO_USE_HDR_FOR_SDR)
+  {
+	vs.m_PlaceboUseHdrForSdr = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT)
   {
 	vs.m_PlaceboTargetColorspaceHint = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
@@ -557,6 +640,11 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   else if (settingId == SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT_MODE)
   {
 	vs.m_PlaceboTargetColorspaceHintMode = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_DITHER_DEPTH)
+  {
+	vs.m_PlaceboDitherDepth = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED)
@@ -781,6 +869,12 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	m_placeboOptions->color_map_params.gamut_constants.perceptual_deadzone = vs.m_PlaceboGamutConstantsPerceptualDeadzone;
 	appPlayer->SetVideoSettings(vs);
   }
+  else if(settingId == SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH)
+  {
+	vs.m_PlaceboGamutConstantsPerceptualStrength = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	m_placeboOptions->color_map_params.gamut_constants.perceptual_strength = vs.m_PlaceboGamutConstantsPerceptualStrength;
+	appPlayer->SetVideoSettings(vs);
+	}
   else if (settingId == SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT)
   {
 	vs.m_PlaceboGamutConstantsSoftclipDesat = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
@@ -1515,6 +1609,8 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	// Render Options
 	AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE, 55313, SettingLevel::Basic, videoSettings.m_PlaceboDisplayHdrPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55313, usePopup);
 	AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE, 55347, SettingLevel::Basic, videoSettings.m_PlaceboDisplaySdrPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55347, usePopup);
+	AddToggle(groupOptions, SETTING_LIB_PLACEBO_USE_HDR_FOR_SDR, 55351, SettingLevel::Basic, videoSettings.m_PlaceboUseHdrForSdr);
+
 	entries.clear();
 	entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));
 	entries.emplace_back(55316, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::NO));
@@ -1559,48 +1655,63 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_ENABLED, 55248, SettingLevel::Basic, videoSettings.m_PlaceboColorMapEnabled);
 	AddButton(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_DEFAULT, 55246, SettingLevel::Basic);
 	AddButton(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LOAD_PRESET_HIGH_QUALITY, 55247, SettingLevel::Basic);
+	AddList(groupColorMap,   SETTING_LIB_PLACEBO_COLOR_MAP_INTENT,55298,SettingLevel::Basic,videoSettings.m_PlaceboColorMapIntent,CPLHelper::PlColorMapIntentOptionFiller,55298);
+	
+	
 	AddList(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING, 55228, SettingLevel::Basic, videoSettings.m_PlaceboColorMapGamutMapping, CPLHelper::PlColorMapGamutMapFunctionOptionFiller, 55228);
-	AddList(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING, 55236, SettingLevel::Basic, videoSettings.m_PlaceboColorMapToneMapping, CPLHelper::PlColorMapToneMapFunctionOptionFiller, 55236);
+	if(videoSettings.m_PlaceboColorMapGamutMapping != -1)
+	{
+	  std::string funcDesc = {};
+
+	  if(pl_gamut_map_functions [videoSettings.m_PlaceboColorMapGamutMapping]->description)
+		funcDesc = pl_gamut_map_functions [videoSettings.m_PlaceboColorMapGamutMapping]->description;
+
+	  if((funcDesc == "Absolute colorimetric clip") || (funcDesc == "Darken and clip") || (funcDesc == "Colorimetric clip"))
+	  {
+		AddSlider(groupColorMap, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA, 55286, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsColorimetricGamma, "{0:4.1f}", (float) 0.0, (float) 0.1, (float) 10.0, 55286, usePopup);
+	  }
+	  else if((funcDesc == "Perceptual mapping"))
+	  {
+		AddSlider(groupColorMap, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE, 55287, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsPerceptualDeadzone, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55287, usePopup);
+		AddSlider(groupColorMap, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH, 55349, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsPerceptualStrength, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55349, usePopup);
+	  }
+	  else if((funcDesc == "Soft clipping"))
+	  {
+		AddSlider(groupColorMap, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT, 55288, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsSoftclipDesat, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55288, usePopup);
+		AddSlider(groupColorMap, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_KNEE, 55289, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsSoftclipKnee, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55289, usePopup);
+	  }
+	}
+	
+	InitializeToneMappingMenuHdr(videoSettings, groupColorMap);
+
 	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_RECOVERY, 55284, SettingLevel::Basic, videoSettings.m_PlaceboColorMapContrastRecovery, "{0:4.2f}", (float)0.0, (float)0.01, (float)2.0, 55284, usePopup);
 	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_CONTRAST_SMOOTHNESS, 55285, SettingLevel::Basic, videoSettings.m_PlaceboColorMapContrastSmoothness, "{0:4.1f}", (float)1.0, (float)0.1, (float)32.0, 55285, usePopup);
 	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_EXPANSION, 55290, SettingLevel::Basic, videoSettings.m_PlaceboColorMapGamutExpansion);
 
 	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_INVERSE_TONE_MAPPING, 55291, SettingLevel::Basic, videoSettings.m_PlaceboColorMapInverseToneMapping);
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_SHOW_CLIPPING, 55297, SettingLevel::Basic, videoSettings.m_PlaceboColorMapShowClipping);
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_FORCE_TONE_MAPPING_LUT, 55299, SettingLevel::Basic, videoSettings.m_PlaceboColorMapForceToneMappingLut);
+	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_LUT, 55277, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeLut);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X0, 55278, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectX0, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55278, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X1, 55279, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectX1, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55279, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y0, 55280, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectY0, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55280, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y1, 55281, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectY1, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0, 55281, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_HUE, 55282, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeHue, "{0:3.0f}", (float) 0.0, (float) 1.0, (float) 360.0, 55282, usePopup);
+	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_THETA, 55283, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeTheta, "{0:3.0f}", (float) 0.0, (float) 1.0, (float) 360.0, 55283, usePopup);
 	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_I, 55292, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeI, -1, 0, 1, 1024, 55292, usePopup);
 	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_C, 55293, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeC, -1, 0, 1, 1024, 55293, usePopup);
 	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_SIZE_H, 55294, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dSizeH, -1, 0, 1, 1024, 55294, usePopup);
 	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT3D_TRICUBIC, 55295, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLut3dTricubic);
 	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_LUT_SIZE, 55296, SettingLevel::Basic, videoSettings.m_PlaceboColorMapLutSize, -1, 0, 1, 1024, 55296, usePopup);
-	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_SHOW_CLIPPING, 55297, SettingLevel::Basic, videoSettings.m_PlaceboColorMapShowClipping);
-	AddList(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_INTENT, 55298, SettingLevel::Basic, videoSettings.m_PlaceboColorMapIntent, CPLHelper::PlColorMapIntentOptionFiller, 55298);
-	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_FORCE_TONE_MAPPING_LUT, 55299, SettingLevel::Basic, videoSettings.m_PlaceboColorMapForceToneMappingLut);
-
-	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_LUT, 55277, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeLut);
-	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X0, 55278, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectX0, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55278, usePopup);
-	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_X1, 55279, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectX1, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55279, usePopup);
-	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y0, 55280, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectY0, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55280, usePopup);
-	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_RECT_Y1, 55281, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeRectY1, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55281, usePopup);
-	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_HUE, 55282, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeHue, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55282, usePopup);
-	AddSlider(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_THETA, 55283, SettingLevel::Basic, videoSettings.m_PlaceboColorMapVisualizeTheta, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55283, usePopup);
 
 	// Tone mapping constants
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_EXPOSURE, 55266, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantExposure, "{0:4.1f}", (float)0.0, (float)0.1, (float)10.0, 55266, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_ADAPTATION, 55267, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeAdaptation, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55267, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_DEFAULT, 55268, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeDefault, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55268, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MAXIMUM, 55269, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeMaximum, "{0:4.2f}", (float)0.5, (float)0.01, (float)1.0, 55269, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MINIMUM, 55270, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeMinimum, "{0:4.2f}", (float)0.0, (float)0.01, (float)0.5, 55270, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_OFFSET, 55271, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeOffset, "{0:4.2f}", (float)0.5, (float)0.01, (float)2.0, 55271, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_LINEAR_KNEE, 55272, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantLinearKnee, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55272, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_REINHARD_CONTRAST, 55273, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantReinhardContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55273, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_OFFSET, 55274, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeOffset, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55274, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING, 55275, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeTuning, "{0:4.2f}", (float)0.0, (float)0.1, (float)10.0, 55275, usePopup);
-	AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST, 55276, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSplineContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.5, 55276, usePopup);
-
-	// Gamut mapping constants
-	AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA, 55286, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsColorimetricGamma, "{0:4.1f}", (float)0.0, (float)0.1, (float)10.0, 55286, usePopup);
-	AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE, 55287, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsPerceptualDeadzone, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55287, usePopup);
-	AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT, 55288, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsSoftclipDesat, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55288, usePopup);
-	AddSlider(groupGamutMappingConstants, SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_KNEE, 55289, SettingLevel::Basic, videoSettings.m_PlaceboGamutConstantsSoftclipKnee, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55289, usePopup);
+	//AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_EXPOSURE, 55266, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantExposure, "{0:4.1f}", (float)0.0, (float)0.1, (float)10.0, 55266, usePopup);
+	//AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_ADAPTATION, 55267, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeAdaptation, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55267, usePopup);
+	//AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_DEFAULT, 55268, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeDefault, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55268, usePopup);
+	//AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_OFFSET, 55271, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeOffset, "{0:4.2f}", (float)0.5, (float)0.01, (float)2.0, 55271, usePopup);
+	//AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_LINEAR_KNEE, 55272, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantLinearKnee, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55272, usePopup);
+	//AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_REINHARD_CONTRAST, 55273, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantReinhardContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.0, 55273, usePopup);
+	//AddSlider(groupToneMappingConstants, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SPLINE_CONTRAST, 55276, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSplineContrast, "{0:4.2f}", (float)0.0, (float)0.01, (float)1.5, 55276, usePopup);
 
 	// Deband
 	AddToggle(groupDeband, SETTING_LIB_PLACEBO_DEBAND_ENABLED, 55237, SettingLevel::Basic, videoSettings.m_PlaceboDebandEnabled);
@@ -1615,7 +1726,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
 	// Deinterlace
 	AddToggle(groupDeinterlace, SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED, 55249, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceEnabled);
-	AddList(groupDeinterlace, SETTING_LIB_PLACEBO_DEINTERLACE_ALGO, 55250, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceAlgo, CPLHelper::PlDeinterlaceAlgoOptionFiller, 55250);
+	AddList(groupDeinterlace,   SETTING_LIB_PLACEBO_DEINTERLACE_ALGO, 55250, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceAlgo, CPLHelper::PlDeinterlaceAlgoOptionFiller, 55250);
 	AddToggle(groupDeinterlace, SETTING_LIB_PLACEBO_DEINTERLACE_SKIP_SPATIAL_CHECK, 55251, SettingLevel::Basic, videoSettings.m_PlaceboDeinterlaceSkipSpatialCheck);
 
 	// Sigmoid 
@@ -1626,26 +1737,27 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
 	// Cones 
 	AddToggle(groupCone, SETTING_LIB_PLACEBO_CONE_ENABLED, 55256, SettingLevel::Basic, videoSettings.m_PlaceboConeEnabled);
-	AddList(groupCone, SETTING_LIB_PLACEBO_CONE_CONES, 55258, SettingLevel::Basic, videoSettings.m_PlaceboConeCones, CPLHelper::PlConeConesOptionFiller, 55258);
+	AddList(groupCone,   SETTING_LIB_PLACEBO_CONE_CONES, 55258, SettingLevel::Basic, videoSettings.m_PlaceboConeCones, CPLHelper::PlConeConesOptionFiller, 55258);
 	AddSlider(groupCone, SETTING_LIB_PLACEBO_CONE_STRENGTH, 55259, SettingLevel::Basic, videoSettings.m_PlaceboConeStrength, "{0:5.2f}", (float)0.0, (float)0.01, (float)10.0, 55259, usePopup);
 
 	// Dither
 	AddToggle(groupDither, SETTING_LIB_PLACEBO_DITHER_ENABLED, 55260, SettingLevel::Basic, videoSettings.m_PlaceboDitherEnabled);
 	AddButton(groupDither, SETTING_LIB_PLACEBO_DITHER_LOAD_PRESET_DEFAULT, 55261, SettingLevel::Basic);
-	AddList(groupDither, SETTING_LIB_PLACEBO_DITHER_METHOD, 55262, SettingLevel::Basic, videoSettings.m_PlaceboDitherMethod, CPLHelper::PlDitherMethodOptionFiller, 55262);
+	AddList(groupDither,   SETTING_LIB_PLACEBO_DITHER_METHOD, 55262, SettingLevel::Basic, videoSettings.m_PlaceboDitherMethod, CPLHelper::PlDitherMethodOptionFiller, 55262);
+	AddSlider(groupDither, SETTING_LIB_PLACEBO_DITHER_DEPTH, 55350, SettingLevel::Basic, videoSettings.m_PlaceboDitherDepth, -1, 2, 1, 8, 555350, usePopup); //cl min/max
 	AddSlider(groupDither, SETTING_LIB_PLACEBO_DITHER_LUT_SIZE, 55263, SettingLevel::Basic, videoSettings.m_PlaceboDitherLutSize, -1, 1, 1, 8, 55263, usePopup);
 	AddToggle(groupDither, SETTING_LIB_PLACEBO_DITHER_TEMPORAL, 55264, SettingLevel::Basic, videoSettings.m_PlaceboDitherTemporal);
-	AddList(groupDither, SETTING_LIB_PLACEBO_DITHER_TRANSFER, 55265, SettingLevel::Basic, videoSettings.m_PlaceboDitherTransfer, CPLHelper::PlDitherTransferOptionFiller, 55265);
+	AddList(groupDither,   SETTING_LIB_PLACEBO_DITHER_TRANSFER, 55265, SettingLevel::Basic, videoSettings.m_PlaceboDitherTransfer, CPLHelper::PlDitherTransferOptionFiller, 55265);
 
-	AddList(groupLut, SETTING_LIB_PLACEBO_LUT_TYPE, 55330, SettingLevel::Basic, videoSettings.m_PlaceboLutType, CPLHelper::PlLutTypeOptionFiller, 55330);
-	AddList(groupLut, SETTING_LIB_PLACEBO_LUT_FILENAME, 55332, SettingLevel::Basic, videoSettings.m_PlaceboLutFilename, CPLHelper::PlLutOptionFiller, 55332);
+	AddList(groupLut,    SETTING_LIB_PLACEBO_LUT_TYPE, 55330, SettingLevel::Basic, videoSettings.m_PlaceboLutType, CPLHelper::PlLutTypeOptionFiller, 55330);
+	AddList(groupLut,    SETTING_LIB_PLACEBO_LUT_FILENAME, 55332, SettingLevel::Basic, videoSettings.m_PlaceboLutFilename, CPLHelper::PlLutOptionFiller, 55332);
 	AddSlider(groupMisc, SETTING_LIB_PLACEBO_ANTIRINGING_STRENGTH, 55300, SettingLevel::Basic, videoSettings.m_PlaceboAntiringingStrength, "{0:3.2f}", (float)0.0, (float)0.01, (float)1.0, 55300, usePopup);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_CORRECT_SUBPIXEL_OFFSET, 55301, SettingLevel::Basic, videoSettings.m_PlaceboCorrectSubpixelOffset);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_BUILTIN_SCALERS, 55302, SettingLevel::Basic, videoSettings.m_PlaceboDisableBuiltinScalers);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_DITHER_GAMMA_CORRECTION, 55303, SettingLevel::Basic, videoSettings.m_PlaceboDisableDitherGammaCorrection);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DISABLE_LINEAR_SCALING, 55304, SettingLevel::Basic, videoSettings.m_PlaceboDisableLinearScaling);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DYNAMIC_CONSTANTS, 55305, SettingLevel::Basic, videoSettings.m_PlaceboDynamicConstant);
-	AddList(groupMisc, SETTING_LIB_PLACEBO_ERROR_DIFFUSION, 55306, SettingLevel::Basic, videoSettings.m_PlaceboErrorDiffusion, CPLHelper::PlDiffusionKernelOptionFiller, 55306);
+	AddList(groupMisc,   SETTING_LIB_PLACEBO_ERROR_DIFFUSION, 55306, SettingLevel::Basic, videoSettings.m_PlaceboErrorDiffusion, CPLHelper::PlDiffusionKernelOptionFiller, 55306);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_FORCE_DITHER, 55307, SettingLevel::Basic, videoSettings.m_PlaceboForceDither);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_FORCE_LOW_BIT_DEPTH_FBOS, 55308, SettingLevel::Basic, videoSettings.m_PlaceboForceLowBitDepthFbos);
 	// AddToggle(groupMisc, SETTING_LIB_PLACEBO_IGNORE_ICC_PROFILES,             55309, SettingLevel::Basic, videoSettings.m_PlaceboIgnoreIccProfiles); ignore_icc_profiles; // non-functional, just set pl_frame.icc to NULL
@@ -1653,14 +1765,97 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING, 55311, SettingLevel::Basic, videoSettings.m_PlaceboSkipAntiAliasing);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME, 55312, SettingLevel::Basic, videoSettings.m_PlaceboSkipCachingSingleFrame);
 
-
-
 	InitializeShaderMenu(videoSettings, category);
 	CreateGroup(groupShaderLoad, category);
 	AddToggle(groupShaderLoad, SETTING_LIB_PLACEBO_SHADER_APPLY, 55338, SettingLevel::Basic, videoSettings.m_PlaceboShaderApply);
 	AddButton(groupShaderLoad, SETTING_LIB_PLACEBO_SHADER_ADD, 55334, SettingLevel::Basic);
 
 
+  }
+}
+
+void CGUIDialogVideoSettings::InitializeToneMappingMenuHdr(CVideoSettings& videoSettings, const std::shared_ptr<CSettingGroup> group)
+{
+  // Tone mapping
+  AddList(group, SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING, 55236, SettingLevel::Basic, videoSettings.m_PlaceboColorMapToneMapping, CPLHelper::PlColorMapToneMapFunctionOptionFiller, 55236);
+
+  std::string desc = {};
+  std::string funcDesc = {};
+  videoSettings.m_PlaceboColorMapToneMapParameter = 0.0;
+  float paramMin = 0.0;
+  float paramMax = 1.0;
+  float paramStep = 0.01;
+  bool bHasParam = false;
+  if(videoSettings.m_PlaceboColorMapToneMapping != -1)
+  {
+	if(pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_desc)
+	  desc = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_desc;
+	if(pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->description)
+	  funcDesc = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->description;
+
+	if(desc == "Knee point target")
+	{
+	  videoSettings.m_PlaceboColorMapToneMapParameter = videoSettings.m_PlaceboToneConstantKneeAdaptation;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if(desc == "Knee offset")
+	{
+	  videoSettings.m_PlaceboColorMapToneMapParameter = videoSettings.m_PlaceboToneConstantKneeOffset;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if((desc == "Contrast") && (funcDesc == "Single-pivot polynomial spline"))
+	{
+	  videoSettings.m_PlaceboColorMapToneMapParameter = videoSettings.m_PlaceboToneConstantSplineContrast;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if((desc == "Contrast") && (funcDesc == "Reinhard"))
+	{
+	  videoSettings.m_PlaceboColorMapToneMapParameter = videoSettings.m_PlaceboToneConstantReinhardContrast;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if(desc == "Exposure")
+	{
+	  videoSettings.m_PlaceboColorMapToneMapParameter = videoSettings.m_PlaceboToneConstantExposure;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+	else if(desc == "Knee point")
+	{
+	  videoSettings.m_PlaceboColorMapToneMapParameter = videoSettings.m_PlaceboToneConstantLinearKnee;
+	  paramMin = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_min;
+	  paramMax = pl_tone_map_functions [videoSettings.m_PlaceboColorMapToneMapping]->param_max;
+	  paramStep = (paramMax - paramMin) / 100.0;
+	  bHasParam = true;
+	}
+  }
+  if(bHasParam)
+  {
+	AddSlider(group, SETTING_LIB_PLACEBO_COLOR_MAP_TONE_MAPPING_PARAMETER, "   " + desc, SettingLevel::Basic, videoSettings.m_PlaceboColorMapToneMapParameter, "{0:4.2f}", paramMin, paramStep, paramMax); //cl strings.po...
+  }
+  if(funcDesc == "Single-pivot polynomial spline" || (funcDesc == "SMPTE ST 2094-10 Annex B.2") || (funcDesc == "SMPTE ST 2094-40 Annex B"))
+  {
+	AddSlider(group, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MAXIMUM, 55269, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeMaximum, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0);
+	AddSlider(group, SETTING_LIB_PLACEBO_TONE_CONSTANTS_KNEE_MINIMUM, 55270, SettingLevel::Basic, videoSettings.m_PlaceboToneConstantKneeMinimum, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 0.5);
+  }
+
+  if(funcDesc == "Single-pivot polynomial spline")
+  {
+	AddSlider(group, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_OFFSET, "   Slope offset", SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeOffset, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0);  //cl strings.po...
+	AddSlider(group, SETTING_LIB_PLACEBO_TONE_CONSTANTS_SLOPE_TUNING, "   Slope Tuning", SettingLevel::Basic, videoSettings.m_PlaceboToneConstantSlopeTuning, "{0:4.2f}", (float) 0.0, (float) 0.1, (float) 10.0);  //cl strings.po...
   }
 }
 

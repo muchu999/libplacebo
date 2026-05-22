@@ -25129,11 +25129,11 @@ msgid "Tone mapping constants: Knee default"
 msgstr ""
 
 msgctxt "#55269"
-msgid "Tone mapping constants: Knee Maximum"
+msgid "   Knee Maximum"
 msgstr ""
 
 msgctxt "#55270"
-msgid "Tone mapping constants: Knee Minimum"
+msgid "   Knee Minimum"
 msgstr ""
 
 msgctxt "#55271"
@@ -25197,19 +25197,19 @@ msgid "Contrast smoothness"
 msgstr ""
 
 msgctxt "#55286"
-msgid "Gammut mapping constants: colorimetric gamma"
+msgid "   Colorimetric gamma"
 msgstr ""
 
 msgctxt "#55287"
-msgid "Gammut mapping constants: Perceptual deadzone"
+msgid "   Perceptual deadzone"
 msgstr ""
 
 msgctxt "#55288"
-msgid "Gammut mapping constants: Softclip desat"
+msgid "   Softclip desat"
 msgstr ""
 
 msgctxt "#55289"
-msgid "Gammut mapping constants: softclip knee"
+msgid "   Softclip knee"
 msgstr ""
 
 msgctxt "#55290"
@@ -25217,7 +25217,7 @@ msgid "Gamut expansion"
 msgstr ""
 
 msgctxt "#55291"
-msgid "Inverse tone mapping"
+msgid "Inverse tone mapping (SDR only)"
 msgstr ""
 
 msgctxt "#55292"
@@ -25443,6 +25443,24 @@ msgstr ""
 msgctxt "#55347"
 msgid "Display SDR peak luminance (0 for auto)"
 msgstr ""
+
+msgctxt "#55348"
+msgid "Tone mapping main parameter"
+msgstr ""
+
+msgctxt "#55349"
+msgid "   Perceptual strength"
+msgstr ""
+
+msgctxt "#55350"
+msgid "Dither depth"
+msgstr ""
+
+msgctxt "#55351"
+msgid "Force HDR for SDR content"
+msgstr ""
+
+
 
 
 

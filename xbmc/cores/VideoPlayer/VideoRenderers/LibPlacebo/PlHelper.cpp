@@ -391,6 +391,7 @@ void CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings& vs)
 
   vs.m_PlaceboGamutConstantsColorimetricGamma = m_placeboOptions->color_map_params.gamut_constants.colorimetric_gamma;
   vs.m_PlaceboGamutConstantsPerceptualDeadzone = m_placeboOptions->color_map_params.gamut_constants.perceptual_deadzone;
+  vs.m_PlaceboGamutConstantsPerceptualStrength = m_placeboOptions->color_map_params.gamut_constants.perceptual_strength;
   vs.m_PlaceboGamutConstantsSoftclipDesat = m_placeboOptions->color_map_params.gamut_constants.softclip_desat;
   vs.m_PlaceboGamutConstantsSoftclipKnee = m_placeboOptions->color_map_params.gamut_constants.softclip_knee;
 
@@ -502,6 +503,7 @@ void CPLHelper::UpdateLibPLaceboParamsFromVideoSettings(CVideoSettings& vs)
 
   m_placeboOptions->color_map_params.gamut_constants.colorimetric_gamma = vs.m_PlaceboGamutConstantsColorimetricGamma;
   m_placeboOptions->color_map_params.gamut_constants.perceptual_deadzone = vs.m_PlaceboGamutConstantsPerceptualDeadzone;
+  m_placeboOptions->color_map_params.gamut_constants.perceptual_strength = vs.m_PlaceboGamutConstantsPerceptualStrength;
   m_placeboOptions->color_map_params.gamut_constants.softclip_desat = vs.m_PlaceboGamutConstantsSoftclipDesat;
   m_placeboOptions->color_map_params.gamut_constants.softclip_knee = vs.m_PlaceboGamutConstantsSoftclipKnee;
 
@@ -548,6 +550,8 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetFloat(pNode,"placebodisplaysdrpeakluminance",vs.m_PlaceboDisplaySdrPeakLuminance);
   XMLUtils::SetInt(pNode, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
   XMLUtils::SetInt(pNode, "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
+  XMLUtils::SetInt(pNode, "placeboditherdepth", vs.m_PlaceboDitherDepth);
+  XMLUtils::SetBoolean(pNode, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::SetBoolean(pNode, "placeboshaderapply", vs.m_PlaceboShaderApply);
 
   XMLUtils::SetBoolean(pNode, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
@@ -631,6 +635,7 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
 
   XMLUtils::SetFloat(pNode, "placebogamutconstantscolorimetricgamma", vs.m_PlaceboGamutConstantsColorimetricGamma);
   XMLUtils::SetFloat(pNode, "placebogamutconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
+  XMLUtils::SetFloat(pNode,"placebogamutconstantsperceptualstrength",vs.m_PlaceboGamutConstantsPerceptualStrength);
   XMLUtils::SetFloat(pNode, "placebogamutconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
   XMLUtils::SetFloat(pNode, "placebogamutconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
 
@@ -691,6 +696,8 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement,"placebodisplaysdrpeakluminance",vs.m_PlaceboDisplaySdrPeakLuminance);
   XMLUtils::GetInt(pElement, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
   XMLUtils::GetInt(pElement, "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
+  XMLUtils::GetInt(pElement, "placeboditherdepth", vs.m_PlaceboDitherDepth);
+  XMLUtils::GetBoolean(pElement, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::GetBoolean(pElement, "placeboshaderapply", vs.m_PlaceboShaderApply);
 
   XMLUtils::GetBoolean(pElement, "placebocoloradjustmentenabled", vs.m_PlaceboColorAdjustmentEnabled);
@@ -774,6 +781,7 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
 
   XMLUtils::GetFloat(pElement, "placebogamutconstantscolorimetricgamma", vs.m_PlaceboGamutConstantsColorimetricGamma);
   XMLUtils::GetFloat(pElement, "placebogamutconstantsperceptualdeadzone", vs.m_PlaceboGamutConstantsPerceptualDeadzone);
+  XMLUtils::GetFloat(pElement,"placebogamutconstantsperceptualstrength",vs.m_PlaceboGamutConstantsPerceptualStrength);
   XMLUtils::GetFloat(pElement, "placebogamutconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
   XMLUtils::GetFloat(pElement, "placebogamutconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
 

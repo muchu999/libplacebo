@@ -83,7 +83,7 @@ protected:
 
   void CheckVideoParameters() override;
   void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags) override;
-  void ApplyTargetOptions(pl_color_space* target_csp, struct pl_frame* target, float min_luma, bool hint);
+  void ApplyTargetOptions(CVideoSettings& videoSettings, pl_color_space* target_csp, struct pl_frame* target, float min_luma, bool hint, float peakLuminance);
   bool InitializeFrame(pl_frame& frameOut);
   CRenderBuffer* CreateBuffer() override;
 

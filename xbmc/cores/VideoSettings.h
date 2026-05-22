@@ -345,7 +345,9 @@ public:
   float m_PlaceboDisplaySdrPeakLuminance;
   int m_PlaceboTargetColorspaceHint;
   int m_PlaceboTargetColorspaceHintMode;
+  int m_PlaceboDitherDepth;
   bool m_PlaceboShaderApply;
+  bool m_PlaceboUseHdrForSdr;
 
   bool m_PlaceboColorAdjustmentEnabled;
   float m_PlaceboSaturation;
@@ -390,6 +392,7 @@ public:
   float m_PlaceboColorMapContrastSmoothness;
   int m_PlaceboColorMapGamutMapping;
   int m_PlaceboColorMapToneMapping;
+  float m_PlaceboColorMapToneMapParameter; //cl only used transitively
 
   bool m_PlaceboDeinterlaceEnabled;
   int m_PlaceboDeinterlaceAlgo;
@@ -431,6 +434,7 @@ public:
 
   float m_PlaceboGamutConstantsColorimetricGamma;
   float m_PlaceboGamutConstantsPerceptualDeadzone;
+  float m_PlaceboGamutConstantsPerceptualStrength;
   float m_PlaceboGamutConstantsSoftclipDesat;
   float m_PlaceboGamutConstantsSoftclipKnee;
 
