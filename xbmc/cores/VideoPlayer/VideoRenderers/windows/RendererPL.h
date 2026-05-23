@@ -78,13 +78,14 @@ public:
   static CRendererBase* Create(CVideoSettings& videoSettings);
   static void GetWeight(std::map<RenderMethod, int>& weights, const VideoPicture& picture);
   static DXGI_FORMAT GetDXGIFormat(AVPixelFormat format, DXGI_FORMAT default_fmt);
+  static bool InitializeFrame(pl_swapchain sw, pl_frame& frameOut);
+  static int getColorDepth(void);
 protected:
   explicit CRendererPL(CVideoSettings& videoSettings);
 
   void CheckVideoParameters() override;
   void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags) override;
-  void ApplyTargetOptions(CVideoSettings& videoSettings, pl_color_space* target_csp, struct pl_frame* target, float min_luma, bool hint, float peakLuminance);
-  bool InitializeFrame(pl_frame& frameOut);
+  void ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* target, float min_luma, bool hint);
   CRenderBuffer* CreateBuffer() override;
 
   //important to override we need to let libplacebo set the swapchain csp or we would get issues with HDR

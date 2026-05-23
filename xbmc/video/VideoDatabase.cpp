@@ -5059,6 +5059,8 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
 
 		if ((str = a->records [i]->at(col).get_asString()) == "PlaceboSaturation") { list.push_back(str); continue; }
 		if ((str = a->records [i]->at(col).get_asString()) == "PlaceboSdrSaturation") { list.push_back(str); continue; }
+		if ((str = a->records [i]->at(col).get_asString()) == "PlaceboSdrColorMapInverseToneMapping") { list.push_back(str); continue; }
+		if ((str = a->records [i]->at(col).get_asString()) == "PlaceboSdrColorMapGamutExpansion") { list.push_back(str); continue; }
 		if ((str = a->records [i]->at(col).get_asString()) == "PlaceboSdrColorMapIntent") { list.push_back(str); continue; }
 		if ((str = a->records[i]->at(col).get_asString()) == "PlaceboSdrColorMapGamutMapping") { list.push_back(str); continue; }
         if ((str = a->records[i]->at(col).get_asString()) == "PlaceboSdrColorMapToneMapping") { list.push_back(str); continue; }
@@ -5207,6 +5209,8 @@ static std::vector<std::string> LibplaceboColumnslist = {
                                    "PlaceboColorAdjustmentEnabled",
                                    "PlaceboSaturation",
                                    "PlaceboSdrSaturation",
+								   "PlaceboSdrColorMapInverseToneMapping",
+								   "PlaceboSdrColorMapGamutExpansion",
 								   "PlaceboSdrColorMapIntent",
                                    "PlaceboSdrColorMapGamutMapping",
                                    "PlaceboSdrColorMapToneMapping",
@@ -5354,7 +5358,7 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
       static std::vector<std::string> list = LibplaceboColumnslist;
       for (int i = 0; i < numColumns; i++)
       {
-        std::erase(list, a->records[i]->at(col).get_asString());
+        std::erase(list, a->records[i]->at(col).get_asString()); // remove what exists from the list 
       }
 
       std::string strSQL2;
@@ -5372,9 +5376,11 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
 		if (list[i] == "PlaceboShaderApply") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboShaderApply                            bool NOT NULL DEFAULT  %i", vs.m_PlaceboShaderApply); m_pDS->exec(strSQL2); }
 	    if (list[i] == "PlaceboUseHdrForSdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboUseHdrForSdr                          bool NOT NULL DEFAULT  %i", vs.m_PlaceboUseHdrForSdr); m_pDS->exec(strSQL2); }
         if (list[i] == "PlaceboSdrSaturation") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrSaturation                        float NOT NULL DEFAULT %f", vs.m_PlaceboSdrSaturation); m_pDS->exec(strSQL2); }
-		if(list [i] == "PlaceboSdrColorMapIntent") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapIntent                integer NOT NULL DEFAULT %i", vs.m_PlaceboSdrColorMapIntent); m_pDS->exec(strSQL2); }
-		if (list[i] == "PlaceboSdrColorMapGamutMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapGamutMapping             integer NOT NULL DEFAULT %i", vs.m_PlaceboSdrColorMapGamutMapping); m_pDS->exec(strSQL2); }
-		if (list[i] == "PlaceboSdrColorMapToneMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapToneMapping               integer NOT NULL DEFAULT %i", vs.m_PlaceboSdrColorMapToneMapping); m_pDS->exec(strSQL2); }
+		if (list[i] == "PlaceboSdrColorMapInverseToneMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapInverseToneMapping integer NOT NULL DEFAULT %i", vs.m_PlaceboSdrColorMapInverseToneMapping); m_pDS->exec(strSQL2); }
+		if (list[i] == "PlaceboSdrColorMapGamutExpansion") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapGamutExpansion integer NOT NULL DEFAULT %i", vs.m_PlaceboSdrColorMapGamutExpansion); m_pDS->exec(strSQL2); }
+		if (list[i] == "PlaceboSdrColorMapIntent") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapIntent                text NOT NULL DEFAULT '%s'", CPLHelper::getColorMapIntentDescriptionFromIndex(vs.m_PlaceboSdrColorMapIntent).c_str()); m_pDS->exec(strSQL2);}
+		if (list[i] == "PlaceboSdrColorMapGamutMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapGamutMapping             text NOT NULL DEFAULT '%s'", vs.m_PlaceboSdrColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions [vs.m_PlaceboSdrColorMapGamutMapping]->description == nullptr ? "''" : pl_gamut_map_functions [vs.m_PlaceboSdrColorMapGamutMapping]->description); m_pDS->exec(strSQL2);}
+		if (list[i] == "PlaceboSdrColorMapToneMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapToneMapping               text NOT NULL DEFAULT '%s'", vs.m_PlaceboSdrColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->description == nullptr ? "''" : pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->description); m_pDS->exec(strSQL2);}
 		if (list[i] == "PlaceboSdrToneConstantExposure") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrToneConstantExposure             float NOT NULL DEFAULT %f", vs.m_PlaceboSdrToneConstantExposure); m_pDS->exec(strSQL2); }
 		if (list[i] == "PlaceboSdrToneConstantKneeAdaptation") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrToneConstantKneeAdaptation float NOT NULL DEFAULT %f", vs.m_PlaceboSdrToneConstantKneeAdaptation); m_pDS->exec(strSQL2); }
 		if (list[i] == "PlaceboSdrToneConstantKneeDefault") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrToneConstantKneeDefault       float NOT NULL DEFAULT %f", vs.m_PlaceboSdrToneConstantKneeDefault); m_pDS->exec(strSQL2); }
@@ -5594,6 +5600,8 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
 		settings.m_PlaceboUseHdrForSdr = m_pDS->fv("PlaceboUseHdrForSdr").get_asBool();
 
 		settings.m_PlaceboSdrSaturation = m_pDS->fv("PlaceboSdrSaturation").get_asFloat();
+		settings.m_PlaceboSdrColorMapInverseToneMapping = m_pDS->fv("PlaceboSdrColorMapInverseToneMapping").get_asBool();
+		settings.m_PlaceboSdrColorMapGamutExpansion = m_pDS->fv("PlaceboSdrColorMapGamutExpansion").get_asBool();
 		settings.m_PlaceboSdrColorMapIntent = (str = (m_pDS->fv("PlaceboSdrColorMapIntent").get_asString())) == "" ? -1 : CPLHelper::getColorMapIntentIndexFromDescription(str);
 		settings.m_PlaceboSdrColorMapGamutMapping = (str = (m_pDS->fv("PlaceboSdrColorMapGamutMapping").get_asString())) == "" ? -1 : CPLHelper::getGamutMapIndexFromDescription(str);
 		settings.m_PlaceboSdrColorMapToneMapping = (str = (m_pDS->fv("PlaceboSdrColorMapToneMapping").get_asString())) == "" ? -1 : CPLHelper::getToneMapIndexFromDescription(str);
@@ -5803,8 +5811,8 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
         strSQL = PrepareSQL(
           "update settings set "
           "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayHdrPeakLuminance=%f,PlaceboDisplaySdrPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
-          "PlaceboDitherDepth=%i,PlaceboShaderApply=%i,PlaceboUseHdrForSdr=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboSdrSaturation=%f,"
-		  "PlaceboSdrColorMapIntent=%i,PlaceboSdrColorMapGamutMapping=%i,PlaceboSdrColorMapToneMapping=%i,PlaceboSdrToneConstantExposure=%f,PlaceboSdrToneConstantKneeAdaptation=%f,PlaceboSdrToneConstantKneeDefault=%f,PlaceboSdrToneConstantKneeMaximum=%f,"
+          "PlaceboDitherDepth=%i,PlaceboShaderApply=%i,PlaceboUseHdrForSdr=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboSdrSaturation=%f,PlaceboSdrColorMapInverseToneMapping=%i,PlaceboSdrColorMapGamutExpansion=%i,"
+		  "PlaceboSdrColorMapIntent='%s',PlaceboSdrColorMapGamutMapping='%s',PlaceboSdrColorMapToneMapping='%s',PlaceboSdrToneConstantExposure=%f,PlaceboSdrToneConstantKneeAdaptation=%f,PlaceboSdrToneConstantKneeDefault=%f,PlaceboSdrToneConstantKneeMaximum=%f,"
 		  "PlaceboSdrToneConstantKneeMinimum=%f,PlaceboSdrToneConstantKneeOffset=%f,PlaceboSdrToneConstantLinearKnee=%f,PlaceboSdrToneConstantReinhardContrast=%f,PlaceboSdrToneConstantSlopeOffset=%f,"
 		  "PlaceboSdrToneConstantSlopeTuning=%f,PlaceboSdrToneConstantSplineContrast=%f,PlaceboSdrGamutConstantsColorimetricGamma=%f,PlaceboSdrGamutConstantsPerceptualDeadzone=%f,PlaceboSdrGamutConstantsPerceptualStrength=%f,"
 		  "PlaceboSdrGamutConstantsSoftclipDesat=%f,PlaceboSdrGamutConstantsSoftclipKnee=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
@@ -5846,6 +5854,8 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           static_cast<double>(settings.m_PlaceboSaturation),
 
           static_cast<double>(settings.m_PlaceboSdrSaturation),
+		  settings.m_PlaceboSdrColorMapInverseToneMapping,
+		  settings.m_PlaceboSdrColorMapGamutExpansion,
 		  CPLHelper::getColorMapIntentDescriptionFromIndex(settings.m_PlaceboSdrColorMapIntent).c_str(),
 		  settings.m_PlaceboSdrColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions [settings.m_PlaceboSdrColorMapGamutMapping]->description == nullptr ? "''" : ((std::string) pl_gamut_map_functions [settings.m_PlaceboSdrColorMapGamutMapping]->description).c_str(),
 		  settings.m_PlaceboSdrColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions [settings.m_PlaceboSdrColorMapToneMapping]->description == nullptr ? "''" : pl_tone_map_functions [settings.m_PlaceboSdrColorMapToneMapping]->description,
@@ -5996,8 +6006,8 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
         strSQL = PrepareSQL(
 		  "update settings set "
 		  "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboLutFilename='%s',PlaceboDisplayHdrPeakLuminance=%f,PlaceboDisplaySdrPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
-		  "PlaceboDitherDepth=%i,PlaceboShaderApply=%i,PlaceboUseHdrForSdr=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboSdrSaturation=%f,"
-		  "PlaceboSdrColorMapIntent=%i,PlaceboSdrColorMapGamutMapping=%i,PlaceboSdrColorMapToneMapping=%i,PlaceboSdrToneConstantExposure=%f,PlaceboSdrToneConstantKneeAdaptation=%f,PlaceboSdrToneConstantKneeDefault=%f,PlaceboSdrToneConstantKneeMaximum=%f,"
+		  "PlaceboDitherDepth=%i,PlaceboShaderApply=%i,PlaceboUseHdrForSdr=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboSdrSaturation=%f,PlaceboSdrColorMapInverseToneMapping=%i,PlaceboSdrColorMapGamutExpansion=%i,"
+		  "PlaceboSdrColorMapIntent='%s',PlaceboSdrColorMapGamutMapping='%s',PlaceboSdrColorMapToneMapping='%s',PlaceboSdrToneConstantExposure=%f,PlaceboSdrToneConstantKneeAdaptation=%f,PlaceboSdrToneConstantKneeDefault=%f,PlaceboSdrToneConstantKneeMaximum=%f,"
 		  "PlaceboSdrToneConstantKneeMinimum=%f,PlaceboSdrToneConstantKneeOffset=%f,PlaceboSdrToneConstantLinearKnee=%f,PlaceboSdrToneConstantReinhardContrast=%f,PlaceboSdrToneConstantSlopeOffset=%f,"
 		  "PlaceboSdrToneConstantSlopeTuning=%f,PlaceboSdrToneConstantSplineContrast=%f,PlaceboSdrGamutConstantsColorimetricGamma=%f,PlaceboSdrGamutConstantsPerceptualDeadzone=%f,PlaceboSdrGamutConstantsPerceptualStrength=%f,"
 		  "PlaceboSdrGamutConstantsSoftclipDesat=%f,PlaceboSdrGamutConstantsSoftclipKnee=%f,PlaceboHue=%f,PlaceboTemperature=%f,"
@@ -6039,6 +6049,8 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
 		  static_cast<double>(settings.m_PlaceboSaturation),
 
 		  static_cast<double>(settings.m_PlaceboSdrSaturation),
+		  settings.m_PlaceboSdrColorMapInverseToneMapping,
+		  settings.m_PlaceboSdrColorMapGamutExpansion,
 		  CPLHelper::getColorMapIntentDescriptionFromIndex(settings.m_PlaceboSdrColorMapIntent).c_str(),
 		  settings.m_PlaceboSdrColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions [settings.m_PlaceboSdrColorMapGamutMapping]->description == nullptr ? "''" : ((std::string) pl_gamut_map_functions [settings.m_PlaceboSdrColorMapGamutMapping]->description).c_str(),
 		  settings.m_PlaceboSdrColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions [settings.m_PlaceboSdrColorMapToneMapping]->description == nullptr ? "''" : pl_tone_map_functions [settings.m_PlaceboSdrColorMapToneMapping]->description,
@@ -6148,7 +6160,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
 		  settings.m_PlaceboSkipAntiAliasing,
 		  settings.m_PlaceboSkipCachingSingleFrame,
 		  idFile);
-		m_pDS->exec(strSQL);
+		  m_pDS->exec(strSQL);
           m_pDS->close();
 
           std::string serializedShadersData;

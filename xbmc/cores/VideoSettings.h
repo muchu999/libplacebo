@@ -305,6 +305,7 @@ public:
   bool operator!=(const CVideoSettings& right) const;
   void ResetRenderSettings(PlOptionsWrapper::reset_type type = PlOptionsWrapper::DEFAULT);
   void ResetDitherSettings(PlOptionsWrapper::reset_type type);
+  void ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type);
 
 
   EINTERLACEMETHOD m_InterlaceMethod;
@@ -465,6 +466,8 @@ public:
   // SDR overrides when using SDR source in HDR mode, mostly anything affecting colorspace conversion and 
   // tone mapping, but also saturation as it can be used to mitigate desaturation from gamut mapping.
   float m_PlaceboSdrSaturation;
+  bool m_PlaceboSdrColorMapInverseToneMapping;
+  bool m_PlaceboSdrColorMapGamutExpansion;
   int m_PlaceboSdrColorMapIntent;
   int m_PlaceboSdrColorMapGamutMapping;
   int m_PlaceboSdrColorMapToneMapping;

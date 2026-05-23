@@ -562,6 +562,8 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetBoolean(pNode, "placeboshaderapply", vs.m_PlaceboShaderApply);
 
   XMLUtils::SetFloat(pNode, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
+  XMLUtils::SetBoolean(pNode, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
+  XMLUtils::SetBoolean(pNode, "placebosdrcolormapgamutexpansion", vs.m_PlaceboSdrColorMapGamutExpansion);
   XMLUtils::SetInt(pNode, "placebosdrcolormapgamutmapping", vs.m_PlaceboSdrColorMapGamutMapping);
   XMLUtils::SetInt(pNode, "placebosdrcolormaptone_mapping", vs.m_PlaceboSdrColorMapToneMapping);
   XMLUtils::SetInt(pNode, "placebosdrcolormapintent", vs.m_PlaceboSdrColorMapIntent);
@@ -729,6 +731,8 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetBoolean(pElement, "placeboshaderapply", vs.m_PlaceboShaderApply);
 
   XMLUtils::GetFloat(pElement, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
+  XMLUtils::GetBoolean(pElement, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
+  XMLUtils::GetBoolean(pElement, "placebosdrcolormapgamutexpansion", vs.m_PlaceboSdrColorMapGamutExpansion);
   XMLUtils::GetInt(pElement,   "placebosdrcolormapgamutmapping", vs.m_PlaceboSdrColorMapGamutMapping);
   XMLUtils::GetInt(pElement,   "placebosdrcolormaptoneMapping", vs.m_PlaceboSdrColorMapToneMapping);
   XMLUtils::GetInt(pElement,   "placebosdrcolormapintent", vs.m_PlaceboSdrColorMapIntent);
@@ -1311,7 +1315,7 @@ int CPLHelper::getColorMapIntentIndexFromDescription(std::string description)
   for (int i = 0; i < alist.size(); i++)
   {
 	if (alist[i].label == description)
-	  return i;
+	  return alist [i].value; 
   }
   return -1;
 }

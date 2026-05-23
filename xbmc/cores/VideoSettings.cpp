@@ -84,6 +84,8 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboShaderApply = other.m_PlaceboShaderApply;
   m_PlaceboUseHdrForSdr = other.m_PlaceboUseHdrForSdr;
   m_PlaceboSdrSaturation = other.m_PlaceboSdrSaturation;
+  m_PlaceboSdrColorMapInverseToneMapping = other.m_PlaceboSdrColorMapInverseToneMapping;
+  m_PlaceboSdrColorMapGamutExpansion = other.m_PlaceboSdrColorMapGamutExpansion;
   m_PlaceboSdrColorMapIntent = other.m_PlaceboSdrColorMapIntent;
   m_PlaceboSdrColorMapGamutMapping = other.m_PlaceboSdrColorMapGamutMapping;
   m_PlaceboSdrColorMapToneMapping = other.m_PlaceboSdrColorMapToneMapping;
@@ -165,13 +167,11 @@ CVideoSettings::CVideoSettings()
   m_PlaceboSkinZoomHint = 0;
 
   // LibPLacebo specific video settings
-  m_PlaceboDisplayHdrPeakLuminance = 700;
-  m_PlaceboDisplaySdrPeakLuminance = 0;
-  m_PlaceboShaderApply = true;
   m_PlaceboUseHdrForSdr = false;
+  m_PlaceboDisplayHdrPeakLuminance = 700;
+  m_PlaceboShaderApply = true;
   m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::AUTO;
   m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::TARGET;
-  m_PlaceboDitherDepth = 8;  //cl 
   m_PlaceboLutFilename = "";
   m_PlaceboLut = nullptr;
   
@@ -182,27 +182,6 @@ CVideoSettings::CVideoSettings()
   // m_placeboOptions already reset in constructor, just update
   CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(*this);
 
-  // Reset overriding default values for placebo specific settings
-  m_PlaceboSdrSaturation = m_PlaceboSaturation;
-  m_PlaceboSdrColorMapIntent = m_PlaceboColorMapIntent;
-  m_PlaceboSdrColorMapGamutMapping = m_PlaceboColorMapGamutMapping;
-  m_PlaceboSdrColorMapToneMapping = m_PlaceboColorMapToneMapping;
-  m_PlaceboSdrToneConstantExposure = m_PlaceboToneConstantExposure;
-  m_PlaceboSdrToneConstantKneeAdaptation = m_PlaceboToneConstantKneeAdaptation;
-  m_PlaceboSdrToneConstantKneeDefault = m_PlaceboToneConstantKneeDefault;
-  m_PlaceboSdrToneConstantKneeMaximum = m_PlaceboToneConstantKneeMaximum;
-  m_PlaceboSdrToneConstantKneeMinimum = m_PlaceboToneConstantKneeMinimum;
-  m_PlaceboSdrToneConstantKneeOffset = m_PlaceboToneConstantKneeOffset;
-  m_PlaceboSdrToneConstantLinearKnee = m_PlaceboToneConstantLinearKnee;
-  m_PlaceboSdrToneConstantReinhardContrast = m_PlaceboToneConstantReinhardContrast;
-  m_PlaceboSdrToneConstantSlopeOffset = m_PlaceboToneConstantSlopeOffset;
-  m_PlaceboSdrToneConstantSlopeTuning = m_PlaceboToneConstantSlopeTuning;
-  m_PlaceboSdrToneConstantSplineContrast = m_PlaceboToneConstantSplineContrast;
-  m_PlaceboSdrGamutConstantsColorimetricGamma = m_PlaceboGamutConstantsColorimetricGamma;
-  m_PlaceboSdrGamutConstantsPerceptualDeadzone = m_PlaceboGamutConstantsPerceptualDeadzone;
-  m_PlaceboSdrGamutConstantsPerceptualStrength = m_PlaceboGamutConstantsPerceptualStrength;
-  m_PlaceboSdrGamutConstantsSoftclipDesat = m_PlaceboGamutConstantsSoftclipDesat;
-  m_PlaceboSdrGamutConstantsSoftclipKnee = m_PlaceboGamutConstantsSoftclipKnee;
 
   // Reset default values that are not part of libplacebo
   ResetRenderSettings();
@@ -212,15 +191,55 @@ void CVideoSettings::ResetRenderSettings(PlOptionsWrapper::reset_type type)
 {
   m_placeboOptions->resetPlOptions(type);
 
-  // Reset only the placebo options //cl rethink the whole thing
+  // Reset only the placebo options //cl rethink the whole VideoSettings thing ???
   ResetDitherSettings(type);
+  ResetSdrToHdrSettings(type);
 }
 
 void CVideoSettings::ResetDitherSettings(PlOptionsWrapper::reset_type type)
 {
   // Reset only the placebo options //cl rethink the whole thing with settings...
-  m_PlaceboDitherDepth = 8;
+  m_PlaceboDitherDepth = 0; //cl 0=auto
 }
+
+void CVideoSettings::ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type)
+{
+  // Overriding SDR default values for SDR to HDR mapping
+  m_PlaceboDisplaySdrPeakLuminance = 600;
+  m_PlaceboSdrSaturation = 55.0; //cl best defaults for good image?
+  m_PlaceboSdrColorMapInverseToneMapping = true;
+  m_PlaceboSdrColorMapGamutExpansion = true;
+  m_PlaceboSdrColorMapIntent = PL_INTENT_PERCEPTUAL; // PL_INTENT_SATURATION PL_INTENT_PERCEPTUAL
+  m_PlaceboSdrColorMapGamutMapping = CPLHelper::getGamutMapIndexFromDescription("Perceptual mapping");   //cl "Perceptual mapping", "Saturation mapping"
+  m_PlaceboSdrColorMapToneMapping = CPLHelper::getToneMapIndexFromDescription("Single-pivot polynomial spline"); //cl the ones supporting inverse (should filter?):"ITU-R BT.2446 Method A", "Single-pivot polynomial spline", "Perceptually linear stretch", "Linear light stretch"
+
+  // Just use defaults for the other ones
+  static bool bInit = false;
+  static PlOptionsWrapper* opt;
+  if(!bInit)
+  {
+    opt = new PlOptionsWrapper(); // get defaults, function could be called from other places than constructor, do it only once.
+    bInit = true;
+  }
+
+  m_PlaceboSdrToneConstantExposure = opt->getPlOptions()->color_map_params.tone_constants.exposure;
+  m_PlaceboSdrToneConstantKneeAdaptation = opt->getPlOptions()->color_map_params.tone_constants.knee_adaptation;
+  m_PlaceboSdrToneConstantKneeDefault = opt->getPlOptions()->color_map_params.tone_constants.knee_default;
+  m_PlaceboSdrToneConstantKneeMaximum = opt->getPlOptions()->color_map_params.tone_constants.knee_maximum;
+  m_PlaceboSdrToneConstantKneeMinimum = opt->getPlOptions()->color_map_params.tone_constants.knee_minimum;
+  m_PlaceboSdrToneConstantKneeOffset = opt->getPlOptions()->color_map_params.tone_constants.knee_offset;
+  m_PlaceboSdrToneConstantLinearKnee = opt->getPlOptions()->color_map_params.tone_constants.linear_knee;
+  m_PlaceboSdrToneConstantReinhardContrast = opt->getPlOptions()->color_map_params.tone_constants.reinhard_contrast;
+  m_PlaceboSdrToneConstantSlopeOffset = opt->getPlOptions()->color_map_params.tone_constants.slope_offset;
+  m_PlaceboSdrToneConstantSlopeTuning = opt->getPlOptions()->color_map_params.tone_constants.slope_tuning;
+  m_PlaceboSdrToneConstantSplineContrast = opt->getPlOptions()->color_map_params.tone_constants.spline_contrast;
+  m_PlaceboSdrGamutConstantsColorimetricGamma = opt->getPlOptions()->color_map_params.gamut_constants.colorimetric_gamma;
+  m_PlaceboSdrGamutConstantsPerceptualDeadzone = opt->getPlOptions()->color_map_params.gamut_constants.perceptual_deadzone;
+  m_PlaceboSdrGamutConstantsPerceptualStrength = opt->getPlOptions()->color_map_params.gamut_constants.perceptual_strength;
+  m_PlaceboSdrGamutConstantsSoftclipDesat = opt->getPlOptions()->color_map_params.gamut_constants.softclip_desat;
+  m_PlaceboSdrGamutConstantsSoftclipKnee = opt->getPlOptions()->color_map_params.gamut_constants.softclip_knee;
+}
+
 
 
 
@@ -266,6 +285,8 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if (m_PlaceboUseHdrForSdr != right.m_PlaceboUseHdrForSdr) return true;  
 
   if(m_PlaceboSdrSaturation != right.m_PlaceboSdrSaturation) return true;
+  if(m_PlaceboSdrColorMapInverseToneMapping != right.m_PlaceboSdrColorMapInverseToneMapping) return true;
+  if(m_PlaceboSdrColorMapGamutExpansion != right.m_PlaceboSdrColorMapGamutExpansion) return true;
   if(m_PlaceboSdrColorMapIntent != right.m_PlaceboSdrColorMapIntent) return true;
   if(m_PlaceboSdrColorMapGamutMapping != right.m_PlaceboSdrColorMapGamutMapping) return true;
   if(m_PlaceboSdrColorMapToneMapping != right.m_PlaceboSdrColorMapToneMapping) return true;

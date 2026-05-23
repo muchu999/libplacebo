@@ -446,40 +446,29 @@ struct pl_color_space MpDxgiDesc1ToColorSpace(const DXGI_OUTPUT_DESC1* desc1)
   return ret;
 }
 
-void CRendererPL::ApplyTargetOptions(CVideoSettings& videoSettings, pl_color_space* target_csp, struct pl_frame* target, float min_luma, bool hint, float peakLuminance)
+void CRendererPL::ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* target, float min_luma, bool hint)
 {
-
-  //update_lut(p, &p->next_opts->target_lut);
-  //target->lut = p->next_opts->target_lut.lut;
-  //target->lut_type = p->next_opts->target_lut.type;
 
   //// Colorspace overrides
   //const struct gl_video_opts* opts = p->opts_cache->opts;
   //// If swapchain returned a value use this, override is used in hint
   //if (p->output_levels)
   //  target->repr.levels = p->output_levels;
-  if (target_csp->primaries && (!target->color.primaries || !hint))
-	target->color.primaries = target_csp->primaries;
-  if (target_csp->transfer && (!target->color.transfer || !hint))
-	target->color.transfer = target_csp->transfer;
+  //if(opts->target_prim && (!target->color.primaries || !hint))
+  //  target->color.primaries = opts->target_prim;
+  //if(opts->target_trc && (!target->color.transfer || !hint))
+  //  target->color.transfer = opts->target_trc;
 
-  if (peakLuminance && (!target->color.hdr.max_luma || !hint))
-	  target->color.hdr.max_luma = peakLuminance;
-
-  //if (opts->hdr_reference_white && (!target->color.hdr.max_luma || !hint) &&
-  //  !pl_color_transfer_is_hdr(target->color.transfer)) {
-  //  target->color.hdr.max_luma = opts->hdr_reference_white;
-  //}
   if ((!target->color.hdr.min_luma || !hint))
     ApplyTargetContrast(&target->color, min_luma, 0.0); //cl auto for now
   //if (opts->target_gamut)
   //  mp_parse_raw_primaries(mp_null_log, opts->target_gamut, &target->color.hdr.prim);
   
   int dither_depth = videoSettings.m_PlaceboDitherDepth;
-  //if (dither_depth == 0) {
-  //cl struct ra_swapchain* sw = p->ra_ctx->swapchain;
-  //dither_depth = sw->fns->color_depth ? sw->fns->color_depth(sw) : 0;
-  //}
+  if (dither_depth == 0)
+  {
+    dither_depth = getColorDepth();
+  }
   if (dither_depth > 0) {
     struct pl_bit_encoding* tbits = &target->repr.bits;
     tbits->color_depth += dither_depth - tbits->sample_depth;
@@ -503,9 +492,50 @@ static inline DXGI_FORMAT fmt_to_dxgi(const pl_fmt fmt)
   return (*fmtp)->dxfmt;
 }
 
+//cl could change, not exposed in libplacebo
+#define SW_PFN(name) void *name
+struct pl_sw_fns {
+  // This destructor follows the same rules as `pl_gpu_fns`
+  void (*destroy)(pl_swapchain sw);
 
-bool CRendererPL::InitializeFrame(pl_frame &frameOut)
+  SW_PFN(latency); // optional
+  SW_PFN(resize); // optional
+  SW_PFN(colorspace_hint); // optional
+  SW_PFN(start_frame);
+  SW_PFN(submit_frame);
+  SW_PFN(swap_buffers);
+};
+struct d3d11_csp_mapping {
+  DXGI_COLOR_SPACE_TYPE d3d11_csp;
+  DXGI_FORMAT           d3d11_fmt;
+  struct pl_color_space out_csp;
+};
+
+struct priv {
+  struct pl_sw_fns impl;
+  struct pl_d3d11_swapchain_params params;
+
+  struct d3d11_ctx* ctx;
+  IDXGISwapChain* swapchain;
+  pl_tex backbuffer;
+
+  // Currently requested or applied swap chain configuration.
+  // Affected by received colorspace hints.
+  struct d3d11_csp_mapping csp_map;
+};
+
+
+int CRendererPL::getColorDepth()
 {
+  pl_frame frame;
+  InitializeFrame(PL::PLInstance::Get()->GetSwapchain(), frame);
+  return(frame.repr.bits.color_depth);
+}
+
+bool CRendererPL::InitializeFrame(pl_swapchain sw, pl_frame &frameOut)
+{
+  const struct priv* p = (const priv*) PL_PRIV(sw);
+
   pl_gpu gpu = PL::PLInstance::Get()->GetGpu();
 
   DXGI_SWAP_CHAIN_DESC desc;
@@ -542,12 +572,12 @@ bool CRendererPL::InitializeFrame(pl_frame &frameOut)
 		.components = num_comps,
 		.component_mapping = {0,1,2,3},}},
 		.repr = {
-	  .sys = PL_COLOR_SYSTEM_RGB,
-	  .levels = PL_COLOR_LEVELS_FULL,
-	  .alpha = PL_ALPHA_UNKNOWN,
-	  .bits = {.sample_depth = bits,.color_depth = bits}},
-	  .color = {},
-	  //.crop = {0,0,fbo->params.w,fbo->params.h},
+	      .sys = PL_COLOR_SYSTEM_RGB,
+	      .levels = PL_COLOR_LEVELS_FULL,
+	      .alpha = PL_ALPHA_UNKNOWN,
+	      .bits = {.sample_depth = bits,.color_depth = bits}},
+	    .color = p->csp_map.out_csp,
+	    //.crop = {0,0,fbo->params.w,fbo->params.h},
   };
   return true;
 }
@@ -673,9 +703,9 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   bool target_hint = hintFunc == SettinglibPlaceboTargetColorspaceHint::YES || (hintFunc == SettinglibPlaceboTargetColorspaceHint::AUTO && target_csp.transfer != PL_COLOR_TRC_UNKNOWN);
 
   bool target_unknown = target_csp.transfer == PL_COLOR_TRC_UNKNOWN;
-  if(target_csp.transfer == PL_COLOR_TRC_UNKNOWN)
+  if(target_unknown)
   {
-	if (pl_color_transfer_is_hdr(frameIn.color.transfer))
+	if (pl_color_transfer_is_hdr(frameIn.color.transfer)) //cl mpv check if options specify a transfer instead
 	  target_csp.transfer = frameIn.color.transfer;
 	else
 	  target_csp.transfer = pl_color_space_hdr10.transfer;
@@ -706,6 +736,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  hint = *targetCS;
 	  if (pl_color_transfer_is_hdr(hint.transfer) && !pl_primaries_valid(&hint.hdr.prim))
 		pl_color_space_merge(&hint, sourceCS);
+	  if(target_unknown && !pl_color_transfer_is_hdr(sourceCS->transfer))
+		hint = *sourceCS;
 	  if (targetCS->hdr.max_luma)
 	  {
 		hint.hdr.max_luma = targetCS->hdr.max_luma;
@@ -741,14 +773,22 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	struct pl_color_space source_csp = *sourceCS;
 	pl_color_space_infer_map(&source_csp, &hint);
 
-	if(videoSettings.m_PlaceboColorMapInverseToneMapping && pl_color_transfer_is_hdr(sourceCS->transfer))
+	bool inverseToneMapping = false;;
+	if(pl_color_transfer_is_hdr(sourceCS->transfer))
 	{
-	  //cl only for SDR for now
-	  videoSettings.m_PlaceboColorMapInverseToneMapping = false;
+	  inverseToneMapping = videoSettings.m_PlaceboColorMapInverseToneMapping;
+	}
+	else
+	{
+	  if(videoSettings.m_PlaceboUseHdrForSdr)
+	    inverseToneMapping = videoSettings.m_PlaceboSdrColorMapInverseToneMapping;
+
 	}
 
+	//cl disable inverse map if no color map, mpv doesn't check that or?
+	//bool inverseToneMapping = videoSettings.m_placeboOptions->getPlOptions()->params.color_map_params == NULL ? false : inverseToneMapping;
+
 	// Always prefer target luminance and transfer for inverse tone mapping
-	bool inverseToneMapping = videoSettings.m_placeboOptions->getPlOptions()->params.color_map_params == NULL ? false : videoSettings.m_placeboOptions->getPlOptions()->params.color_map_params->inverse_tone_mapping;
 	if (pl_color_transfer_is_hdr(targetCS->transfer) && inverseToneMapping)
 	{
 	  hint.transfer = targetCS->transfer;
@@ -758,21 +798,26 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  hint.hdr.max_fall = targetCS->hdr.max_fall;
 	}
 
-
-	if(peakLuminance)
-	  if(hint.hdr.max_luma > peakLuminance)
-		hint.hdr.max_luma = peakLuminance;
-
-    //if (opts->target_prim)  //cl 
+	//if (opts->target_prim)  //cl 
     //  hint.primaries = opts->target_prim;
     //if (opts->target_gamut)
     //  mp_parse_raw_primaries(mp_null_log, opts->target_gamut, &hint.hdr.prim);
     //if (opts->target_trc)
     //  hint.transfer = opts->target_trc;
 
+	//if(peakLuminance)
+	//  if(hint.hdr.max_luma > peakLuminance)
+	//	hint.hdr.max_luma = peakLuminance;
+	if(pl_color_transfer_is_hdr(hint.transfer) && videoSettings.m_PlaceboDisplayHdrPeakLuminance)
+	  hint.hdr.max_luma = videoSettings.m_PlaceboDisplayHdrPeakLuminance;
 
-	//if (opts->hdr_reference_white && !pl_color_transfer_is_hdr(hint.transfer))
-	//  hint.hdr.max_luma = opts->hdr_reference_white;
+	if (!pl_color_transfer_is_hdr(frameIn.color.transfer) && videoSettings.m_PlaceboDisplaySdrPeakLuminance)
+	{
+	  if(videoSettings.m_PlaceboUseHdrForSdr)
+	    hint.hdr.max_luma = videoSettings.m_PlaceboDisplaySdrPeakLuminance; 
+	  else
+		hint.hdr.max_luma = hint.hdr.max_luma; //cl works only up to 203, after that, libplacebo will switch output colorspace to HDR
+	}
 
 	// Always set maxCLL, display uses this metadata and we shouldn't let it
 	// fallback to default value.
@@ -792,24 +837,37 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	if (hint.hdr.max_cll && hint.hdr.max_fall > hint.hdr.max_cll)
 	  hint.hdr.max_fall = 0;
 
-	ApplyTargetContrast(&hint, hint.hdr.min_luma, 0.0); //cl auto for now
+	ApplyTargetContrast(&hint, hint.hdr.min_luma, 0.0); //cl auto for now, comes from options in MPV
   }
   else if (!target_hint)
   {
 	if (!hint.hdr.min_luma)
 	  hint.hdr.min_luma = target_csp.hdr.min_luma;
-	//external_params = set_colorspace_hint(p, NULL);
+	//external_params = set_colorspace_hint(p, NULL); //cl not supported on D3D11, so false...
   }
 
-  pl_swapchain_colorspace_hint(PL::PLInstance::Get()->GetSwapchain(), &hint);
-
-  if(!CRendererPL::InitializeFrame(frameOut))
+  pl_swapchain_colorspace_hint(PL::PLInstance::Get()->GetSwapchain(), &hint); //cl if hdr max_luma is set higher than 203 (PL_COLOR_SDR_WHITE), the libplacebo swapchain functions will pick an HDR colorspace as default instead of SDR
+  if(!CRendererPL::InitializeFrame(PL::PLInstance::Get()->GetSwapchain(), frameOut))
 	return;
 
   // Calculate target
 
-  bool strict_sw_params = target_hint && true; //clp->next_opts->target_hint_strict;
-  ApplyTargetOptions(videoSettings, &target_csp, &frameOut, hint.hdr.min_luma, strict_sw_params, peakLuminance);
+  bool strict_sw_params = target_hint && true; //cl p->next_opts->target_hint_strict, enabled by default in mpv;
+  //if(videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(frameIn.color.transfer) && pl_color_transfer_is_hdr(hint.transfer))
+    //peakLuminance = 
+
+  ApplyTargetOptions(videoSettings, &frameOut, hint.hdr.min_luma, strict_sw_params);
+
+  if(pl_color_transfer_is_hdr(frameOut.color.transfer) && videoSettings.m_PlaceboDisplayHdrPeakLuminance && (!frameOut.color.hdr.max_luma || !strict_sw_params))
+	frameOut.color.hdr.max_luma = videoSettings.m_PlaceboDisplayHdrPeakLuminance;
+
+  if(!pl_color_transfer_is_hdr(frameIn.color.transfer) && videoSettings.m_PlaceboDisplaySdrPeakLuminance && (!frameOut.color.hdr.max_luma || !strict_sw_params))
+  {
+	if(videoSettings.m_PlaceboUseHdrForSdr)
+      frameOut.color.hdr.max_luma = videoSettings.m_PlaceboDisplaySdrPeakLuminance;
+	else
+	  frameOut.color.hdr.max_luma = frameOut.color.hdr.max_luma; //cl 
+  }
 
 
   bool clip_gamut = pl_primaries_valid(&frameOut.color.hdr.prim);
@@ -932,12 +990,14 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   buffer->m_FrameInColor = frameIn.color;
   buffer->m_FrameOutColor = frameOut.color;
   
-  if(videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(frameIn.color.transfer))
+  if(videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(frameIn.color.transfer) && pl_color_transfer_is_hdr(frameOut.color.transfer))
   {
 	pl_options opt = videoSettings.m_placeboOptions->getPlOptions();
 
 	// Apply SDR to HDR specific settings
 	opt->color_adjustment.saturation = pow(10.0, (videoSettings.m_PlaceboSdrSaturation - 50.0) / 40.0);
+	opt->color_map_params.inverse_tone_mapping = videoSettings.m_PlaceboSdrColorMapInverseToneMapping;
+	opt->color_map_params.gamut_expansion = videoSettings.m_PlaceboSdrColorMapGamutExpansion;
 	opt->color_map_params.gamut_mapping = videoSettings.m_PlaceboSdrColorMapGamutMapping == -1 ? NULL : pl_gamut_map_functions [videoSettings.m_PlaceboSdrColorMapGamutMapping];
 	opt->color_map_params.tone_mapping_function = videoSettings.m_PlaceboSdrColorMapToneMapping == -1 ? NULL : pl_tone_map_functions [videoSettings.m_PlaceboSdrColorMapToneMapping];
 	opt->color_map_params.intent = (pl_rendering_intent) videoSettings.m_PlaceboSdrColorMapIntent;

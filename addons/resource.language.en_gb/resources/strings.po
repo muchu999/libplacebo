@@ -25217,7 +25217,7 @@ msgid "Gamut expansion"
 msgstr ""
 
 msgctxt "#55291"
-msgid "Inverse tone mapping (SDR only)"
+msgid "Inverse tone mapping"
 msgstr ""
 
 msgctxt "#55292"
@@ -25453,16 +25453,21 @@ msgid "   Perceptual strength"
 msgstr ""
 
 msgctxt "#55350"
-msgid "Dither depth"
+msgid "Dither depth (0 for auto)"
 msgstr ""
 
 msgctxt "#55351"
-msgid "Force HDR for SDR content"
+msgid "Play SDR video using HDR (needs video restart)"
 msgstr ""
 
 msgctxt "#55352"
 msgid "SDR to HDR mapping"
 msgstr ""
+
+msgctxt "#55353"
+msgid "Reset SDR to HDR mapping to Default"
+msgstr ""
+
 
 
 
