@@ -992,6 +992,7 @@ PL_LIBAV_API void pl_map_dovi_metadata(struct pl_dovi_metadata *out,
     }
 }
 
+PL_DEPRECATED_IN(v7.370)
 PL_LIBAV_API bool pl_avdovi_metadata_supported(const AVDOVIMetadata *metadata)
 {
     (void)metadata;
@@ -1036,8 +1037,7 @@ PL_LIBAV_API void pl_frame_map_avdovi_metadata(struct pl_frame *out_frame,
 {
     if (!out_frame)
         return;
-    if (pl_avdovi_metadata_supported(metadata))
-        pl_map_avdovi_metadata(&out_frame->color, &out_frame->repr, dovi, metadata);
+    pl_map_avdovi_metadata(&out_frame->color, &out_frame->repr, dovi, metadata);
 }
 #endif // PL_HAVE_LAV_DOLBY_VISION
 
@@ -1394,9 +1394,7 @@ PL_LIBAV_API bool pl_map_avframe_ex(pl_gpu gpu, struct pl_frame *out,
         AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DOVI_METADATA);
         if (sd) {
             const AVDOVIMetadata *metadata = (AVDOVIMetadata *) sd->data;
-            // Only automatically map DoVi RPUs that don't require a (full) EL
-            if (params->map_dovi_force || pl_avdovi_metadata_supported(metadata))
-                pl_map_avdovi_metadata(&out->color, &out->repr, &priv->dovi, metadata);
+            pl_map_avdovi_metadata(&out->color, &out->repr, &priv->dovi, metadata);
         }
 
 #ifdef PL_HAVE_LIBDOVI

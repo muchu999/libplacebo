@@ -186,7 +186,8 @@ struct pl_avframe_params {
 
     // Ignore the checks and always map Dolby Vision metadata (even if this
     // mapping will be incomplete). Does not imply ->map_dovi.
-    bool map_dovi_force;
+    // Since v7.368, metadata is always mapped.
+    PL_DEPRECATED_IN(v7.370) bool map_dovi_force;
 };
 
 #define PL_AVFRAME_DEFAULTS \
