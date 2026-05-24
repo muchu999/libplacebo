@@ -99,6 +99,7 @@ public:
   virtual void OnNothingToQueueNotify() {}
   virtual bool CloseFile(bool reopen = false) = 0;
   virtual bool IsPlaying() const { return false;}
+  virtual bool IsExternal(std::string name) const { return false; }
   virtual bool CanPause() const { return true; }
   virtual void Pause() = 0;
   virtual bool HasVideo() const = 0;
@@ -114,6 +115,7 @@ public:
   virtual float GetCachePercentage() const { return 0; }
   virtual void SetMute(bool bOnOff){}
   virtual void SetVolume(float volume){}
+  virtual void SetPlayTime(double maxTime, double duration) {}
   virtual void SetDynamicRangeCompression(long drc){}
 
   virtual void SetAVDelay(float fValue = 0.0f) {}

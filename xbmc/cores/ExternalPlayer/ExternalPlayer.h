@@ -39,6 +39,8 @@ public:
   void SetDynamicRangeCompression(long drc) override {}
   void SetAVDelay(float fValue = 0.0f) override;
   float GetAVDelay() override;
+  void SetPlayTime(double time, double duration) override  {m_playTime = time; m_duration = duration; } ;
+  bool IsExternal(std::string name) const override { return m_name == name; }
 
   void SetSubTitleDelay(float fValue = 0.0f) override;
   float GetSubTitleDelay() override;
@@ -60,7 +62,8 @@ public:
 private:
   void GetCustomRegexpReplacers(TiXmlElement *pRootElement, std::vector<std::string>& settings);
   void Process() override;
-
+  double m_playTime = -1.0;
+  double m_duration = -1.0;
   bool m_bAbortRequest;
   bool m_bIsPlaying;
   std::chrono::time_point<std::chrono::steady_clock> m_playbackStartTime;
@@ -78,6 +81,7 @@ private:
 #endif
   std::string m_filename;
   std::string m_args;
+  double m_startTime;
   bool m_hideconsole;
   bool m_hidexbmc;
   bool m_islauncher;

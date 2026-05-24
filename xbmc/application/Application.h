@@ -142,6 +142,7 @@ public:
   void ShowAppMigrationMessage();
   void Process() override;
   void ProcessSlow();
+  void ProcessMpv();
   /*!
    \brief Returns the total time in fractional seconds of the currently playing media
 
