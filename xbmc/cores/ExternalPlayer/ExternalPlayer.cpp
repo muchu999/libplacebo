@@ -137,11 +137,16 @@ void CExternalPlayer::Process()
 {
   std::string mainFile = m_launchFilename;
   std::string archiveContent;
-  if(m_name == "MPV")
+  if(m_name == "MPV" || m_name == "mpv")
   {
     m_args = std::format("--start={} ", m_startTime) + m_args;
     m_args = std::format(R"(--input-ipc-server=\\.\pipe\mpvsocket )") + m_args;
   }
+  else if((m_name == "MPC-BE") || (m_name == "MPC-HC") || (m_name == "mpc-be") || (m_name == "mpc-hc"))
+  {
+	m_args += std::format(" /startpos {}", m_startTime);
+  }
+
   if (m_args.find("{0}") == std::string::npos)
   {
     // Unwind archive names
