@@ -32,11 +32,14 @@
 #include "windowing/WinSystem.h"
 #if defined(TARGET_WINDOWS)
   #include "utils/CharsetConverter.h"
+  #include <nlohmann/json.hpp>
+  using json = nlohmann::json;
   #include <Windows.h>
 #endif
 #if defined(TARGET_ANDROID)
   #include "platform/android/activity/XBMCApp.h"
 #endif
+#include <application/ApplicationPlayer.h>
 
 // If the process ends in less than this time (ms), we assume it's a launcher
 // and wait for manual intervention before continuing
@@ -414,6 +417,85 @@ void CExternalPlayer::Process()
   else
     m_callback.OnPlayBackEnded();
 }
+
+std::string CExternalPlayer::sendMpvCommand(const std::string& pipeName, const std::string& jsonCommand)
+{
+  HANDLE hPipe = CreateFileA(
+	pipeName.c_str(),
+	GENERIC_READ | GENERIC_WRITE,
+	0,
+	NULL,
+	OPEN_EXISTING,
+	0,
+	NULL
+  );
+
+  if(hPipe == INVALID_HANDLE_VALUE) {
+	return "Error opening pipe";
+  }
+
+  std::string command = jsonCommand + "\n";
+  DWORD bytesWritten;
+  ::WriteFile(hPipe, command.c_str(), command.length(), &bytesWritten, NULL);
+
+  char buffer [4096] = {0};
+  DWORD bytesRead;
+  ReadFile(hPipe, buffer, sizeof(buffer) - 1, &bytesRead, NULL);
+
+  CloseHandle(hPipe);
+
+  if(bytesRead > 0) {
+	return std::string(buffer, bytesRead);
+  }
+  return "";
+}
+
+void CExternalPlayer::UpdateSlow()
+{
+  std::string jsonCommand;
+  std::string response;
+  std::string pipeName = R"(\\.\pipe\mpvsocket)";
+  //std::string jsonCommand = R"({"command": ["set_property", "pause", true]})";
+
+  if(IsPlaying() && HasVideo() && m_name == "MPV")
+  {
+	double time = -1.0;
+	double duration = -1.0;
+	jsonCommand = R"({"command": ["get_property", "time-pos"]})";
+	response = sendMpvCommand(pipeName, jsonCommand);
+	if(response != "Error opening pipe")
+	{
+	  json j;
+	  try {
+		j = json::parse(response);
+		if(j.contains("data"))
+		  time = j ["data"].get<double>();
+	  }
+	  catch(json::parse_error& e) {
+	  }
+
+	  jsonCommand = R"({"command": ["get_property", "duration"]})";
+	  response = sendMpvCommand(pipeName, jsonCommand);
+	  if(response != "Error opening pipe")
+	  {
+		json k;
+		try {
+		  k = json::parse(response);
+		  if(k.contains("data"))
+			duration = k ["data"].get<double>();
+		}
+		catch(json::parse_error& e) {
+		}
+	  }
+	  if(time >= 0.0 && duration > 0.0)
+	  {
+		m_playTime = time;
+		m_duration = duration;
+	  }
+	}
+  }
+}
+
 
 #if defined(TARGET_WINDOWS_DESKTOP)
 bool CExternalPlayer::ExecuteAppW32(const char* strPath, const char* strSwitches)
