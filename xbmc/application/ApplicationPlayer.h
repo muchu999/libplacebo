@@ -132,7 +132,6 @@ public:
   bool IsPausedPlayback() const;
   bool IsPassthrough() const;
   bool IsPlaying() const;
-  bool IsExternal(std::string name) const;
   bool IsPlayingAudio() const;
   bool IsPlayingVideo() const;
   bool IsPlayingGame() const;
@@ -153,11 +152,11 @@ public:
   void SetAVDelay(float fValue = 0.0f);
   void SetDynamicRangeCompression(long drc);
   void SetMute(bool bOnOff);
-  void SetPlayTime(double maxTimetime, double duration);
   bool SetPlayerState(const std::string& state);
   void SetSubtitle(int iStream);
   void SetSubTitleDelay(float fValue = 0.0f);
   void SetSubtitleVisible(bool bVisible);
+  void UpdateSlow();
 
   /*!
    * \brief Set the subtitle vertical position,

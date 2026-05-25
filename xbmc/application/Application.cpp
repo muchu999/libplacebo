@@ -181,8 +181,6 @@
 #include <mutex>
 
 #include <tinyxml.h>
-#include <nlohmann/json.hpp>
-using json = nlohmann::json;
 
 //TODO: XInitThreads
 #ifdef HAVE_X11
@@ -2340,88 +2338,12 @@ void CApplication::Process()
     ProcessSlow();
   }
 }
-std::string sendMpvCommandWindows(const std::string& pipeName, const std::string& jsonCommand) 
-{
-  HANDLE hPipe = CreateFileA(
-	pipeName.c_str(),
-	GENERIC_READ | GENERIC_WRITE,
-	0,
-	NULL,
-	OPEN_EXISTING,
-	0,
-	NULL
-  );
-
-  if(hPipe == INVALID_HANDLE_VALUE) {
-	return "Error opening pipe";
-  }
-
-  std::string command = jsonCommand + "\n";
-  DWORD bytesWritten;
-  ::WriteFile(hPipe, command.c_str(), command.length(), &bytesWritten, NULL);
-
-  char buffer [4096] = {0};
-  DWORD bytesRead;
-  ReadFile(hPipe, buffer, sizeof(buffer) - 1, &bytesRead, NULL);
-
-  CloseHandle(hPipe);
-
-  if(bytesRead > 0) {
-	return std::string(buffer, bytesRead);
-  }
-  return "";
-}
-
-void CApplication::ProcessMpv()
-{
-  std::string jsonCommand;
-  std::string response;
-  std::string pipeName = R"(\\.\pipe\mpvsocket)";
-  //std::string jsonCommand = R"({"command": ["set_property", "pause", true]})";
-
-  const auto appPlayer = GetComponent<CApplicationPlayer>();
-  if(appPlayer->IsPlayingVideo() && appPlayer->IsExternal("MPV"))
-  {
-	double time = -1.0;
-	double duration = -1.0;
-	jsonCommand = R"({"command": ["get_property", "time-pos"]})";
-	response = sendMpvCommandWindows(pipeName, jsonCommand);
-	if(response != "Error opening pipe")
-	{
-	  json j;
-	  try {
-		j = json::parse(response);
-		if(j.contains("data"))
-		  time = j ["data"].get<double>();
-	  }
-	  catch(json::parse_error& e) {
-	  }
-
-	  jsonCommand = R"({"command": ["get_property", "duration"]})";
-	  response = sendMpvCommandWindows(pipeName, jsonCommand);
-	  if(response != "Error opening pipe")
-	  {
-		json k;
-		try {
-		  k = json::parse(response);
-		  if(k.contains("data"))
-			duration = k ["data"].get<double>();
-		}
-		catch(json::parse_error& e) {
-		}
-	  }
-	  if(time >= 0.0 && duration > 0.0)
-	  {
-		appPlayer->SetPlayTime(time, duration);
-	  }
-	}
-  }
-}
 
 // We get called every 500ms
 void CApplication::ProcessSlow()
 {
-  ProcessMpv();
+  const auto appPlayer = GetComponent<CApplicationPlayer>();
+  appPlayer->UpdateSlow();
 
   // process skin resources (skin timers)
   GetComponent<CApplicationSkinHandling>()->ProcessSkin();
@@ -2468,7 +2390,7 @@ void CApplication::ProcessSlow()
   CheckDelayedPlayerRestart();
 
   //  check if we can unload any unreferenced dlls or sections
-  const auto appPlayer = GetComponent<CApplicationPlayer>();
+  //const auto appPlayer = GetComponent<CApplicationPlayer>();
   if (!appPlayer->IsPlayingVideo())
     CSectionLoader::UnloadDelayed();
 
