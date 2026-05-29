@@ -1047,15 +1047,11 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 void CRendererPL::ProcessHDR(CRenderBuffer* rb)
 {
   
-  if (m_AutoSwitchHDR && rb->primaries == AVCOL_PRI_BT2020 &&
-	(rb->color_transfer == AVCOL_TRC_SMPTE2084 || rb->color_transfer == AVCOL_TRC_ARIB_STD_B67) &&
-	!DX::Windowing()->IsHDROutput())
+  if(  m_AutoSwitchHDR && !DX::Windowing()->IsHDROutput() && (rb->color_transfer == AVCOL_TRC_SMPTE2084 || rb->color_transfer == AVCOL_TRC_ARIB_STD_B67 || m_videoSettings.m_PlaceboUseHdrForSdr) )
   {
-	//DX::Windowing()->ToggleHDR(); // Toggle display HDR ON  //cl can't do it like that, swapchain will be destroyed in resources which will screw up things here
-  }
-  if(m_AutoSwitchHDR && m_videoSettings.m_PlaceboUseHdrForSdr && !DX::Windowing()->IsHDROutput())
-  {
-	//DX::Windowing()->ToggleHDR(); // Toggle display HDR ON //cl can't do it like that, swapchain will be destroyed in resources which will screw up things here
+	PL::PLInstance::Get()->DestroySwapchain();
+	DX::Windowing()->ToggleHDR(); // Toggle display HDR ON
+	PL::PLInstance::Get()->CreateSwapchain();
   }
 
   m_HdrType = HDR_TYPE::HDR_HDR10; //cl
@@ -1119,7 +1115,7 @@ CRendererPL::CRenderBufferImpl::CRenderBufferImpl(AVPixelFormat av_pix_format, u
 
 CRendererPL::CRenderBufferImpl::~CRenderBufferImpl()
 {
-  //cl something to release on player close???
+  CRenderBufferImpl::ReleasePicture();
 }
 
 void CRendererPL::CRenderBufferImpl::ReleasePicture()
