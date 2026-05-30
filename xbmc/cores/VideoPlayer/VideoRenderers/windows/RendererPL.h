@@ -55,7 +55,7 @@ enum class SettinglibPlaceboTargetColorspaceHintMode
 
 enum RenderMethod;
 
-class CRendererPL : public CRendererHQ
+class CRendererPL : public CRendererBase
 {
     CRect ApplyTransforms(const CRect& destRect) const;
 	class CRenderBufferImpl;

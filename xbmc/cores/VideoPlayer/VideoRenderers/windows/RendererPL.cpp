@@ -158,7 +158,7 @@ void CRendererPL::GetWeight(std::map<RenderMethod, int>& weights, const VideoPic
 	weights[RENDER_LIBPLACEBO] = weight;
 }
 
-CRendererPL::CRendererPL(CVideoSettings& videoSettings) : CRendererHQ(videoSettings)
+CRendererPL::CRendererPL(CVideoSettings& videoSettings) : CRendererBase(videoSettings)
 {
   m_renderMethodName = "LibPlacebo";
   m_colorSpace = {};
