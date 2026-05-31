@@ -93,6 +93,7 @@ class IPlayer
 public:
   explicit IPlayer(IPlayerCallback& callback) : m_callback(callback) {}
   virtual ~IPlayer() = default;
+  virtual void UpdateSlow(void) {}
   virtual bool Initialize(TiXmlElement* pConfig) { return true; }
   virtual bool OpenFile(const CFileItem& file, const CPlayerOptions& options){ return false;}
   virtual bool QueueNextFile(const CFileItem &file) { return false; }

@@ -156,6 +156,7 @@ public:
   void SetSubtitle(int iStream);
   void SetSubTitleDelay(float fValue = 0.0f);
   void SetSubtitleVisible(bool bVisible);
+  void UpdateSlow();
 
   /*!
    * \brief Set the subtitle vertical position,

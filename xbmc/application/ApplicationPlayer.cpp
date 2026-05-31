@@ -1068,6 +1068,13 @@ void CApplicationPlayer::SetUpdateStreamDetails()
     vp->SetUpdateStreamDetails();
 }
 
+void CApplicationPlayer::UpdateSlow()
+{
+  const std::shared_ptr<IPlayer> player = GetInternal();
+  if(player)
+	player->UpdateSlow();
+}
+
 bool CApplicationPlayer::HasGameAgent() const
 {
   const std::shared_ptr<const IPlayer> player = GetInternal();

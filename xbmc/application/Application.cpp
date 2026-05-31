@@ -155,6 +155,7 @@
 #include "windowing/GraphicContext.h"
 #include "windowing/WinSystem.h"
 #include "windowing/WindowSystemFactory.h"
+#include "fileapi.h"
 #if defined(TARGET_ANDROID)
 #include "platform/android/activity/XBMCApp.h"
 #endif
@@ -2341,6 +2342,9 @@ void CApplication::Process()
 // We get called every 500ms
 void CApplication::ProcessSlow()
 {
+  const auto appPlayer = GetComponent<CApplicationPlayer>();
+  appPlayer->UpdateSlow();
+
   // process skin resources (skin timers)
   GetComponent<CApplicationSkinHandling>()->ProcessSkin();
 
@@ -2386,7 +2390,7 @@ void CApplication::ProcessSlow()
   CheckDelayedPlayerRestart();
 
   //  check if we can unload any unreferenced dlls or sections
-  const auto appPlayer = GetComponent<CApplicationPlayer>();
+  //const auto appPlayer = GetComponent<CApplicationPlayer>();
   if (!appPlayer->IsPlayingVideo())
     CSectionLoader::UnloadDelayed();
 

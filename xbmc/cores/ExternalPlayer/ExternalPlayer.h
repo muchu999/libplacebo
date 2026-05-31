@@ -39,6 +39,7 @@ public:
   void SetDynamicRangeCompression(long drc) override {}
   void SetAVDelay(float fValue = 0.0f) override;
   float GetAVDelay() override;
+  void UpdateSlow() override;
 
   void SetSubTitleDelay(float fValue = 0.0f) override;
   float GetSubTitleDelay() override;
@@ -50,6 +51,11 @@ public:
 
 #if defined(TARGET_WINDOWS_DESKTOP)
   bool ExecuteAppW32(const char* strPath, const char* strSwitches);
+  std::string sendMpvCommand(const std::string& pipeName, const std::string& jsonCommand);
+  void updateMpvPosition(double& time, double& duration);
+  void updateMpcPosition(double& time, double& duration);
+  void updateVlcPosition(double& time, double& duration);
+  void updatePotPlayerPosition(double& time, double& duration);
   //static void CALLBACK AppFinished(void* closure, BOOLEAN TimerOrWaitFired);
 #elif defined(TARGET_ANDROID)
   bool ExecuteAppAndroid(const char* strSwitches,const char* strPath);
@@ -60,7 +66,8 @@ public:
 private:
   void GetCustomRegexpReplacers(TiXmlElement *pRootElement, std::vector<std::string>& settings);
   void Process() override;
-
+  double m_playTime = -1.0;
+  double m_duration = -1.0;
   bool m_bAbortRequest;
   bool m_bIsPlaying;
   std::chrono::time_point<std::chrono::steady_clock> m_playbackStartTime;
@@ -78,6 +85,7 @@ private:
 #endif
   std::string m_filename;
   std::string m_args;
+  double m_startTime;
   bool m_hideconsole;
   bool m_hidexbmc;
   bool m_islauncher;

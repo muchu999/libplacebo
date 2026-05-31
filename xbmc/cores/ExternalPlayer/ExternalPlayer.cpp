@@ -22,6 +22,7 @@
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
 #include "threads/SystemClock.h"
+#include <utils/Base64.h>
 #include "utils/RegExp.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
@@ -32,11 +33,20 @@
 #include "windowing/WinSystem.h"
 #if defined(TARGET_WINDOWS)
   #include "utils/CharsetConverter.h"
+  #include <nlohmann/json.hpp>
+  using json = nlohmann::json;
   #include <Windows.h>
+  #include <wininet.h>
 #endif
 #if defined(TARGET_ANDROID)
   #include "platform/android/activity/XBMCApp.h"
 #endif
+#include <application/ApplicationPlayer.h>
+#include <future>
+#include <regex>
+#include <algorithm>
+#include <cctype>
+#pragma comment(lib, "wininet.lib")
 
 // If the process ends in less than this time (ms), we assume it's a launcher
 // and wait for manual intervention before continuing
@@ -86,6 +96,7 @@ bool CExternalPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &opti
 {
   try
   {
+	m_startTime = options.starttime;
     m_file = file;
     m_bIsPlaying = true;
     m_time = 0;
@@ -129,6 +140,24 @@ void CExternalPlayer::Process()
 {
   std::string mainFile = m_launchFilename;
   std::string archiveContent;
+  if(m_name == "MPV" || m_name == "mpv")
+  {
+    m_args = std::format("--start={} ", m_startTime) + m_args;
+    m_args = std::format(R"(--input-ipc-server=\\.\pipe\mpvsocket )") + m_args;
+  }
+  else if((m_name == "MPC-BE") || (m_name == "MPC-HC") || (m_name == "mpc-be") || (m_name == "mpc-hc"))
+  {
+	m_args += std::format(" /startpos {}", m_startTime);
+  }
+  else if((m_name == "VLC") || (m_name == "vlc"))
+  {
+	m_args = std::format(" --start-time={} ", m_startTime) + m_args;
+  }
+  else if(m_name == "POTPLAYER" || m_name == "potplayer")
+  {
+	m_args += std::format(" /seek={} ", m_startTime);
+  }
+
 
   if (m_args.find("{0}") == std::string::npos)
   {
@@ -376,10 +405,20 @@ void CExternalPlayer::Process()
 #endif
 
   CBookmark bookmark;
-  bookmark.totalTimeInSeconds = 1;
-  bookmark.timeInSeconds = (duration.count() / 1000 >= m_playCountMinTime) ? 1 : 0;
-  bookmark.player = m_name;
-  m_callback.OnPlayerCloseFile(m_file, bookmark);
+  if(m_playTime == -1.0)
+  {
+    bookmark.totalTimeInSeconds = 1;
+	bookmark.timeInSeconds = (duration.count() / 1000 >= m_playCountMinTime) ? 1 : 0;
+	bookmark.player = m_name;
+	m_callback.OnPlayerCloseFile(m_file, bookmark);
+  }
+  else
+  {
+	bookmark.totalTimeInSeconds = m_duration;
+	bookmark.timeInSeconds = m_playTime;
+	bookmark.player = m_name;
+	m_callback.OnPlayerCloseFile(m_file, bookmark);
+  }
 
   /* Resume AE processing of XBMC native audio */
   if (!CServiceBroker::GetActiveAE()->Resume())
@@ -399,6 +438,307 @@ void CExternalPlayer::Process()
   else
     m_callback.OnPlayBackEnded();
 }
+
+#if defined(TARGET_WINDOWS_DESKTOP)
+namespace {
+std::string getPlayerHttpStatus(std::string serverName, int port, std::string object, std::string password)
+{
+  std::string response;
+  HINTERNET hInternet = InternetOpenA("Client", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+  if(!hInternet) return "";
+
+  HINTERNET hConnect = InternetConnectA(hInternet, serverName.c_str(), port, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+  if(!hConnect) {
+	InternetCloseHandle(hInternet);
+	return "";
+  }
+
+  HINTERNET hRequest = HttpOpenRequestA(hConnect, "GET", object.c_str(), NULL, NULL, NULL, INTERNET_FLAG_NO_COOKIES, 0);
+  if(hRequest) 
+  {
+	std::string headerString = "";
+	if(password != "")
+	{
+	  std::string rawCredentials = ":" + password;
+	  std::string encodedAuth;
+	  Base64::Encode(rawCredentials, encodedAuth);
+	  headerString = "Authorization: Basic " + encodedAuth + "\r\n";
+	}
+
+	if(HttpSendRequestA(hRequest, headerString.c_str(), (DWORD) headerString.length(), NULL, 0)) 
+	{
+	  char buffer [4096];
+	  DWORD bytesRead;
+
+	  while(InternetReadFile(hRequest, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) 
+	  {
+		buffer [bytesRead] = '\0';
+		response.append(buffer, bytesRead);
+	  }
+	}
+	else 
+	{
+	}
+	InternetCloseHandle(hRequest);
+  }
+  InternetCloseHandle(hConnect);
+  InternetCloseHandle(hInternet);
+
+  return response;
+}
+
+int extractValue(const std::string& htmlContent, std::string targetToken) 
+{
+  size_t tokenPos = htmlContent.find("\""+targetToken+"\"");
+
+  if(tokenPos == std::string::npos) {
+	return -1; 
+  }
+
+  size_t startPos = htmlContent.find('>', tokenPos);
+  if(startPos == std::string::npos) return -1;
+  startPos += 1; 
+
+  size_t endPos = htmlContent.find('<', startPos);
+  if(endPos == std::string::npos || endPos <= startPos) return -1;
+
+  std::string numericStr = htmlContent.substr(startPos, endPos - startPos);
+
+  numericStr.erase(std::remove_if(numericStr.begin(), numericStr.end(),
+	[](unsigned char c) { return std::isspace(c); }), numericStr.end());
+
+  try {
+	if(!numericStr.empty()) {
+	  return std::stoi(numericStr);
+	}
+  }
+  catch(...) {
+	return -1;
+  }
+
+  return -1;
+}
+
+std::string GetTagValue(const std::string& xml, const std::string& tagName) 
+{
+  std::string startTag = "<" + tagName + ">";
+  std::string endTag = "</" + tagName + ">";
+
+  size_t startPos = xml.find(startTag);
+  if(startPos == std::string::npos) return ""; 
+
+  startPos += startTag.length();
+  size_t endPos = xml.find(endTag, startPos);
+  if(endPos == std::string::npos) return "";
+
+  return xml.substr(startPos, endPos - startPos);
+}
+}
+
+std::string CExternalPlayer::sendMpvCommand(const std::string& pipeName, const std::string& jsonCommand)
+{
+  HANDLE hPipe = CreateFileA(
+	pipeName.c_str(),
+	GENERIC_READ | GENERIC_WRITE,
+	0,
+	NULL,
+	OPEN_EXISTING,
+	0,
+	NULL
+  );
+
+  if(hPipe == INVALID_HANDLE_VALUE) {
+	return "Error opening pipe";
+  }
+
+  std::string command = jsonCommand + "\n";
+  DWORD bytesWritten;
+  ::WriteFile(hPipe, command.c_str(), command.length(), &bytesWritten, NULL);
+
+  char buffer [4096] = {0};
+  DWORD bytesRead;
+  ReadFile(hPipe, buffer, sizeof(buffer) - 1, &bytesRead, NULL);
+
+  CloseHandle(hPipe);
+
+  if(bytesRead > 0) {
+	return std::string(buffer, bytesRead);
+  }
+  return "";
+}
+
+void CExternalPlayer::updateMpvPosition(double& outTime, double& outDuration)
+{
+  std::string jsonCommand;
+  std::string response;
+  std::string pipeName = R"(\\.\pipe\mpvsocket)";
+  jsonCommand = R"({"command": ["get_property", "time-pos"]})";
+  response = sendMpvCommand(pipeName, jsonCommand);
+  if(response != "Error opening pipe")
+  {
+	double time = -1;
+	double duration = -1;
+	json j;
+	try 
+	{
+	  j = json::parse(response);
+	  if(j.contains("data"))
+		time = j ["data"].get<double>();
+	}
+	catch(json::parse_error& e) 
+	{
+	}
+	jsonCommand = R"({"command": ["get_property", "duration"]})";
+	response = sendMpvCommand(pipeName, jsonCommand);
+	if(response != "Error opening pipe")
+	{
+	  json k;
+	  try 
+	  {
+		k = json::parse(response);
+		if(k.contains("data"))
+		  duration = k ["data"].get<double>();
+	  }
+	  catch(json::parse_error& e) 
+	  {
+	  }
+	}
+	if(time >= 0.0 && duration > 0.0)
+	{
+	  outTime = time;
+	  outDuration = duration;
+	}
+  }
+}
+
+void CExternalPlayer::updateMpcPosition(double& outTime, double& outDuration)
+{
+  static std::future<std::string> pendingRequest;
+  static bool isRequestActive = false;
+  if(!isRequestActive)
+  {
+	std::string serverName = "127.0.0.1";
+	std::string password = "";
+	std::string object = "/variables.html";
+	int port = 13579;
+	pendingRequest = std::async(std::launch::async, getPlayerHttpStatus, serverName, port, object, password);
+	isRequestActive = true;
+  }
+
+  if(isRequestActive && pendingRequest.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+  {
+	std::string html = pendingRequest.get();
+	isRequestActive = false;
+
+	if(!html.empty())
+	{
+	  double time = extractValue(html, "position") / 1000.0;
+	  double duration = extractValue(html, "duration") / 1000.0;
+	  if(time >= 0.0 && duration > 0.0)
+	  {
+		outTime = time;
+		outDuration = duration;
+	  }
+	}
+  }
+}
+
+void CExternalPlayer::updateVlcPosition(double& outTime, double& outDuration)
+{
+  static std::future<std::string> pendingRequest;
+  static bool isRequestActive = false;
+  if(!isRequestActive) {
+	std::string serverName = "127.0.0.1";
+	std::string password = "kodi";
+	std::string object = "/requests/status.xml";
+	int port = 8080;
+	pendingRequest = std::async(std::launch::async, getPlayerHttpStatus, serverName, port, object, password);
+	isRequestActive = true;
+  }
+
+  if(isRequestActive && pendingRequest.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+  {
+	std::string html = pendingRequest.get();
+	isRequestActive = false;
+
+	if(!html.empty())
+	{
+	  double time = -1;
+	  double duration = -1;
+
+	  std::string timeStr = GetTagValue(html, "time");
+	  if(timeStr != "")
+		time = std::stod(timeStr);
+	  std::string durationStr = GetTagValue(html, "length");
+	  if(durationStr != "")
+		duration = std::stod(durationStr);
+
+	  if(time >= 0.0 && duration > 0.0)
+	  {
+		m_playTime = time;
+		m_duration = duration;
+	  }
+	}
+  }
+}
+
+void CExternalPlayer::updatePotPlayerPosition(double& outTime, double& outDuration)
+{
+  #define WM_USER_POT 0x0400
+  #define POT_GET_CURRENT_TIME 0x5004 // Returns time in milliseconds
+  #define POT_GET_DURATION     0x5002 // Returns duration in milliseconds
+
+  double time = -1.0;
+  double duration = -1.0;
+
+  HWND hWnd = FindWindowA("PotPlayer64", NULL);
+  if(!hWnd)
+	return;
+
+  LRESULT result = SendMessageA(hWnd, WM_USER_POT, POT_GET_CURRENT_TIME, 0);
+  if(result != -1)
+  {
+	time = static_cast<double>(result) / 1000.0;
+  }
+  result = SendMessageA(hWnd, WM_USER_POT, POT_GET_DURATION, 0);
+  if(result != -1)
+  {
+	duration = static_cast<double>(result) / 1000.0;
+  }
+
+  if(time >= 0.0 && duration > 0.0)
+  {
+	m_playTime = time;
+	m_duration = duration;
+  }
+}
+#endif
+
+void CExternalPlayer::UpdateSlow()
+{
+  if(IsPlaying() && HasVideo())
+  {
+    #if defined(TARGET_WINDOWS_DESKTOP)
+	if(m_name == "MPV" || m_name == "mpv")
+	{
+	  updateMpvPosition(m_playTime, m_duration);
+	}
+    else if(m_name == "MPC-HC" || m_name == "MPC-BE" || m_name == "mpc-hc" || m_name == "mpc-be")
+	{
+	  updateMpcPosition(m_playTime, m_duration);
+	}
+	else if(m_name == "VLC" || m_name == "vlc")
+	{
+	  updateVlcPosition(m_playTime, m_duration);
+	}
+	else if(m_name == "POTPLAYER" || m_name == "potplayer")
+	{
+	  updatePotPlayerPosition(m_playTime, m_duration);
+	}
+	#endif
+  }
+}
+
 
 #if defined(TARGET_WINDOWS_DESKTOP)
 bool CExternalPlayer::ExecuteAppW32(const char* strPath, const char* strSwitches)
