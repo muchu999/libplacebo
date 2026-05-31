@@ -228,11 +228,6 @@ bool CVideoPlayActionProcessor::OnResumeSelected()
 	auto item {GetItem()};
 	const VIDEO::UTILS::ResumeInformation resumeInfo {VIDEO::UTILS::GetItemResumeInformation(*item)};
 	Action action = ChoosePlayOrResume(VIDEO::UTILS::GetResumeString(resumeInfo.startOffset, resumeInfo.partNumber));
-	if(action == -1)
-	{
-	  SetUserCancelled(true);
-	  return true; // User cancelled the select menu. We're done.
-	}
 	if(action == ACTION_RESUME)
 	  SetResumeData();
 	else

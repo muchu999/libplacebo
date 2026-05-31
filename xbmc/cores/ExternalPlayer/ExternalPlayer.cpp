@@ -150,10 +150,6 @@ void CExternalPlayer::Process()
   {
 	m_args = std::format(" --start-time={} ", m_startTime) + m_args;
   }
-  else if(m_name == "POTPLAYER" || m_name == "potplayer")
-  {
-	m_args += std::format(" /seek={} ", m_startTime);
-  }
 
 
   if (m_args.find("{0}") == std::string::npos)
@@ -576,27 +572,6 @@ std::string GetTagValue(const std::string& xml, const std::string& tagName)
   return xml.substr(startPos, endPos - startPos);
 }
 
-void GetPotPlayerPosition(double& time, double& duration) 
-{
-  #define WM_USER_POT 0x0400
-  #define POT_GET_CURRENT_TIME 0x5004 // Returns time in milliseconds
-  #define POT_GET_DURATION     0x5002 // Returns duration in milliseconds
-  HWND hWnd = FindWindowA("PotPlayer64", NULL);
-  if(!hWnd) 
-	return;
-
-  LRESULT result = SendMessageA(hWnd, WM_USER_POT, POT_GET_CURRENT_TIME, 0);
-  if(result != -1) 
-  {
-	time = static_cast<double>(result) / 1000.0;
-  }
-  result = SendMessageA(hWnd, WM_USER_POT, POT_GET_DURATION, 0);
-  if(result != -1)
-  {
-	duration = static_cast<double>(result) / 1000.0;
-  }
-}
-
 void CExternalPlayer::UpdateSlow()
 {
 
@@ -711,17 +686,6 @@ void CExternalPlayer::UpdateSlow()
 			m_duration = duration;
 		  }
 		}
-	  }
-	}
-	else if(m_name == "POTPLAYER" || m_name == "potplayer")
-	{
-	  double time = -1.0;
-	  double duration = -1.0;
-	  GetPotPlayerPosition(time, duration);
-	  if(time >= 0.0 && duration > 0.0)
-	  {
-		m_playTime = time;
-		m_duration = duration;
 	  }
 	}
   }
