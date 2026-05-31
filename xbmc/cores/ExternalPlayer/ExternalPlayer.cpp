@@ -86,7 +86,6 @@ bool CExternalPlayer::OpenFile(const CFileItem& file, const CPlayerOptions &opti
 {
   try
   {
-	m_startTime = options.starttime;
     m_file = file;
     m_bIsPlaying = true;
     m_time = 0;
@@ -130,11 +129,7 @@ void CExternalPlayer::Process()
 {
   std::string mainFile = m_launchFilename;
   std::string archiveContent;
-  if(m_name == "MPV")
-  {
-    m_args = std::format("--start={} ", m_startTime) + m_args;
-    m_args = std::format(R"(--input-ipc-server=\\.\pipe\mpvsocket )") + m_args;
-  }
+
   if (m_args.find("{0}") == std::string::npos)
   {
     // Unwind archive names
@@ -381,20 +376,10 @@ void CExternalPlayer::Process()
 #endif
 
   CBookmark bookmark;
-  if(m_playTime == -1.0)
-  {
-    bookmark.totalTimeInSeconds = 1;
-	bookmark.timeInSeconds = (duration.count() / 1000 >= m_playCountMinTime) ? 1 : 0;
-	bookmark.player = m_name;
-	m_callback.OnPlayerCloseFile(m_file, bookmark);
-  }
-  else
-  {
-	bookmark.totalTimeInSeconds = m_duration;
-	bookmark.timeInSeconds = m_playTime;
-	bookmark.player = m_name;
-	m_callback.OnPlayerCloseFile(m_file, bookmark);
-  }
+  bookmark.totalTimeInSeconds = 1;
+  bookmark.timeInSeconds = (duration.count() / 1000 >= m_playCountMinTime) ? 1 : 0;
+  bookmark.player = m_name;
+  m_callback.OnPlayerCloseFile(m_file, bookmark);
 
   /* Resume AE processing of XBMC native audio */
   if (!CServiceBroker::GetActiveAE()->Resume())
