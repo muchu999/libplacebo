@@ -35,15 +35,11 @@
   #include <nlohmann/json.hpp>
   using json = nlohmann::json;
   #include <Windows.h>
-  #include <wininet.h>
 #endif
 #if defined(TARGET_ANDROID)
   #include "platform/android/activity/XBMCApp.h"
 #endif
 #include <application/ApplicationPlayer.h>
-#include <future>
-#include <regex>
-#pragma comment(lib, "wininet.lib")
 
 // If the process ends in less than this time (ms), we assume it's a launcher
 // and wait for manual intervention before continuing
@@ -454,139 +450,47 @@ std::string CExternalPlayer::sendMpvCommand(const std::string& pipeName, const s
   return "";
 }
 
-std::string getMPCStatus() {
-  HINTERNET hInternet = InternetOpenA("MPC-BE-Client", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
-  if(!hInternet) return "";
-
-  HINTERNET hConnect = InternetOpenUrlA(hInternet, "http://localhost:13579/variables.html", NULL, 0, INTERNET_FLAG_RELOAD, 0);
-  if(!hConnect) {
-	InternetCloseHandle(hInternet);
-	return "";
-  }
-
-  std::string response = "";
-  char buffer [4096];
-  DWORD bytesRead = 0;
-
-  while(InternetReadFile(hConnect, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
-	response.append(buffer, bytesRead);
-  }
-
-  InternetCloseHandle(hConnect);
-  InternetCloseHandle(hInternet);
-
-  return response;
-}
-
-int extractValue(const std::string& htmlContent, std::string targetToken) 
-{
-  size_t tokenPos = htmlContent.find("\""+targetToken+"\"");
-
-  if(tokenPos == std::string::npos) {
-	return -1; 
-  }
-
-  size_t startPos = htmlContent.find('>', tokenPos);
-  if(startPos == std::string::npos) return -1;
-  startPos += 1; 
-
-  size_t endPos = htmlContent.find('<', startPos);
-  if(endPos == std::string::npos || endPos <= startPos) return -1;
-
-  std::string numericStr = htmlContent.substr(startPos, endPos - startPos);
-
-  numericStr.erase(std::remove_if(numericStr.begin(), numericStr.end(),
-	[](unsigned char c) { return std::isspace(c); }), numericStr.end());
-
-  try {
-	if(!numericStr.empty()) {
-	  return std::stoi(numericStr);
-	}
-  }
-  catch(...) {
-	return -1;
-  }
-
-  return -1;
-}
-
-
-
 void CExternalPlayer::UpdateSlow()
 {
+  std::string jsonCommand;
+  std::string response;
+  std::string pipeName = R"(\\.\pipe\mpvsocket)";
+  //std::string jsonCommand = R"({"command": ["set_property", "pause", true]})";
 
-  if(IsPlaying() && HasVideo())
+  if(IsPlaying() && HasVideo() && m_name == "MPV")
   {
-	if(m_name == "MPV" || m_name == "mpv")
+	double time = -1.0;
+	double duration = -1.0;
+	jsonCommand = R"({"command": ["get_property", "time-pos"]})";
+	response = sendMpvCommand(pipeName, jsonCommand);
+	if(response != "Error opening pipe")
 	{
-	  std::string jsonCommand;
-	  std::string response;
-	  std::string pipeName = R"(\\.\pipe\mpvsocket)";
-	  //std::string jsonCommand = R"({"command": ["set_property", "pause", true]})";
+	  json j;
+	  try {
+		j = json::parse(response);
+		if(j.contains("data"))
+		  time = j ["data"].get<double>();
+	  }
+	  catch(json::parse_error& e) {
+	  }
 
-	  double time = -1.0;
-	  double duration = -1.0;
-	  jsonCommand = R"({"command": ["get_property", "time-pos"]})";
+	  jsonCommand = R"({"command": ["get_property", "duration"]})";
 	  response = sendMpvCommand(pipeName, jsonCommand);
 	  if(response != "Error opening pipe")
 	  {
-		json j;
+		json k;
 		try {
-		  j = json::parse(response);
-		  if(j.contains("data"))
-			time = j ["data"].get<double>();
+		  k = json::parse(response);
+		  if(k.contains("data"))
+			duration = k ["data"].get<double>();
 		}
 		catch(json::parse_error& e) {
 		}
-
-		jsonCommand = R"({"command": ["get_property", "duration"]})";
-		response = sendMpvCommand(pipeName, jsonCommand);
-		if(response != "Error opening pipe")
-		{
-		  json k;
-		  try {
-			k = json::parse(response);
-			if(k.contains("data"))
-			  duration = k ["data"].get<double>();
-		  }
-		  catch(json::parse_error& e) {
-		  }
-		}
-		if(time >= 0.0 && duration > 0.0)
-		{
-		  m_playTime = time;
-		  m_duration = duration;
-		}
 	  }
-	}
-
-	else if(m_name == "MPC-HC" || m_name == "MPC-BE" || m_name == "mpc-hc" || m_name == "mpc-be")
-	{
-	  static std::future<std::string> pendingRequest; 
-	  static bool isRequestActive = false;
-	  if(!isRequestActive) {
-		pendingRequest = std::async(std::launch::async, getMPCStatus);
-		isRequestActive = true;
-	  }
-
-	  if(isRequestActive && pendingRequest.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) 
+	  if(time >= 0.0 && duration > 0.0)
 	  {
-		std::string html = pendingRequest.get();
-		isRequestActive = false; 
-
-		if(!html.empty()) 
-		{
-		  double time = extractValue(html, "position")/1000.0;
-		  double duration = extractValue(html, "duration")/1000.0;
-		  if(time >= 0.0 && duration > 0.0)
-		  {
-			m_playTime = time;
-			m_duration = duration;
-		  }
-		}
-	  else 
-		{
-		}
+		m_playTime = time;
+		m_duration = duration;
 	  }
 	}
   }
