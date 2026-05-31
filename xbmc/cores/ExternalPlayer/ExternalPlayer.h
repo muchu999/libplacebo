@@ -52,10 +52,7 @@ public:
 #if defined(TARGET_WINDOWS_DESKTOP)
   bool ExecuteAppW32(const char* strPath, const char* strSwitches);
   std::string sendMpvCommand(const std::string& pipeName, const std::string& jsonCommand);
-  void updateMpvPosition(double& time, double& duration);
-  void updateMpcPosition(double& time, double& duration);
-  void updateVlcPosition(double& time, double& duration);
-  void updatePotPlayerPosition(double& time, double& duration);
+
   //static void CALLBACK AppFinished(void* closure, BOOLEAN TimerOrWaitFired);
 #elif defined(TARGET_ANDROID)
   bool ExecuteAppAndroid(const char* strSwitches,const char* strPath);
