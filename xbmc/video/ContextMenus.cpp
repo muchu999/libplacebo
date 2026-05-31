@@ -260,7 +260,7 @@ void SetPathAndPlay(const std::shared_ptr<CFileItem>& item, PlayMode mode)
     else if (mode == PlayMode::PLAY_STACK_PART)
       proc.SetChooseStackPart();
 
-    if ((mode == PlayMode::RESUME || mode == PlayMode::PLAY_USING) && (itemCopy->GetStartOffset() == STARTOFFSET_RESUME ||  //cl play using goes through here
+    if (mode == PlayMode::RESUME && (itemCopy->GetStartOffset() == STARTOFFSET_RESUME ||
                                      VIDEO::UTILS::GetItemResumeInformation(*item).isResumable))
       proc.ProcessAction(VIDEO::GUILIB::ACTION_RESUME);
     else if (mode == PlayMode::PLAY_STACK_PART)

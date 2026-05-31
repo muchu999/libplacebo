@@ -210,30 +210,7 @@ void CVideoPlayActionProcessor::SetStartData()
 
 bool CVideoPlayActionProcessor::OnResumeSelected()
 {
-  if(!m_choosePlayer)
-  {
-	Play("");
-  }
-  else
-  {
-	std::string player;
-	const std::vector<std::string> players {CPlayerUtils::GetPlayersForItem(*GetItem())};
-	const CPlayerCoreFactory& playerCoreFactory {CServiceBroker::GetPlayerCoreFactory()};
-	player = playerCoreFactory.SelectPlayerDialog(players);
-	if(player.empty())
-	{
-	  SetUserCancelled(true);
-	  return true; // User cancelled player selection. We're done.
-	}
-	auto item {GetItem()};
-	const VIDEO::UTILS::ResumeInformation resumeInfo {VIDEO::UTILS::GetItemResumeInformation(*item)};
-	Action action = ChoosePlayOrResume(VIDEO::UTILS::GetResumeString(resumeInfo.startOffset, resumeInfo.partNumber));
-	if(action == ACTION_RESUME)
-	  SetResumeData();
-	else
-	  SetStartData();
-	Play(player);
-  }
+  Play("");
   return true;
 }
 
