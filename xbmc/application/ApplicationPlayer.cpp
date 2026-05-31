@@ -253,6 +253,12 @@ bool CApplicationPlayer::IsPlaying() const
   return (player && player->IsPlaying());
 }
 
+bool CApplicationPlayer::IsExternal(std::string name) const
+{
+  std::shared_ptr<const IPlayer> player = GetInternal();
+  return (player && player->IsExternal(name));
+}
+
 bool CApplicationPlayer::IsPausedPlayback() const
 {
   return (IsPlaying() && (GetPlaySpeed() == 0));
@@ -301,6 +307,13 @@ void CApplicationPlayer::SetMute(bool bOnOff)
   std::shared_ptr<IPlayer> player = GetInternal();
   if (player)
     player->SetMute(bOnOff);
+}
+
+void CApplicationPlayer::SetPlayTime(double time, double duration)
+{
+  std::shared_ptr<IPlayer> player = GetInternal();
+  if(player)
+	player->SetPlayTime(time, duration);
 }
 
 void CApplicationPlayer::SetVolume(float volume)
@@ -1066,13 +1079,6 @@ void CApplicationPlayer::SetUpdateStreamDetails()
   CVideoPlayer* vp = dynamic_cast<CVideoPlayer*>(player.get());
   if (vp)
     vp->SetUpdateStreamDetails();
-}
-
-void CApplicationPlayer::UpdateSlow()
-{
-  const std::shared_ptr<IPlayer> player = GetInternal();
-  if(player)
-	player->UpdateSlow();
 }
 
 bool CApplicationPlayer::HasGameAgent() const

@@ -39,7 +39,8 @@ public:
   void SetDynamicRangeCompression(long drc) override {}
   void SetAVDelay(float fValue = 0.0f) override;
   float GetAVDelay() override;
-  void UpdateSlow() override;
+  void SetPlayTime(double time, double duration) override  {m_playTime = time; m_duration = duration; } ;
+  bool IsExternal(std::string name) const override { return m_name == name; }
 
   void SetSubTitleDelay(float fValue = 0.0f) override;
   float GetSubTitleDelay() override;
@@ -51,8 +52,6 @@ public:
 
 #if defined(TARGET_WINDOWS_DESKTOP)
   bool ExecuteAppW32(const char* strPath, const char* strSwitches);
-  std::string sendMpvCommand(const std::string& pipeName, const std::string& jsonCommand);
-
   //static void CALLBACK AppFinished(void* closure, BOOLEAN TimerOrWaitFired);
 #elif defined(TARGET_ANDROID)
   bool ExecuteAppAndroid(const char* strSwitches,const char* strPath);
