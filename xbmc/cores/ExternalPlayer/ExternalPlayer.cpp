@@ -146,11 +146,6 @@ void CExternalPlayer::Process()
   {
 	m_args += std::format(" /startpos {}", m_startTime);
   }
-  else if((m_name == "VLC") || (m_name == "vlc"))
-  {
-	m_args = std::format(" --start-time={} ", m_startTime) + m_args;
-  }
-
 
   if (m_args.find("{0}") == std::string::npos)
   {
@@ -464,61 +459,24 @@ std::string CExternalPlayer::sendMpvCommand(const std::string& pipeName, const s
   return "";
 }
 
-std::string Base64Encode(const std::string& in) {
-  std::string out;
-  int val = 0, valb = -6;
-  for(unsigned char c : in) {
-	val = (val << 8) + c;
-	valb += 8;
-	while(valb >= 0) {
-	  out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" [(val >> valb) & 0x3F]);
-	  valb -= 6;
-	}
-  }
-  if(valb > -6) out.push_back("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" [((val << 8) >> (valb + 8)) & 0x3F]);
-  while(out.size() % 4) out.push_back('=');
-  return out;
-}
-
-std::string getPlayerHttpStatus(std::string serverName, int port, std::string object, std::string password)
-{
-  std::string response;
-  HINTERNET hInternet = InternetOpenA("Client", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+std::string getMPCStatus() {
+  HINTERNET hInternet = InternetOpenA("MPC-BE-Client", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
   if(!hInternet) return "";
 
-  HINTERNET hConnect = InternetConnectA(hInternet, serverName.c_str(), port, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+  HINTERNET hConnect = InternetOpenUrlA(hInternet, "http://localhost:13579/variables.html", NULL, 0, INTERNET_FLAG_RELOAD, 0);
   if(!hConnect) {
 	InternetCloseHandle(hInternet);
 	return "";
   }
 
-  HINTERNET hRequest = HttpOpenRequestA(hConnect, "GET", object.c_str(), NULL, NULL, NULL, INTERNET_FLAG_NO_COOKIES, 0);
-  if(hRequest) 
-  {
-	std::string headerString = "";
-	if(password != "")
-	{
-	  std::string rawCredentials = ":" + password;
-	  std::string encodedAuth = Base64Encode(rawCredentials);
-	  headerString = "Authorization: Basic " + encodedAuth + "\r\n";
-	}
+  std::string response = "";
+  char buffer [4096];
+  DWORD bytesRead = 0;
 
-	if(HttpSendRequestA(hRequest, headerString.c_str(), (DWORD) headerString.length(), NULL, 0)) 
-	{
-	  char buffer [4096];
-	  DWORD bytesRead;
-
-	  while(InternetReadFile(hRequest, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) 
-	  {
-		buffer [bytesRead] = '\0';
-		response.append(buffer, bytesRead);
-	  }
-	}
-	else 
-	{
-	}
-	InternetCloseHandle(hRequest);
+  while(InternetReadFile(hConnect, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0) {
+	response.append(buffer, bytesRead);
   }
+
   InternetCloseHandle(hConnect);
   InternetCloseHandle(hInternet);
 
@@ -557,20 +515,7 @@ int extractValue(const std::string& htmlContent, std::string targetToken)
   return -1;
 }
 
-std::string GetTagValue(const std::string& xml, const std::string& tagName) 
-{
-  std::string startTag = "<" + tagName + ">";
-  std::string endTag = "</" + tagName + ">";
 
-  size_t startPos = xml.find(startTag);
-  if(startPos == std::string::npos) return ""; 
-
-  startPos += startTag.length();
-  size_t endPos = xml.find(endTag, startPos);
-  if(endPos == std::string::npos) return "";
-
-  return xml.substr(startPos, endPos - startPos);
-}
 
 void CExternalPlayer::UpdateSlow()
 {
@@ -619,17 +564,13 @@ void CExternalPlayer::UpdateSlow()
 		}
 	  }
 	}
-    else if(m_name == "MPC-HC" || m_name == "MPC-BE" || m_name == "mpc-hc" || m_name == "mpc-be")
+
+	else if(m_name == "MPC-HC" || m_name == "MPC-BE" || m_name == "mpc-hc" || m_name == "mpc-be")
 	{
 	  static std::future<std::string> pendingRequest; 
 	  static bool isRequestActive = false;
-	  if(!isRequestActive) 
-	  {
-		std::string serverName = "127.0.0.1";
-		std::string password = "";
-		std::string object = "/variables.html";
-		int port = 13579;
-		pendingRequest = std::async(std::launch::async, getPlayerHttpStatus, serverName, port, object, password);
+	  if(!isRequestActive) {
+		pendingRequest = std::async(std::launch::async, getMPCStatus);
 		isRequestActive = true;
 	  }
 
@@ -648,43 +589,8 @@ void CExternalPlayer::UpdateSlow()
 			m_duration = duration;
 		  }
 		}
-	  }
-	}
-	else if(m_name == "VLC" || m_name == "vlc")
-	{
-	  static std::future<std::string> pendingRequest;
-	  static bool isRequestActive = false;
-	  if(!isRequestActive) {
-		std::string serverName = "127.0.0.1";
-		std::string password = "kodi";
-		std::string object = "/requests/status.xml";
-		int port = 8080;
-		pendingRequest = std::async(std::launch::async, getPlayerHttpStatus, serverName, port, object, password);
-		isRequestActive = true;
-	  }
-
-	  if(isRequestActive && pendingRequest.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
-	  {
-		std::string html = pendingRequest.get();
-		isRequestActive = false;
-
-		if(!html.empty())
+	  else 
 		{
-		  double time = -1;
-		  double duration = -1;
-
-		  std::string timeStr = GetTagValue(html, "time");
-		  if(timeStr != "")
-			time = std::stod(timeStr);
-		  std::string durationStr = GetTagValue(html, "length");
-		  if(durationStr != "")
-			duration = std::stod(durationStr);
-
-		  if(time >= 0.0 && duration > 0.0)
-		  {
-			m_playTime = time;
-			m_duration = duration;
-		  }
 		}
 	  }
 	}
