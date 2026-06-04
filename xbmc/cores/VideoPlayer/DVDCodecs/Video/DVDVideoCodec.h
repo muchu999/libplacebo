@@ -73,19 +73,19 @@ public:
   std::string strDVELType;
 
   bool hasDisplayMetadata = false;
-  AVMasteringDisplayMetadata displayMetadata;
+  AVMasteringDisplayMetadata displayMetadata = {};
   bool hasLightMetadata = false;
-  AVContentLightMetadata lightMetadata;
+  AVContentLightMetadata lightMetadata = {};
   bool hasHDR10PlusMetadata = false;
-  AVDynamicHDRPlus hdrMetadata;
+  AVDynamicHDRPlus hdrMetadata = {};
   bool hasDoviMetadata = false;
   bool disable_residual_flag = false;
-  AVDOVIMetadata doviMetadata;
-  pl_color_space doviColorSpace; //< pl_color_space
-  pl_color_repr doviColorRepr;
-  pl_dovi_metadata doviPlMetadata;
+  AVDOVIMetadata doviMetadata = {};
+  pl_color_space doviColorSpace = {}; //< pl_color_space
+  pl_color_repr doviColorRepr = {};
+  pl_dovi_metadata doviPlMetadata = {};
   bool hasDoviRpuMetadata = false;
-  pl_hdr_metadata hdrDoviRpu; //< pl_hdr_metadata
+  pl_hdr_metadata hdrDoviRpu = {}; //< pl_hdr_metadata
   AVDOVIColorMetadata doviColor {0};
   AVDOVIDmData doviExt {0};
   bool hasDoviExt = false;

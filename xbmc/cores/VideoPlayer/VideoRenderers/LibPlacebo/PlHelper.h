@@ -39,6 +39,7 @@ extern "C" {
 #include <libplacebo/gpu.h>
 #include <libplacebo/swapchain.h>
 #include <libplacebo/cache.h>
+#include <libplacebo/utils/frame_queue.h>
 
 #define MAX_FRAME_PASSES 256
 #define MAX_BLEND_PASSES 8
@@ -73,17 +74,22 @@ namespace PL
 	pl_renderer GetRenderer() { return m_plRenderer; }
 	pl_gpu GetGpu() { return m_plD3d11->gpu; }
 	pl_cache* GetCache() { return &m_plCache; }
+	pl_queue* GetQueue() { return &m_plQueue; }
+	void fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format);
+	void LogCurrent();
 
-	pl_cache m_plCache;
-	pl_log m_plLog;
-	pl_d3d11 m_plD3d11;
-	pl_swapchain m_plSwapchain;
-	pl_renderer m_plRenderer;
+  private:
+	bool m_isInitialized = false;
+	pl_cache m_plCache = nullptr;
+	pl_queue m_plQueue = nullptr;
+	pl_log m_plLog = nullptr;
+	pl_d3d11 m_plD3d11 = nullptr;
+	pl_swapchain m_plSwapchain = nullptr;
+	pl_renderer m_plRenderer = nullptr;
+
 	int CurrentPrim;
 	int Currenttransfer;
 	int CurrentMatrix;
-	void LogCurrent();
-	void fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format);
   };
 }
 

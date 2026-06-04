@@ -53,21 +53,14 @@ using namespace Microsoft::WRL;
 
 CRendererPL::~CRendererPL()
 {
-  pl_swapchain m_plSwapchain;
-
-  m_plSwapchain = PL::PLInstance::Get()->GetSwapchain();
-  pl_swapchain_destroy(&m_plSwapchain);
+  Flush(false); // Must free buffers before resetting libplacebo
+  PL::PLInstance::Get()->Reset();
 
   //cl Force restore default color space on exit, non-hdr content messes up hdr color space, should save and restore instead
-  if (DX::Windowing()->IsHDROutput())
+  if(DX::Windowing()->IsHDROutput())
 	DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
   else
 	DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
-
-  pl_cache_destroy(PL::PLInstance::Get()->GetCache());
-  
-  pl_renderer renderer = PL::PLInstance::Get()->GetRenderer();
-  pl_renderer_destroy(&renderer);
 }
 
 void CRendererPL::UpdateVideoFilters()
@@ -78,7 +71,7 @@ void CRendererPL::UpdateVideoFilters()
 	//if (!m_outputShader->Create(m_cmsOn, m_useDithering, m_ditherDepth, m_toneMapping, m_toneMapMethod, m_useHLGtoPQ))
 	if (!m_outputShader->Create(false, false, m_ditherDepth, false, VS_TONEMAPMETHOD_OFF, false))
 	{
-	  CLog::LogF(LOGDEBUG, "unable to create output shader.");
+	  CLog::LogF(LOGERROR, "unable to create output shader.");
 	  m_outputShader.reset();
 	}
 	else
@@ -101,31 +94,84 @@ bool CRendererPL::NeedBuffer(int idx)
 	  return true;
   }*/
 
-  return false;
+  //return false;
+  CRenderBuffer* buf = m_renderBuffers [idx];
+  if(!buf)
+	return false;
+  CRenderBufferImpl* buffer = static_cast<CRenderBufferImpl*>(buf);
+
+  return buffer->m_NeedFrame;
 }
+
 
 void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
 {
   if (m_renderBuffers[index])
   {
 	m_renderBuffers[index]->AppendPicture(picture);
-	m_renderBuffers[index]->frameIdx = m_frameIdx;
-	m_frameIdx += 2;
+	m_renderBuffers[index]->frameIdx = index;
+	//m_frameIdx += 2;
   }
 
-  //CRenderBuffer* rb = m_renderBuffers[index];
-  //struct pl_source_frame sframe{};
-  //sframe.pts = rb->pts/1000000.0;
-  //sframe.duration = rb->duration/1000000.0;
-  //sframe.map = map_frame;
-  //sframe.unmap = NULL;
-  //sframe.frame_data = rb;
-  //sframe.discard = NULL;
-  //sframe.first_field = PL_FIELD_NONE;
-  //if(!queue)
-  //  queue = pl_queue_create(PL::PLInstance::Get()->GetGpu());
-  //
-  //pl_queue_push(queue, &sframe);
+  CRenderBuffer* rb = m_renderBuffers[index];
+  struct pl_source_frame sframe{};
+  sframe.pts = rb->pts/1000000.0;
+  sframe.duration = rb->duration/1000000.0;
+  sframe.map = CRendererPL::MapFrame;
+  sframe.unmap = CRendererPL::UnmapFrame;
+  sframe.frame_data = rb;
+  sframe.discard = NULL;
+  sframe.first_field = PL_FIELD_NONE;
+  //CLog::LogF(LOGDEBUG, "AddVideoPicture idx: {} pts: {}", index, rb->pts/1000000.0);
+
+  pl_queue_push(*PL::PLInstance::Get()->GetQueue(), &sframe);
+}
+
+bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame* src, struct pl_frame* frameIn)
+{
+  CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
+  CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
+  if(!plbuffer->IsLoaded())
+  {
+	if (!plbuffer->UploadBuffer())
+	{
+	  CLog::LogF(LOGERROR, "Failed to upload buffer to GPU");
+	  return false;
+	}
+  }
+ 
+  InitializeFrameInFields(frameIn, static_cast<CRendererPL::CRenderBufferImpl*>(rb));
+  if(plbuffer->pictureFlags & DVP_FLAG_INTERLACED)
+  {
+	if(plbuffer->pictureFlags & DVP_FLAG_TOP_FIELD_FIRST)
+	{
+	  frameIn->field = PL_FIELD_TOP;
+	  frameIn->first_field = PL_FIELD_TOP;
+	}
+	else
+	{
+	  frameIn->field = PL_FIELD_BOTTOM;
+	  frameIn->first_field = PL_FIELD_TOP;
+	}
+  }
+  else
+  {
+	frameIn->field = PL_FIELD_NONE;
+	frameIn->first_field = PL_FIELD_NONE;
+  }
+
+  frameIn->user_data = plbuffer;
+  plbuffer->m_NeedFrame = true;
+  return true;
+}
+
+void CRendererPL::UnmapFrame(pl_gpu gpu, struct pl_frame* frame, const struct pl_source_frame* src)
+{
+  CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
+  CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
+
+  plbuffer->m_NeedFrame = false;
+
 }
 
 
@@ -240,7 +286,7 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
 
   DEBUG_INFO_VIDEO info;
-  pl_hdr_metadata hdr = plbuffer->hdrColorSpace.hdr;
+  pl_hdr_metadata hdr = plbuffer->m_ColorSpace.hdr;
 
   info.videoSource = StringUtils::Format("Display: Format: {} Levels: full, ColorMatrix:rgb", DX::DXGIFormatToShortString(m_IntermediateTarget.GetFormat()));
 
@@ -582,6 +628,79 @@ bool CRendererPL::InitializeFrame(pl_swapchain sw, pl_frame &frameOut)
   return true;
 }
 
+void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer)
+{
+  frameIn->color = buffer->m_ColorSpace;
+  frameIn->repr.levels = buffer->full_range ? PL_COLOR_LEVELS_FULL : PL_COLOR_LEVELS_LIMITED;
+  frameIn->repr.sys = pl_system_from_av(buffer->color_space);
+  frameIn->repr.bits = buffer->plFormat.bits;
+  frameIn->repr.alpha = PL_ALPHA_UNKNOWN;
+
+  if(buffer->hasDoviMetadata)
+  {
+	frameIn->repr.dovi = &buffer->doviPlMetadata;
+	frameIn->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
+  }
+  else
+  {
+	if(frameIn->repr.sys == PL_COLOR_SYSTEM_UNKNOWN)
+	  frameIn->repr.sys = PL_COLOR_SYSTEM_BT_709;
+  }
+
+  frameIn->num_planes = buffer->plFormat.num_planes;
+  frameIn->planes [0] = buffer->plplanes [0];
+  frameIn->planes [1] = buffer->plplanes [1];
+  frameIn->planes [2] = buffer->plplanes [2];
+  pl_frame_set_chroma_location(frameIn, buffer->m_chromaLocation);
+}
+
+class PtsEstimator {
+private:
+  std::optional<int> lastIndex;
+  double lastPts;
+  int currentDuplicateCount {0};
+
+public:
+  PtsEstimator() = default;
+
+  bool processFrame(double fps, int index, double pts, double& estimatedPts) //pts in microseconds
+  {
+	if(!lastIndex.has_value())   
+	{
+	  lastIndex = index;
+	  lastPts = pts;
+	  currentDuplicateCount = 0;
+	  estimatedPts = pts;
+	  return true;
+	}
+
+	if((pts < lastPts) || ((pts - lastPts) > 0.06 * 1000000.0))
+	{
+	  lastIndex = index;
+	  lastPts = pts;
+	  currentDuplicateCount = 0;
+	  estimatedPts = pts;
+	  return false;
+	}
+	else if(index == lastIndex.value()) 
+	{
+	  currentDuplicateCount++;
+	  if(currentDuplicateCount < 5) //cl
+	    estimatedPts = lastPts + currentDuplicateCount / fps * 1000000.0;
+	  else
+		estimatedPts = lastPts + 5.0 / fps * 1000000.0;
+	}
+	else
+	{
+	  lastIndex = index;
+	  lastPts = pts;
+	  currentDuplicateCount = 0;
+	  estimatedPts = pts;
+	}
+	return true;
+  }
+};
+PtsEstimator estimator;
 
 //---------------------------------------------------
 //
@@ -590,7 +709,7 @@ bool CRendererPL::InitializeFrame(pl_swapchain sw, pl_frame &frameOut)
 void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags)
 {
   CPLHelper::InitializeShaders(PL::PLInstance::Get()->GetGpu());  //cl here for now, race condition with the loading of videoSettings...
-
+ 
   pl_frame frameOut{};
   pl_frame frameIn{};
   CVideoSettings videoSettings = m_videoSettings;  //cl take a copy, we might change a few settings and don't want to have to revert
@@ -600,84 +719,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   if (!buf || !buf->IsLoaded())
 	return;
   CRenderBufferImpl* buffer = static_cast<CRenderBufferImpl*>(buf);
-  buffer->m_signature = m_signatureCounter++;
 
-
-  frameIn.repr.levels = buffer->full_range ? PL_COLOR_LEVELS_FULL : PL_COLOR_LEVELS_LIMITED;
-  frameIn.repr.sys = pl_system_from_av(buffer->color_space);
-  frameIn.repr.bits = buffer->plFormat.bits;
-  frameIn.repr.alpha = PL_ALPHA_UNKNOWN;
-  if (buffer->hasDoviMetadata)
-  {
-	pl_color_repr crpr{};
-	frameIn.color = m_colorSpace;
-	frameIn.repr.dovi = &buffer->doviPlMetadata;
-	frameIn.repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
-	frameIn.color.primaries = PL_COLOR_PRIM_BT_2020;
-	frameIn.color.transfer = PL_COLOR_TRC_PQ;
-	frameIn.color.hdr.min_luma = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, buffer->doviColor.source_min_pq / 4095.0f);
-	frameIn.color.hdr.max_luma = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, buffer->doviColor.source_max_pq / 4095.0f);
-	if (buffer->hasDoviExt) {
-	  frameIn.color.hdr.max_pq_y = buffer->doviExt.l1.max_pq / 4095.0f;
-	  frameIn.color.hdr.avg_pq_y = buffer->doviExt.l1.avg_pq / 4095.0f;
-	}
-  }
-  else if (buffer->hasHDR10PlusMetadata)
-  {
-	pl_av_hdr_metadata metadata = {};
-	metadata.clm = &buffer->lightMetadata;
-	metadata.mdm = &buffer->displayMetadata;
-	metadata.dhp = &buffer->hdrMetadata;
-	buffer->hdrColorSpace = m_colorSpace;
-	pl_map_hdr_metadata(&buffer->hdrColorSpace.hdr, &metadata);
-
-	frameIn.color = buffer->hdrColorSpace;
-  }
-  else
-  {
-	frameIn.color = m_colorSpace;
-	if (frameIn.repr.sys == PL_COLOR_SYSTEM_UNKNOWN)
-	  frameIn.repr.sys = PL_COLOR_SYSTEM_BT_709;
-  }
-
-  //set sample dep and others
-
-  frameIn.num_planes = buffer->plFormat.num_planes;
-  frameIn.planes[0] = buffer->plplanes[0];
-  frameIn.planes[1] = buffer->plplanes[1];
-  frameIn.planes[2] = buffer->plplanes[2];
-
-
-
-  // Interlacing
-  if (buffer->m_bIsInterlaced)
-  {
-	if ((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_TOP))
-	{
-	  frameIn.field = PL_FIELD_TOP;
-	  frameIn.first_field = PL_FIELD_TOP;
-	}
-	else if ((flags & RENDER_FLAG_FIELD1) && (flags & RENDER_FLAG_BOT))
-	{
-	  frameIn.field = PL_FIELD_BOTTOM;
-	  frameIn.first_field = PL_FIELD_TOP;
-	}
-	else if ((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_BOT))
-	{
-	  frameIn.field = PL_FIELD_BOTTOM;
-	  frameIn.first_field = PL_FIELD_BOTTOM;
-	}
-	else if ((flags & RENDER_FLAG_FIELD1) && (flags & RENDER_FLAG_TOP))
-	{
-	  frameIn.field = PL_FIELD_TOP;
-	  frameIn.first_field = PL_FIELD_BOTTOM;
-	}
-  }
-  else
-  {
-	frameIn.field = PL_FIELD_NONE;
-	frameIn.first_field = PL_FIELD_NONE;
-  }
+  InitializeFrameInFields(&frameIn, buffer); //cl wastefull, need cleanup
 
   pl_color_space target_csp{ };
     static DX::DeviceResources::mp_dxgi_factory_ctx ctx = {0}; //cl
@@ -705,8 +748,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   bool target_unknown = target_csp.transfer == PL_COLOR_TRC_UNKNOWN;
   if(target_unknown)
   {
-	if (pl_color_transfer_is_hdr(frameIn.color.transfer)) //cl mpv check if options specify a transfer instead
-	  target_csp.transfer = frameIn.color.transfer;
+	if (false) //cl mpv check if options specify a transfer instead
+	  target_csp.transfer = pl_color_space_hdr10.transfer;
 	else
 	  target_csp.transfer = pl_color_space_hdr10.transfer;
   }
@@ -869,7 +912,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  frameOut.color.hdr.max_luma = frameOut.color.hdr.max_luma; //cl 
   }
 
-
   bool clip_gamut = pl_primaries_valid(&frameOut.color.hdr.prim);
   clip_gamut = clip_gamut && frameOut.color.transfer != PL_COLOR_TRC_SCRGB;
   if (clip_gamut) {
@@ -899,7 +941,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   if (false && target_pq)
 	frameOut.color.transfer = PL_COLOR_TRC_SRGB;
 
-  //wrap the intermediate texture onthe output frame
+  // Target texture
   pl_d3d11_wrap_params d3dparams =
   {
   .tex = target.Get(),
@@ -916,13 +958,13 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   frameOut.planes[0].component_mapping[2] = PL_CHANNEL_B;
   frameOut.planes[0].component_mapping[3] = PL_CHANNEL_A;
   
-  CRect src = sourceRect;
+  // Transforms
   CRect dst = ApplyTransforms(CRect(destPoints[0],destPoints[2])); //uses m_renderOrientation
 
-  frameIn.crop.x0 = src.x1;
-  frameIn.crop.x1 = src.x2;
-  frameIn.crop.y0 = src.y1;
-  frameIn.crop.y1 = src.y2;
+  frameIn.crop.x0 = sourceRect.x1;
+  frameIn.crop.x1 = sourceRect.x2;
+  frameIn.crop.y0 = sourceRect.y1;
+  frameIn.crop.y1 = sourceRect.y2;
 
   frameOut.crop.x0 = dst.x1;
   frameOut.crop.x1 = dst.x2;
@@ -931,15 +973,17 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
 
-  //Without this recent version of libplacebo would spam the debug log like crazy
-  //And its also set on an info level
+  // Without this recent version of libplacebo would spam the debug log like crazy, its also set on an info level
   params->skip_target_clearing = true;
-  //this data is used for the video debug renderer
+
+  // Data used for the video debug renderer
   m_displayTransfer = frameOut.color.transfer;
   m_displayPrimaries = frameOut.color.primaries;
   m_videoMatrix = frameIn.repr.sys;
-  pl_frame_set_chroma_location(&frameIn, m_chromaLocation);
+  buffer->m_FrameInColor = frameIn.color;
+  buffer->m_FrameOutColor = frameOut.color;
 
+  // Shaders
   if((videoSettings.m_PlaceboShadersHooks.size() > 0) && (videoSettings.m_PlaceboShaderApply))
   {
 	static std::vector<const pl_hook*> hooks;
@@ -968,33 +1012,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	//cl params.hooks = nullptr;
 	params->num_hooks = 0;
   }
-  ////////////////////////////
-  // A list of additional overlays associated with this frame. Note that will
-  // be rendered directly onto intermediate/cache frames, so changing any of
-  // these overlays may require flushing the renderer cache.
-  // in pl_frame: const struct pl_overlay* overlays; int num_overlays;
-  //float color[4] = {50,100,100,100};
-  //struct pl_overlay_part b =  {{0,0,500,500},{30, 30, 400, 900}};
-  //struct pl_overlay a =  {
-  //.tex = frameIn.planes[0].texture,
-	//  .mode = PL_OVERLAY_NORMAL,
-	//  .coords = PL_OVERLAY_COORDS_DST_CROP,
-	//  .repr = frameIn.repr,
-	//  .color = frameIn.color,
-	//  .parts = &b,
-	//  .num_parts = 1,
-  //};
-  //frameOut.overlays = &a;
-  //std::string stats = "Codec: H264\nFPS: 60\nDropped: 0";
 
-  buffer->m_FrameInColor = frameIn.color;
-  buffer->m_FrameOutColor = frameOut.color;
-  
+  // Apply SDR to HDR specific settings
   if(videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(frameIn.color.transfer) && pl_color_transfer_is_hdr(frameOut.color.transfer))
   {
 	pl_options opt = videoSettings.m_placeboOptions->getPlOptions();
 
-	// Apply SDR to HDR specific settings
 	opt->color_adjustment.saturation = pow(10.0, (videoSettings.m_PlaceboSdrSaturation - 50.0) / 40.0);
 	opt->color_map_params.inverse_tone_mapping = videoSettings.m_PlaceboSdrColorMapInverseToneMapping;
 	opt->color_map_params.gamut_expansion = videoSettings.m_PlaceboSdrColorMapGamutExpansion;
@@ -1018,7 +1041,50 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	opt->color_map_params.gamut_constants.softclip_desat = videoSettings.m_PlaceboSdrGamutConstantsSoftclipDesat;
 	opt->color_map_params.gamut_constants.softclip_knee = videoSettings.m_PlaceboSdrGamutConstantsSoftclipKnee;
   }
+#if 1
+    double screenFps = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
+    double estimatedPts;
+	if(!estimator.processFrame(screenFps, m_iBufferIndex, buffer->pts, estimatedPts))
+	{
+	  pl_queue_reset(*PL::PLInstance::Get()->GetQueue());
+	  CLog::LogF(LOGDEBUG, "pl_queue_reset");
+	}
 
+	struct pl_frame_mix mix {};
+	pl_queue_params qParams {};
+	qParams.pts = estimatedPts / 1000000; //cl  - 1*buffer->duration / 1000000 ;   
+	qParams.radius = pl_frame_mix_radius(params) * videoSettings.m_PlaceboFrameMixerRadiusFactor;
+	qParams.vsync_duration = 1.0 / screenFps; //cl 
+	qParams.timeout = 0; //UINT64_MAX;
+	//qParams.interpolation_threshold = 0.01;
+	//qParams.drift_compensation = true;
+
+	//----------------
+	// Render Image
+	//----------------
+	LARGE_INTEGER frequency;
+	QueryPerformanceFrequency(&frequency);
+	int64_t start = CurrentHostCounter();
+	pl_queue_status res = pl_queue_update(*PL::PLInstance::Get()->GetQueue(), &mix, &qParams);
+	if(res != PL_QUEUE_OK)
+	{
+	  CLog::LogF(LOGERROR, "pl_queue_update failed with status {}", res);
+	}
+	bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
+	if(!res2)
+	{
+	  CLog::LogF(LOGERROR, "pl_render_image_mix failed");
+	}
+	int64_t end = CurrentHostCounter();
+	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
+	//CLog::LogF(LOGDEBUG, "idx: {} bufferPts: {:.3f}, estimatedPts: {:.3f}, qParamsPts: {:.3f}, mixNumFrames: {}, radius: {}", m_iBufferIndex, buffer->pts / 1000000.0, estimatedPts / 1000000.0, qParams.pts, mix.num_frames, qParams.radius);
+	//for(int i=0; i<mix.num_frames; ++i)
+	//{
+	//  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) mix.frames[i]->user_data;
+	//  CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	//}
+	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
+#else
   //----------------
   // Render Image
   //----------------
@@ -1028,13 +1094,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
   int64_t end = CurrentHostCounter();
   buffer->m_RenderDuration = (end - start)/(float)frequency.QuadPart;
-
-  buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(),&buffer->m_PeakDetectMetadata);
-  pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes[0].texture);
+  buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
+  pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
+#endif
    
   
   //pl_render_error err = pl_renderer_get_errors(PL::PLInstance::Get()->GetRenderer()).errors;
-
   // cl unclear, libplacebo disabled peak detection for dolby vision in renderer.c
   //if (vo->params) {
   //  // Augment metadata with peak detection max_pq_y / avg_pq_y
@@ -1124,7 +1189,6 @@ void CRendererPL::CRenderBufferImpl::ReleasePicture()
   {
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &pltex[i]);
   }
-
   CRenderBuffer::ReleasePicture();
 }
 
@@ -1134,7 +1198,7 @@ void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
   hdrDoviRpu = picture.hdrDoviRpu;
   hdrMetadata = picture.hdrMetadata;
   doviMetadata = picture.doviMetadata;
-  hdrColorSpace = picture.doviColorSpace;
+  doviColorSpace = picture.doviColorSpace;
   doviColorRepr = picture.doviColorRepr;
   doviPlMetadata = picture.doviPlMetadata;
   disable_residual_flag = picture.disable_residual_flag;
@@ -1144,6 +1208,7 @@ void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
   doviColor = picture.doviColor;
   doviExt = picture.doviExt;
   hasDoviExt = picture.hasDoviExt;
+  m_chromaLocation = pl_chroma_from_av(picture.chroma_position);
 
   if (videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
   {
@@ -1155,43 +1220,28 @@ void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
   pts = picture.pts;
   duration = picture.iDuration;
   m_bIsInterlaced = picture.iFlags & DVP_FLAG_INTERLACED;
-}
+  m_ColorSpace = pl_color_space {.primaries = pl_primaries_from_av(primaries), .transfer = pl_transfer_from_av(color_transfer), .hdr={}};
 
-bool CRendererPL::CRenderBufferImpl::GetLibplaceboFrame(pl_frame& frame)
-{
-  //clif (!m_bLoaded)
-  //cl  return false;
-  pl_color_repr crpr{};
-
-  if (hasDoviMetadata)
-  {
-	crpr = doviColorRepr;
-	frame.color = hdrColorSpace;
-  }
-
-  if (hasHDR10PlusMetadata)
+  if(hasHDR10PlusMetadata)
   {
 	pl_av_hdr_metadata metadata = {};
-	pl_hdr_metadata out = {};
 	metadata.clm = &lightMetadata;
 	metadata.mdm = &displayMetadata;
 	metadata.dhp = &hdrMetadata;
-
-	pl_map_hdr_metadata(&hdrColorSpace.hdr, &metadata);
-	frame.color.hdr = hdrColorSpace.hdr;
-
-
+	pl_map_hdr_metadata(&m_ColorSpace.hdr, &metadata);
   }
-  //set sample dep and others
-  crpr.bits = plFormat.bits;
-  frame.repr = crpr;
+  if(hasDoviMetadata)
+  {
+	m_ColorSpace = doviColorSpace;
+	//m_ColorSpace.primaries = PL_COLOR_PRIM_BT_2020; //cl ?
+	//m_ColorSpace.transfer = PL_COLOR_TRC_PQ; //cl ?
+	//m_ColorSpace.hdr.min_luma = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, doviColor.source_min_pq / 4095.0f); //cl ? 
+	//m_ColorSpace.hdr.max_luma = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, doviColor.source_max_pq / 4095.0f); //cl ?
 
-  frame.num_planes = plFormat.num_planes;
-  frame.planes[0] = plplanes[0];
-  frame.planes[1] = plplanes[1];
-  frame.planes[2] = plplanes[2];
-
-  return true;
+	//if(hasDoviExt) {
+	 // m_ColorSpace.hdr.max_pq_y = doviExt.l1.max_pq / 4095.0f;
+	  //m_ColorSpace.hdr.avg_pq_y = doviExt.l1.avg_pq / 4095.0f;
+  }
 }
 
 bool CRendererPL::CRenderBufferImpl::UploadBuffer()
@@ -1252,14 +1302,12 @@ bool CRendererPL::CRenderBufferImpl::UploadWrapPlanes()
   D3D11_TEXTURE2D_DESC desc;
   HRESULT hr;
   unsigned arrayIdx;
-  //CLog::Log(LOGERROR,"Before");
 
   if (FAILED(GetResource(&pResource, &arrayIdx)))
   {
 	CLog::LogF(LOGERROR, "unable to open d3d11va resource.");
 	return false;
   }
-  //CLog::Log(LOGERROR,"After");
 
   if (plFormat.num_planes==-1)
   {
