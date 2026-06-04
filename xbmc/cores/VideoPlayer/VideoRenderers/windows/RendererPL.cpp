@@ -71,7 +71,7 @@ void CRendererPL::UpdateVideoFilters()
 	//if (!m_outputShader->Create(m_cmsOn, m_useDithering, m_ditherDepth, m_toneMapping, m_toneMapMethod, m_useHLGtoPQ))
 	if (!m_outputShader->Create(false, false, m_ditherDepth, false, VS_TONEMAPMETHOD_OFF, false))
 	{
-	  CLog::LogF(LOGDEBUG, "unable to create output shader.");
+	  CLog::LogF(LOGERROR, "unable to create output shader.");
 	  m_outputShader.reset();
 	}
 	else
@@ -131,12 +131,15 @@ bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame
 {
   CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
-  if (!plbuffer->UploadBuffer())
+  if(!plbuffer->IsLoaded())
   {
-	CLog::LogF(LOGERROR, "Failed to upload buffer to GPU");
-	return false;
+	if (!plbuffer->UploadBuffer())
+	{
+	  CLog::LogF(LOGERROR, "Failed to upload buffer to GPU");
+	  return false;
+	}
   }
-
+ 
   InitializeFrameInFields(frameIn, static_cast<CRendererPL::CRenderBufferImpl*>(rb));
   if(plbuffer->pictureFlags & DVP_FLAG_INTERLACED)
   {
@@ -157,6 +160,7 @@ bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame
 	frameIn->first_field = PL_FIELD_NONE;
   }
 
+  frameIn->user_data = plbuffer;
   plbuffer->m_NeedFrame = true;
   return true;
 }
@@ -1048,7 +1052,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
 	struct pl_frame_mix mix {};
 	pl_queue_params qParams {};
-	qParams.pts = estimatedPts / 1000000 - buffer->duration / 1000000 ;   //buffer->getPts()/1000000.0; // Go back in time to allow using "future frames"
+	qParams.pts = estimatedPts / 1000000; //cl  - 1*buffer->duration / 1000000 ;   
 	qParams.radius = pl_frame_mix_radius(params) * videoSettings.m_PlaceboFrameMixerRadiusFactor;
 	qParams.vsync_duration = 1.0 / screenFps; //cl 
 	qParams.timeout = 0; //UINT64_MAX;
@@ -1073,7 +1077,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	}
 	int64_t end = CurrentHostCounter();
 	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
-	CLog::LogF(LOGDEBUG, "idx: {} pts: {:.3f}, estimatedPts: {:.3f}, mixNumFrames: {}, radius: {}", m_iBufferIndex, buffer->pts / 1000000.0, estimatedPts / 1000000.0, mix.num_frames, qParams.radius);
+	//CLog::LogF(LOGDEBUG, "idx: {} bufferPts: {:.3f}, estimatedPts: {:.3f}, qParamsPts: {:.3f}, mixNumFrames: {}, radius: {}", m_iBufferIndex, buffer->pts / 1000000.0, estimatedPts / 1000000.0, qParams.pts, mix.num_frames, qParams.radius);
+	//for(int i=0; i<mix.num_frames; ++i)
+	//{
+	//  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) mix.frames[i]->user_data;
+	//  CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	//}
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
 #else
   //----------------
@@ -1171,18 +1180,15 @@ CRendererPL::CRenderBufferImpl::CRenderBufferImpl(AVPixelFormat av_pix_format, u
 
 CRendererPL::CRenderBufferImpl::~CRenderBufferImpl()
 {
-  CLog::LogF(LOGERROR, "ReleasePicture~ {}", this->frameIdx);
   CRenderBufferImpl::ReleasePicture();
 }
 
 void CRendererPL::CRenderBufferImpl::ReleasePicture()
 {
-  CLog::LogF(LOGERROR, "ReleasePicture {}", this->frameIdx);
   for (int i = 0; i < plFormat.num_planes; i++)
   {
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &pltex[i]);
   }
-
   CRenderBuffer::ReleasePicture();
 }
 
@@ -1214,8 +1220,6 @@ void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
   pts = picture.pts;
   duration = picture.iDuration;
   m_bIsInterlaced = picture.iFlags & DVP_FLAG_INTERLACED;
-  //CLog::LogF(LOGDEBUG, "AppendPicture pts: {}", pts/1000000.0);
-
   m_ColorSpace = pl_color_space {.primaries = pl_primaries_from_av(primaries), .transfer = pl_transfer_from_av(color_transfer), .hdr={}};
 
   if(hasHDR10PlusMetadata)
@@ -1244,7 +1248,6 @@ bool CRendererPL::CRenderBufferImpl::UploadBuffer()
 {
   if (!videoBuffer)
 	return false;
-  CLog::LogF(LOGERROR, "Upload {}", this->frameIdx);
 
   if (videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
   {
@@ -1299,14 +1302,12 @@ bool CRendererPL::CRenderBufferImpl::UploadWrapPlanes()
   D3D11_TEXTURE2D_DESC desc;
   HRESULT hr;
   unsigned arrayIdx;
-  //CLog::Log(LOGERROR,"Before");
 
   if (FAILED(GetResource(&pResource, &arrayIdx)))
   {
 	CLog::LogF(LOGERROR, "unable to open d3d11va resource.");
 	return false;
   }
-  //CLog::Log(LOGERROR,"After");
 
   if (plFormat.num_planes==-1)
   {
