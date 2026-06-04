@@ -115,11 +115,13 @@ PL::PLInstance::~PLInstance() = default;
 
 bool PL::PLInstance::Init()
 {
+  // Log
   pl_log_params log_param{};
   log_param.log_cb = pl_log_cb;
   log_param.log_level = PL_LOG_DEBUG;
   m_plLog = pl_log_create(PL_API_VER, &log_param);
-  //d3d device
+
+  // D3D11
   pl_d3d11_params d3d_param{};
   d3d_param.device = DX::DeviceResources::Get()->GetD3DDevice();
   d3d_param.adapter = DX::DeviceResources::Get()->GetAdapter();
@@ -130,13 +132,11 @@ bool PL::PLInstance::Init()
   d3d_param.debug = false;
   //libplacebo dont touch it if 0
   d3d_param.max_frame_latency = 0;
-  //this was added to libplacebo to handle multi threaded rendering for kodi
-
-
-  // D3D11
   m_plD3d11 = pl_d3d11_create(m_plLog, &d3d_param);
   if (!m_plD3d11)
 	return false;
+  
+  // Swapchain
   if(!CreateSwapchain())
 	return false;
 
@@ -161,6 +161,7 @@ bool PL::PLInstance::Init()
   // Queue
   m_plQueue = pl_queue_create(PL::PLInstance::Get()->GetGpu());
 
+  m_isInitialized = true;
   return true;
 }
 
@@ -189,12 +190,24 @@ bool PL::PLInstance::CreateSwapchain(void)
 
 void PL::PLInstance::Reset()
 {
-  //cl???
-  CLog::Log(LOGDEBUG, "PL::PLInstance::Reset()");
-  m_plSwapchain = nullptr;
-  m_plLog = nullptr;
-  m_plD3d11 = nullptr;
-  m_plRenderer = nullptr;
+  if(m_isInitialized)
+  {
+	if(m_plCache) pl_cache_destroy(&m_plCache);
+	if(m_plQueue) pl_queue_destroy(&m_plQueue);
+	if(m_plRenderer) pl_renderer_destroy(&m_plRenderer);
+	if(m_plSwapchain) pl_swapchain_destroy(&m_plSwapchain);
+	if(m_plD3d11) pl_d3d11_destroy(&m_plD3d11);
+	if(m_plLog) pl_log_destroy(&m_plLog);
+
+	m_plCache = nullptr;
+	m_plQueue = nullptr;
+	m_plRenderer = nullptr;
+	m_plSwapchain = nullptr;
+	m_plD3d11 = nullptr;
+	m_plLog = nullptr;
+
+	m_isInitialized = false;
+  }
 }
 
 void PL::PLInstance::LogCurrent()

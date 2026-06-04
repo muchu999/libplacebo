@@ -53,22 +53,14 @@ using namespace Microsoft::WRL;
 
 CRendererPL::~CRendererPL()
 {
-  pl_swapchain m_plSwapchain;
-
-  m_plSwapchain = PL::PLInstance::Get()->GetSwapchain();
-  pl_swapchain_destroy(&m_plSwapchain);
+  Flush(false); // Must free buffers before resetting libplacebo
+  PL::PLInstance::Get()->Reset();
 
   //cl Force restore default color space on exit, non-hdr content messes up hdr color space, should save and restore instead
-  if (DX::Windowing()->IsHDROutput())
+  if(DX::Windowing()->IsHDROutput())
 	DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
   else
 	DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
-
-  pl_cache_destroy(PL::PLInstance::Get()->GetCache());
-  pl_queue_destroy(PL::PLInstance::Get()->GetQueue());
-  
-  pl_renderer renderer = PL::PLInstance::Get()->GetRenderer();
-  pl_renderer_destroy(&renderer);
 }
 
 void CRendererPL::UpdateVideoFilters()
