@@ -1068,12 +1068,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	pl_queue_status res = pl_queue_update(*PL::PLInstance::Get()->GetQueue(), &mix, &qParams);
 	if(res != PL_QUEUE_OK)
 	{
-	  CLog::LogF(LOGERROR, "pl_queue_update failed with status {}", res);
+	  //cl CLog::LogF(LOGERROR, "pl_queue_update failed with status {}", res);
 	}
 	bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
 	if(!res2)
 	{
-	  CLog::LogF(LOGERROR, "pl_render_image_mix failed");
+	  //cl CLog::LogF(LOGERROR, "pl_render_image_mix failed");
 	}
 	int64_t end = CurrentHostCounter();
 	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
