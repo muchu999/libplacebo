@@ -20,7 +20,7 @@
 #include <vector>
 
 #define MAX_FIELDS 3
-#define NUM_BUFFERS 6 //cl num of video buffers, went down to 3...
+#define NUM_BUFFERS 10 //cl num of video buffers, went down to 3...
 
 class CSetting;
 struct IntegerSettingOption;

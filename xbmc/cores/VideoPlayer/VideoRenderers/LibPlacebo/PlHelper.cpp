@@ -155,10 +155,11 @@ bool PL::PLInstance::Init()
   cacheParams.get = pl_cache_get_file;
   static const std::string cacheDir = CSpecialProtocol::TranslatePath(cacheDirectory);
   cacheParams.priv = (void*)cacheDir.c_str();
-
   m_plCache = pl_cache_create(&cacheParams);
   pl_gpu_set_cache(PL::PLInstance::Get()->GetGpu(), m_plCache);
 
+  // Queue
+  m_plQueue = pl_queue_create(PL::PLInstance::Get()->GetGpu());
 
   return true;
 }
@@ -189,6 +190,7 @@ bool PL::PLInstance::CreateSwapchain(void)
 void PL::PLInstance::Reset()
 {
   //cl???
+  CLog::Log(LOGDEBUG, "PL::PLInstance::Reset()");
   m_plSwapchain = nullptr;
   m_plLog = nullptr;
   m_plD3d11 = nullptr;
@@ -579,6 +581,7 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetInt(pNode, "placeboditherdepth", vs.m_PlaceboDitherDepth);
   XMLUtils::SetBoolean(pNode, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::SetBoolean(pNode, "placeboshaderapply", vs.m_PlaceboShaderApply);
+  XMLUtils::SetFloat(pNode, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
 
   XMLUtils::SetFloat(pNode, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::SetBoolean(pNode, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
@@ -748,6 +751,7 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetInt(pElement, "placeboditherdepth", vs.m_PlaceboDitherDepth);
   XMLUtils::GetBoolean(pElement, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::GetBoolean(pElement, "placeboshaderapply", vs.m_PlaceboShaderApply);
+  XMLUtils::GetFloat(pElement, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
 
   XMLUtils::GetFloat(pElement, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);

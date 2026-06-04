@@ -349,6 +349,7 @@ public:
   int m_PlaceboDitherDepth;
   bool m_PlaceboShaderApply;
   bool m_PlaceboUseHdrForSdr;
+  float m_PlaceboFrameMixerRadiusFactor;
 
   bool m_PlaceboColorAdjustmentEnabled;
   float m_PlaceboSaturation;

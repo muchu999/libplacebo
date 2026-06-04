@@ -117,6 +117,7 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboShadersFilename = other.m_PlaceboShadersFilename;
   m_PlaceboShadersParams = other.m_PlaceboShadersParams;
   m_PlaceboShadersHooks = other.m_PlaceboShadersHooks;
+  m_PlaceboFrameMixerRadiusFactor = other.m_PlaceboFrameMixerRadiusFactor;
 
   // Shallow copy and deep copy of m_placeboOptions content
   if (m_placeboOptions && other.m_placeboOptions)
@@ -168,12 +169,13 @@ CVideoSettings::CVideoSettings()
 
   // LibPLacebo specific video settings
   m_PlaceboUseHdrForSdr = false;
-  m_PlaceboDisplayHdrPeakLuminance = 700;
+  m_PlaceboDisplayHdrPeakLuminance = 700.0;
   m_PlaceboShaderApply = true;
   m_PlaceboTargetColorspaceHint = (int)SettinglibPlaceboTargetColorspaceHint::AUTO;
   m_PlaceboTargetColorspaceHintMode = (int)SettinglibPlaceboTargetColorspaceHintMode::TARGET;
   m_PlaceboLutFilename = "";
   m_PlaceboLut = nullptr;
+  m_PlaceboFrameMixerRadiusFactor = 1.0;
   
   m_PlaceboShadersEnabled = {};
   m_PlaceboShadersFilename = {};
@@ -308,11 +310,12 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if(m_PlaceboSdrGamutConstantsSoftclipKnee != right.m_PlaceboSdrGamutConstantsSoftclipKnee) return true;
 
   if (m_PlaceboDisplayHdrPeakLuminance != right.m_PlaceboDisplayHdrPeakLuminance) return true;
-  if(m_PlaceboDisplaySdrPeakLuminance != right.m_PlaceboDisplaySdrPeakLuminance) return true;
+  if (m_PlaceboDisplaySdrPeakLuminance != right.m_PlaceboDisplaySdrPeakLuminance) return true;
   if (m_PlaceboTargetColorspaceHint != right.m_PlaceboTargetColorspaceHint) return true;
   if (m_PlaceboTargetColorspaceHintMode != right.m_PlaceboTargetColorspaceHintMode) return true;
-  if(m_PlaceboDitherDepth != right.m_PlaceboDitherDepth) return true;
+  if (m_PlaceboDitherDepth != right.m_PlaceboDitherDepth) return true;
   if (m_PlaceboLutFilename != right.m_PlaceboLutFilename) return true;
+  if (m_PlaceboFrameMixerRadiusFactor != right.m_PlaceboFrameMixerRadiusFactor) return true;
 
   if (m_PlaceboShadersEnabled != right.m_PlaceboShadersEnabled) return true;
   if (m_PlaceboShadersFilename != right.m_PlaceboShadersFilename) return true;

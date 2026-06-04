@@ -71,6 +71,8 @@ public:
   bool Configure(const VideoPicture& picture, float fps, unsigned orientation) override;
 
   void AddVideoPicture(const VideoPicture& picture, int index) override; 
+  static bool MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame* src, struct pl_frame* out_frame);
+  static void UnmapFrame(pl_gpu gpu, struct pl_frame* frame, const struct pl_source_frame* src);
 
 
   DEBUG_INFO_VIDEO GetDebugInfo(int idx) override;
@@ -85,6 +87,7 @@ protected:
 
   void CheckVideoParameters() override;
   void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags) override;
+  static void InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer);
   void ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* target, float min_luma, bool hint);
   CRenderBuffer* CreateBuffer() override;
 
@@ -130,7 +133,8 @@ public:
   bool map_frame(pl_gpu gpu, pl_tex* tex, struct pl_source_frame* src, struct pl_frame* out_frame);
   double getPts() { return pts; }
   bool HasHdrData();
-  pl_color_space hdrColorSpace = {}; //< pl_color_space
+  pl_color_space doviColorSpace = {}; //< pl_color_space
+  pl_color_space m_ColorSpace = {}; //< pl_color_space
   pl_color_repr doviColorRepr = {};
   pl_dovi_metadata doviPlMetadata = {};
   pl_hdr_metadata hdrDoviRpu; //< pl_hdr_metadata
@@ -140,6 +144,8 @@ public:
   AVDOVIColorMetadata doviColor { 0 };
   AVDOVIDmData doviExt{ 0 };
   bool hasDoviExt = false;
+  bool m_NeedFrame = false;
+  pl_chroma_location m_chromaLocation = PL_CHROMA_UNKNOWN;
 
   // For debugInfo
   DXGI_OUTPUT_DESC1 m_OutputDesc1 = {};

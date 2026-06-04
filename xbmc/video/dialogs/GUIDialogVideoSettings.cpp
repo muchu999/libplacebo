@@ -129,6 +129,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_PLANE_UPSCALER                          "video.libplacebo.plane_upscaler"
 #define SETTING_LIB_PLACEBO_PLANE_DOWNSCALER                        "video.libplacebo.plane_dowsnscaler"
 #define SETTING_LIB_PLACEBO_FRAME_MIXER                             "video.libplacebo.frame_mixer"
+#define SETTING_LIB_PLACEBO_FRAME_MIXER_RADIUS_FACTOR 		        "video.libplacebo.frame_mixer_radius_factor"
 #define SETTING_LIB_PLACEBO_COLOR_MAP_GAMUT_MAPPING                 "video.libplacebo.gamut_map_funtion"
 #define SETTING_LIB_PLACEBO_SDR_COLOR_MAP_INTENT  			        "video.libplacebo.sdr_gamut_map_intent"
 #define SETTING_LIB_PLACEBO_SDR_COLOR_MAP_GAMUT_MAPPING             "video.libplacebo.sdr_gamut_map_funtion"
@@ -745,6 +746,11 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   else if(settingId == SETTING_LIB_PLACEBO_DITHER_DEPTH)
   {
 	vs.m_PlaceboDitherDepth = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_FRAME_MIXER_RADIUS_FACTOR)
+  {
+	vs.m_PlaceboFrameMixerRadiusFactor = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED)
@@ -1578,6 +1584,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
   CreateGroup(groupGamutMappingConstants, category);
   CreateGroup(groupSdr, category);
   CreateGroup(groupScaler, category);
+  CreateGroup(groupMixer, category);
   CreateGroup(groupDeband, category);
   CreateGroup(groupSigmoid, category);
   CreateGroup(groupDither, category);
@@ -1776,8 +1783,10 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddList(groupScaler, SETTING_LIB_PLACEBO_DOWNSCALER, 55224, SettingLevel::Basic, videoSettings.m_PlaceboDownscaler, CPLHelper::PlDownscalerOptionFiller, 55224);
 	AddList(groupScaler, SETTING_LIB_PLACEBO_PLANE_UPSCALER, 55225, SettingLevel::Basic, videoSettings.m_PlaceboPlaneUpscaler, CPLHelper::PlUpscalerOptionFiller, 55225);
 	AddList(groupScaler, SETTING_LIB_PLACEBO_PLANE_DOWNSCALER, 55226, SettingLevel::Basic, videoSettings.m_PlaceboPlaneDownscaler, CPLHelper::PlDownscalerOptionFiller, 55226);
-	AddList(groupScaler, SETTING_LIB_PLACEBO_FRAME_MIXER, 55227, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixer, CPLHelper::PlFrameMixerOptionFiller, 55227);
-
+	
+	// Mixer
+	AddList(groupMixer, SETTING_LIB_PLACEBO_FRAME_MIXER, 55227, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixer, CPLHelper::PlFrameMixerOptionFiller, 55227);
+	AddSlider(groupMixer, SETTING_LIB_PLACEBO_FRAME_MIXER_RADIUS_FACTOR, 55354, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixerRadiusFactor, "{0:3.1f}", (float) 0.1, (float) 0.1, (float) 2.0, 55354, usePopup);
 
 	// Color map
 	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_ENABLED, 55248, SettingLevel::Basic, videoSettings.m_PlaceboColorMapEnabled);

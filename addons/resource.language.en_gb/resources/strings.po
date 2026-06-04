@@ -25468,6 +25468,9 @@ msgctxt "#55353"
 msgid "Reset SDR to HDR mapping to Default"
 msgstr ""
 
+msgctxt "#55354"
+msgid "Frame mixing radius factor"
+msgstr ""
 
 
 
