@@ -40,7 +40,7 @@ public:
 
 protected:
   explicit CRendererShaders(CVideoSettings& videoSettings);
-  void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags) override;
+  void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts = 0.0) override;
   void CheckVideoParameters() override;
   void UpdateVideoFilters() override;
   CRenderBuffer* CreateBuffer() override;

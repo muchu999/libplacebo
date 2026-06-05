@@ -212,7 +212,7 @@ void CWinRenderer::Update()
   m_renderer->ManageTextures();
 }
 
-void CWinRenderer::RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha)
+void CWinRenderer::RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha, double renderPts)
 {
   if (!m_bConfigured)
     return;
@@ -224,7 +224,7 @@ void CWinRenderer::RenderUpdate(int index, int index2, bool clear, unsigned int 
 
   ManageRenderArea();
   m_renderer->Render(index, index2, DX::Windowing()->GetBackBuffer(), m_sourceRect, m_destRect,
-                     GetScreenRect(), flags);
+                     GetScreenRect(), flags, renderPts);
   DX::Windowing()->SetAlphaBlendEnable(true);
 }
 

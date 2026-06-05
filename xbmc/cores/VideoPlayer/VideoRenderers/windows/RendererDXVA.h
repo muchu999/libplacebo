@@ -42,7 +42,7 @@ protected:
   explicit CRendererDXVA(CVideoSettings& videoSettings);
 
   void CheckVideoParameters() override;
-  void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags) override;
+  void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts = 0.0) override;
   CRenderBuffer* CreateBuffer() override;
   virtual std::string GetRenderMethodDebugInfo() const;
 

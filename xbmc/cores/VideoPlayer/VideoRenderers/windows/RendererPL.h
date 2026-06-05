@@ -86,7 +86,7 @@ protected:
   explicit CRendererPL(CVideoSettings& videoSettings);
 
   void CheckVideoParameters() override;
-  void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags) override;
+  void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts = 0.0) override;
   static void InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer);
   void ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* target, float min_luma, bool hint);
   CRenderBuffer* CreateBuffer() override;
@@ -108,6 +108,13 @@ private:
   pl_color_system m_videoMatrix;
   pl_color_transfer m_displayTransfer;
   pl_color_primaries m_displayPrimaries;
+  int m_FrameMixerNumFrames = 0;
+  int m_FrameMixerMixErrors = 0;
+  int m_FrameMixerQueueMore = 0;
+  int m_FrameMixerQueueErr = 0;
+
+  int m_FrameMixerQueueResets = 0;
+
 
   // Tracking for parameter changes
   AVColorSpace m_lastColorSpace = AVCOL_SPC_UNSPECIFIED;

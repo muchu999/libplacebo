@@ -106,7 +106,7 @@ bool CRendererShaders::Configure(const VideoPicture& picture, float fps, unsigne
   return false;
 }
 
-void CRendererShaders::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags)
+void CRendererShaders::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts)
 {
   if (!m_colorShader)
     return;

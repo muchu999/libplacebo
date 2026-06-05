@@ -240,14 +240,15 @@ void CRendererBase::Render(int index,
                            const CRect& sourceRect,
                            const CRect& destRect,
                            const CRect& viewRect,
-                           unsigned flags)
+                           unsigned flags, 
+                           double renderPts)
 {
   m_iBufferIndex = index;
   ManageTextures();
-  Render(target, sourceRect, destRect, viewRect, flags);
+  Render(target, sourceRect, destRect, viewRect, flags, renderPts);
 }
 
-void CRendererBase::Render(CD3DTexture& target, const CRect& sourceRect, const CRect& destRect, const CRect& viewRect, unsigned flags)
+void CRendererBase::Render(CD3DTexture& target, const CRect& sourceRect, const CRect& destRect, const CRect& viewRect, unsigned flags, double renderPts)
 {
   if (m_iNumBuffers == 0)
     return;
@@ -277,7 +278,7 @@ void CRendererBase::Render(CD3DTexture& target, const CRect& sourceRect, const C
   CRect source = sourceRect;     // can be changed
   CRect(destRect).GetQuad(dest); // can be changed
 
-  RenderImpl(m_IntermediateTarget, source, dest, flags);
+  RenderImpl(m_IntermediateTarget, source, dest, flags, renderPts);
 
   if (m_toneMapping)
   {
