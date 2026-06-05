@@ -1072,12 +1072,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	int64_t end = CurrentHostCounter();
 	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
 	m_FrameMixerNumFrames = mix.num_frames;
-	CLog::LogF(LOGDEBUG, "idx: {} bufferPts: {:.3f}, renderPts: {:.3f},qParamsPts: {:.3f}, mixNumFrames: {}, radius: {}", m_iBufferIndex, buffer->pts / 1000000.0, renderPts/1000000, qParams.pts, mix.num_frames, qParams.radius);
-	for(int i=0; i<mix.num_frames; ++i)
-	{
-	  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) mix.frames[i]->user_data;
-	  CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
-	}
+	//CLog::LogF(LOGDEBUG, "idx: {} bufferPts: {:.3f}, renderPts: {:.3f},qParamsPts: {:.3f}, mixNumFrames: {}, radius: {}", m_iBufferIndex, buffer->pts / 1000000.0, renderPts/1000000, qParams.pts, mix.num_frames, qParams.radius);
+	//for(int i=0; i<mix.num_frames; ++i)
+	//{
+	//  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) mix.frames[i]->user_data;
+	//  CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	//}
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
 #else
   //----------------
