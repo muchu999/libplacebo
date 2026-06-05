@@ -121,8 +121,21 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
   sframe.unmap = CRendererPL::UnmapFrame;
   sframe.frame_data = rb;
   sframe.discard = NULL;
+#if 0
+  if(picture.iFlags & DVP_FLAG_INTERLACED)
+	if(picture.iFlags& DVP_FLAG_TOP_FIELD_FIRST)
+      sframe.first_field = PL_FIELD_TOP;
+	else
+	  sframe.first_field = PL_FIELD_BOTTOM;
+  else
+	sframe.first_field = PL_FIELD_NONE;
+#else
   sframe.first_field = PL_FIELD_NONE;
-  //CLog::LogF(LOGDEBUG, "AddVideoPicture idx: {} pts: {}", index, rb->pts/1000000.0);
+#endif
+
+
+
+  CLog::LogF(LOGDEBUG, "pl_queue_push idx: {} pts: {}", index, rb->pts/1000000.0);
 
   pl_queue_push(*PL::PLInstance::Get()->GetQueue(), &sframe);
 }
@@ -1057,7 +1070,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	pl_queue_status res = pl_queue_update(*PL::PLInstance::Get()->GetQueue(), &mix, &qParams);
 	if(res != PL_QUEUE_OK)
 	{
-	  //CLog::LogF(LOGERROR, "pl_queue_update failed with status {}", res);
+	  CLog::LogF(LOGERROR, "pl_queue_update failed with status {}", res);
 	  if(res == PL_QUEUE_MORE)
 	    ++m_FrameMixerQueueMore;
 	  else if (res == PL_QUEUE_ERR)
@@ -1066,18 +1079,25 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
 	if(!res2)
 	{
-	  //CLog::LogF(LOGERROR, "pl_render_image_mix failed");
+	  CLog::LogF(LOGERROR, "pl_render_image_mix failed");
 	  ++m_FrameMixerMixErrors;
 	}
-	int64_t end = CurrentHostCounter();
-	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
-	m_FrameMixerNumFrames = mix.num_frames;
-	//CLog::LogF(LOGDEBUG, "idx: {} bufferPts: {:.3f}, renderPts: {:.3f},qParamsPts: {:.3f}, mixNumFrames: {}, radius: {}", m_iBufferIndex, buffer->pts / 1000000.0, renderPts/1000000, qParams.pts, mix.num_frames, qParams.radius);
-	//for(int i=0; i<mix.num_frames; ++i)
+	//if(mix.num_frames == 0)
 	//{
-	//  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) mix.frames[i]->user_data;
-	//  CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	//  bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
 	//}
+	//else
+	{
+	  int64_t end = CurrentHostCounter();
+	  buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
+	  m_FrameMixerNumFrames = mix.num_frames;
+	  CLog::LogF(LOGDEBUG, "idx: {} bufferPts: {:.3f}, renderPts: {:.3f},qParamsPts: {:.3f}, mixNumFrames: {}, radius: {}", m_iBufferIndex, buffer->pts / 1000000.0, renderPts / 1000000, qParams.pts, mix.num_frames, qParams.radius);
+	  for(int i = 0; i < mix.num_frames; ++i)
+	  {
+		CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) mix.frames [i]->user_data;
+		CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	  }
+	}
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
 #else
   //----------------

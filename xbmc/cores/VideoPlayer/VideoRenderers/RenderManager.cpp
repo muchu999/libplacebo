@@ -29,6 +29,8 @@
 
 #include <memory>
 #include <mutex>
+#include <dxgitype.h>
+#include <rendering/dx/DeviceResources.h>
 
 using namespace std::chrono_literals;
 
@@ -1137,11 +1139,18 @@ void CRenderManager::PrepareNextRender()
   if (!m_showVideo && !m_forceNext)
     return;
 
+#if 1
   double frameOnScreen = m_dvdClock.GetClock();
+  DXGI_MODE_DESC md = {};
+  DX::DeviceResources::Get()->GetDisplayMode(&md); //cl wastefull?
+  double screenFps = md.RefreshRate.Numerator / (double) md.RefreshRate.Denominator;
+
+  double frametime = 1.0 / screenFps * DVD_TIME_BASE;
+#else
   double frametime = 1.0 /
                      static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS()) *
                      DVD_TIME_BASE;
-
+#endif
   m_displayLatency = DVD_MSEC_TO_TIME(
       m_latencyTweak +
       static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetDisplayLatency()) -
