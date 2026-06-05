@@ -116,8 +116,7 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
   else
 	sframe.first_field = PL_FIELD_NONE;
 
-  CLog::LogF(LOGDEBUG, "pl_queue_push idx: {} pts: {}", index, rb->pts/1000000.0);
-
+  //CLog::LogF(LOGDEBUG, "pl_queue_push idx: {} pts: {}", index, rb->pts/1000000.0);
   pl_queue_push(*PL::PLInstance::Get()->GetQueue(), &sframe);
 }
 
