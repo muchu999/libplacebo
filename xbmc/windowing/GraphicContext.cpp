@@ -28,6 +28,8 @@
 
 #include <cassert>
 #include <mutex>
+#include <dxgitype.h>
+#include <rendering/dx/DeviceResources.h>
 
 using KODI::UTILS::COLOR::Color;
 
@@ -967,6 +969,13 @@ int CGraphicContext::GetHeight() const
 
 float CGraphicContext::GetFPS() const
 {
+#if 1 //cl testing because of hard coded value and unreliable refresh rate info on some platforms
+  DXGI_MODE_DESC md = {};
+  DX::DeviceResources::Get()->GetDisplayMode(&md); //cl wastefull?
+  float screenFps = md.RefreshRate.Numerator / (float) md.RefreshRate.Denominator;
+  return screenFps;
+#else
+
   if (m_Resolution != RES_INVALID)
   {
     RESOLUTION_INFO info = GetResInfo();
@@ -974,6 +983,7 @@ float CGraphicContext::GetFPS() const
       return info.fRefreshRate;
   }
   return 60.0f;
+#endif
 }
 
 float CGraphicContext::GetDisplayLatency() const
