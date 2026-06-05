@@ -1419,7 +1419,7 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, enum AVPixel
   }
 
   if (6 > m_shared)
-    m_shared = 6;
+    m_shared = 6;    //cl where is this value coming from, limits number of buffers available to renderer
 
   m_refs = 2 + m_shared; // 1 decode + 1 safety + display
   m_surface_alignment = 16;

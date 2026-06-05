@@ -86,7 +86,7 @@ bool CRendererSoftware::Supports(ESCALINGMETHOD method) const
     || method == VS_SCALINGMETHOD_LINEAR;
 }
 
-void CRendererSoftware::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags)
+void CRendererSoftware::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts)
 {
   // if creation failed
   if (!m_outputShader)

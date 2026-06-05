@@ -204,7 +204,7 @@ void CRendererDXVA::CheckVideoParameters()
                            m_conversion.m_outputFormat);
 }
 
-void CRendererDXVA::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags)
+void CRendererDXVA::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts)
 {
   CRect src = sourceRect;
   CRect dst = HasHQScaler() ? sourceRect : ApplyTransforms(CRect(destPoints[0], destPoints[2]));

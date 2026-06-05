@@ -126,9 +126,9 @@ public:
 
   virtual void AddVideoPicture(const VideoPicture &picture, int index);
   void Render(int index, int index2, CD3DTexture& target, const CRect& sourceRect, 
-              const CRect& destRect, const CRect& viewRect, unsigned flags);
+              const CRect& destRect, const CRect& viewRect, unsigned flags, double renderPts);
   void Render(CD3DTexture& target, const CRect& sourceRect, const CRect& destRect, 
-              const CRect& viewRect, unsigned flags = 0);
+              const CRect& viewRect, unsigned flags = 0, double renderPts = 0.0);
 
   void ManageTextures();
   int NextBuffer() const;
@@ -171,7 +171,7 @@ protected:
     return m_HdrType == HDR_TYPE::HDR_HDR10 || m_HdrType == HDR_TYPE::HDR_HLG;
   }
 
-  virtual void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint (&destPoints)[4], uint32_t flags) = 0;
+  virtual void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint (&destPoints)[4], uint32_t flags, double renderPts = 0.0) = 0;
   virtual void FinalOutput(CD3DTexture& source, CD3DTexture& target, const CRect& sourceRect, const CPoint(&destPoints)[4]);
 
   virtual CRenderBuffer* CreateBuffer() = 0;

@@ -198,6 +198,7 @@ protected:
     double         pts;
     EFIELDSYNC     presentfield;
     EPRESENTMETHOD presentmethod;
+	double         renderPts;
   } m_Queue[NUM_BUFFERS]{};
 
   std::deque<int> m_free;
@@ -213,6 +214,7 @@ protected:
   int m_NumberBuffers = 0;
   int m_lateframes = -1;
   double m_presentpts = 0.0;
+  double m_renderPts = 0.0;
   EPRESENTSTEP m_presentstep = PRESENT_IDLE;
   XbmcThreads::EndTime<> m_presentTimer;
   bool m_forceNext = false;
