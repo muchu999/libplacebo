@@ -1126,29 +1126,24 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
   return m_queued.size() + m_discard.size();
 }
 
-class DynamicHistorySyncPLL {
+class CriticallyDampedSyncPLL {
 private:
   double lastRawTimeUs;
   double lastPredictedTimeUs;
   double estimatedPeriodUs;
 
   std::vector<double> deltaHistory;
+  const size_t MAX_HISTORY = 21; // Lock history deep to safely absorb feedback oscillations
 
-  // Dynamic Window Boundaries
-  const size_t MIN_HISTORY = 3;  // Fast mode (handles big changes instantly)
-  const size_t MAX_HISTORY = 21; // Steady mode (stops feedback oscillations)
-  size_t currentMaxHistory;
-
-  // Loop Filter gains (Dampened to prevent feedback loops)
-  const double kp = 0.03;
-  const double ki = 0.005;
+  // Low, stable baseline gains
+  const double baseKp = 0.02;
+  const double baseKi = 0.002;
   double integratorUs = 0.0;
   bool isInitialized = false;
 
 public:
-  DynamicHistorySyncPLL()
-	: lastRawTimeUs(0), lastPredictedTimeUs(0.0), estimatedPeriodUs(0.0),
-	currentMaxHistory(MIN_HISTORY) {
+  CriticallyDampedSyncPLL()
+	: lastRawTimeUs(0), lastPredictedTimeUs(0.0), estimatedPeriodUs(0.0) {
   }
 
   double process(double rawTimestampUs) {
@@ -1162,7 +1157,7 @@ public:
 	  deltaHistory.push_back(delta);
 	  lastRawTimeUs = rawTimestampUs;
 
-	  if(deltaHistory.size() >= MIN_HISTORY) {
+	  if(deltaHistory.size() >= 5) {
 		estimatedPeriodUs = delta;
 		lastPredictedTimeUs = rawTimestampUs;
 		isInitialized = true;
@@ -1170,47 +1165,30 @@ public:
 	  return rawTimestampUs;
 	}
 
-	// 1. Calculate raw incoming time delta
 	double rawDelta = rawTimestampUs - lastRawTimeUs;
 	lastRawTimeUs = rawTimestampUs;
 
-	// 2. Short-Term Variance Check (Detect an intentional change before the window fills)
-	// If the new delta deviates by more than 15% from our steady track, shrink history
-	if(estimatedPeriodUs > 0.0) {
-	  double deviation = std::abs(rawDelta - estimatedPeriodUs) / estimatedPeriodUs;
-	  if(deviation > 0.15) {
-		// Crisis mode: Drop historical weight to react immediately
-		currentMaxHistory = MIN_HISTORY;
-		while(deltaHistory.size() > currentMaxHistory) {
-		  deltaHistory.erase(deltaHistory.begin());
-		}
-	  }
-	  else {
-		// Stable mode: Gradually grow back to maximum smoothing
-		if(currentMaxHistory < MAX_HISTORY) {
-		  currentMaxHistory += 2; // Grow by steps to avoid sudden jumps
-		}
-	  }
-	}
+	// 1. Dynamic Scaling (60Hz -> 0.50 | 30Hz -> 1.00 | 24Hz -> 1.25)
+	double timeRatio = estimatedPeriodUs / 33333.33;
+	double activeKp = baseKp * timeRatio;
+	double activeKi = baseKi * timeRatio;
 
-	// 3. Maintain the dynamic rolling history window
-	if(deltaHistory.size() >= currentMaxHistory) {
+	// 2. Fixed Deep History (Crushes raw feedback loop noise)
+	if(deltaHistory.size() >= MAX_HISTORY) {
 	  deltaHistory.erase(deltaHistory.begin());
 	}
 	deltaHistory.push_back(rawDelta);
 
-	// 4. Extract the median velocity from our scaled window
 	std::vector<double> sortedDeltas = deltaHistory;
 	std::sort(sortedDeltas.begin(), sortedDeltas.end());
 	double cleanMeasuredPeriodUs = sortedDeltas [sortedDeltas.size() / 2];
 
-	// 5. Calculate phase error
+	// 3. Compute Phase Error
 	double expectedTimeUs = lastPredictedTimeUs + estimatedPeriodUs;
 	double phaseErrorUs = rawTimestampUs - expectedTimeUs;
 
-	// 6. Hard Reset Trigger (Safety backup for instant mode switches)
-	if(std::abs(phaseErrorUs) > (estimatedPeriodUs * 0.4)) {
-	  currentMaxHistory = MIN_HISTORY;
+	// 4. Hard Reset (Bypass everything on genuine media changes e.g., 24 -> 60)
+	if(std::abs(phaseErrorUs) > (estimatedPeriodUs * 0.45)) {
 	  deltaHistory.clear();
 	  deltaHistory.push_back(cleanMeasuredPeriodUs);
 	  estimatedPeriodUs = cleanMeasuredPeriodUs;
@@ -1219,19 +1197,40 @@ public:
 	  return rawTimestampUs;
 	}
 
-	// 7. PI Loop Updates
-	integratorUs += ki * phaseErrorUs;
+	// 5. Phase Error Soft-Clamping (CPU Burst Protection)
+	double jitterTolerance = estimatedPeriodUs * 0.15;
+	if(std::abs(phaseErrorUs) > jitterTolerance) {
+	  phaseErrorUs = (phaseErrorUs > 0) ? jitterTolerance : -jitterTolerance;
+	}
+
+	// 6. Core PI Loop Calculations
+	integratorUs += activeKi * phaseErrorUs;
 	double maxIntegrator = estimatedPeriodUs * 0.05;
 	integratorUs = std::max(-maxIntegrator, std::min(maxIntegrator, integratorUs));
 
-	estimatedPeriodUs = cleanMeasuredPeriodUs + (kp * phaseErrorUs) + integratorUs;
+	// Calculate what the loop WANTS the new period to be
+	double targetPeriodUs = cleanMeasuredPeriodUs + (activeKp * phaseErrorUs) + integratorUs;
 
-	// 8. Generate clean timeline output
+	// 7. CRITICAL FIX: Slew-Rate Acceleration Limiter (The Oscillation Killer)
+	// We calculate how much the period is attempting to change in a single frame.
+	double deltaPeriodUs = targetPeriodUs - estimatedPeriodUs;
+
+	// Scale allowed change per frame dynamically. 
+	// 60Hz allows max ~60μs adjustment per frame. 24Hz allows ~150μs.
+	double maxPeriodChangePerFrame = 120.0 * (timeRatio * timeRatio);
+
+	// Clamp the change rate to strictly enforce critical damping
+	deltaPeriodUs = std::max(-maxPeriodChangePerFrame, std::min(maxPeriodChangePerFrame, deltaPeriodUs));
+
+	// Apply the safe, damped step
+	estimatedPeriodUs += deltaPeriodUs;
+
+	// 8. Generate locked Output Timeline
 	lastPredictedTimeUs = expectedTimeUs;
 	return expectedTimeUs;
   }
 };
-DynamicHistorySyncPLL synchPLL;
+CriticallyDampedSyncPLL synchPLL;
 
 void CRenderManager::PrepareNextRender()
 {
