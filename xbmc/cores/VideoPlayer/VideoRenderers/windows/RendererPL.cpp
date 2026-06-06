@@ -1028,6 +1028,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	//qParams.drift_compensation = true;
 
     #if LOG_PL_QUEUE
+	qParams.pts += videoSettings.m_PlaceboTest / 1000.0;
     // Find min max pts in queue for debug
 	pl_source_frame out = {};
 	double minPts = std::numeric_limits<double>::max();
@@ -1035,11 +1036,13 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	for(int i = 0; i < pl_queue_num_frames(*pQueue); ++i)
 	{
 	  pl_queue_peek(*pQueue, i, &out);
+	  if(!out.pts && !out.duration) // for interleaved material, libplacebo internally inserts fake frames
+		continue;
 	  if(out.pts < minPts) minPts = out.pts;
 	  if(out.pts > maxPts) maxPts = out.pts;
 	}
-	double renderPtsPos = (renderPts / 1000000.0 - minPts) / (maxPts - minPts);
-	double renderPtsShiftedPos = (qParams.pts - minPts) / (maxPts - minPts);
+	double renderPtsPos = (maxPts == minPts) ? 0.5 : (renderPts / 1000000.0 - minPts) / (maxPts - minPts);
+	double renderPtsShiftedPos = (maxPts == minPts) ? 0.5 : (qParams.pts - minPts) / (maxPts - minPts);
     #endif
 
 	// Start timer

@@ -1418,8 +1418,8 @@ bool CDecoder::Open(AVCodecContext* avctx, AVCodecContext* mainctx, enum AVPixel
     return false;
   }
 
-  if (6 > m_shared)
-    m_shared = 6;    //cl where is this value coming from, limits number of buffers available to renderer
+  if (8 > m_shared)
+    m_shared = 8;    //cl where is this value coming from, limits number of buffers available to renderer, increased to 8 for frame mixer with interleaved material
 
   m_refs = 2 + m_shared; // 1 decode + 1 safety + display
   m_surface_alignment = 16;

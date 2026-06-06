@@ -855,9 +855,9 @@ void CRenderManager::PresentFields(bool clear, DWORD flags, DWORD alpha)
   else
   {
     if( m.presentfield == FS_TOP)
-      m_pRenderer->RenderUpdate(m_presentsource, m_presentsourcePast, clear, flags | RENDER_FLAG_BOT | RENDER_FLAG_FIELD1, alpha, m_renderPts);
+      m_pRenderer->RenderUpdate(m_presentsource, m_presentsourcePast, clear, flags | RENDER_FLAG_BOT | RENDER_FLAG_FIELD1, alpha, m_renderPts2);
     else
-      m_pRenderer->RenderUpdate(m_presentsource, m_presentsourcePast, clear, flags | RENDER_FLAG_TOP | RENDER_FLAG_FIELD1, alpha, m_renderPts);
+      m_pRenderer->RenderUpdate(m_presentsource, m_presentsourcePast, clear, flags | RENDER_FLAG_TOP | RENDER_FLAG_FIELD1, alpha, m_renderPts2);
   }
 }
 
@@ -1290,6 +1290,7 @@ void CRenderManager::PrepareNextRender()
   }
 
   m_renderPts = renderPts;
+  m_renderPts2 = renderPts + frametime; // In case of interleaved material, the present function is only called once.
   CLog::LogFC(LOGDEBUG, LOGAVTIMING,
               "frameOnScreen: {:f} renderPts: {:f} nextFramePts: {:f} -> diff: {:f}  render: {} "
               "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:f}, OnscreenDiff: {:f}",
