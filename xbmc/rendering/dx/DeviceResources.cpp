@@ -1166,8 +1166,16 @@ void DX::DeviceResources::Present()
   DXGI_PRESENT_PARAMETERS parameters = {};
   //int64_t start = CurrentHostCounter();
   HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
-  //int64_t end = CurrentHostCounter();
-  //CLog::LogF(LOGDEBUG,"DX::DeviceResources::Present duration = {}", end-start);
+
+#if 0
+  // Take a look at jitter assuming the flip happens at the end of present(), which sometimes take a long time because of GPU memory copy
+  int64_t end = CurrentHostCounter();
+  static int64_t lastEnd = 0;
+  int64_t duration = end - lastEnd;
+  lastEnd = end;
+  static int64_t freq = CurrentHostFrequency();
+  CLog::LogF(LOGDEBUG,"DX::DeviceResources::Present Inter frame time = {}", duration/(float)freq);
+#endif
 
   // If the device was removed either by a disconnection or a driver upgrade, we
   // must recreate all device resources.

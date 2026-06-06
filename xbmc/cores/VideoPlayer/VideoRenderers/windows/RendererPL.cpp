@@ -279,9 +279,9 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	plbuffer->m_FrameOutColor.hdr.max_luma,
 	Pq2nit(plbuffer->m_FrameOutColor.hdr.max_pq_y),
 	Pq2nit(plbuffer->m_FrameOutColor.hdr.avg_pq_y));
-  info.render += StringUtils::Format(", mixer numFrames: {:1}, mixErrors: {}, queueMore: {}, queueErr: {}, queueResets: {}",
+  info.render += StringUtils::Format(", mixer numFrames: {:1}, renderErrors: {}, queueMore: {}, queueErr: {}, queueResets: {}",
 	m_FrameMixerNumFrames,
-	m_FrameMixerMixErrors,
+	m_FrameMixerRenderErrors,
 	m_FrameMixerQueueMore,
 	m_FrameMixerQueueErr,
 	m_FrameMixerQueueResets);
@@ -998,72 +998,97 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	opt->color_map_params.gamut_constants.softclip_knee = videoSettings.m_PlaceboSdrGamutConstantsSoftclipKnee;
   }
   
-#if 1
-    double screenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
-	CLog::LogF(LOGDEBUG, "screenFps: {}", screenFps);
 
-	if(queueCheck.needReset(buffer->duration, renderPts))
-	{
-	  //CLog::LogF(LOGDEBUG, "pl_queue_reset");
-	  pl_queue_reset(*PL::PLInstance::Get()->GetQueue());
-	  m_FrameMixerQueueResets++;
-	}
-
+  if(queueCheck.needReset(buffer->duration, renderPts))
+  {
+	//CLog::LogF(LOGDEBUG, "pl_queue_reset");
+	pl_queue_reset(*PL::PLInstance::Get()->GetQueue());
+	m_FrameMixerQueueResets++;
+  }
+  //----------------
+  // Render Image
+  //----------------
+  #define LOG_PL_QUEUE 0
+  pl_queue* pQueue = PL::PLInstance::Get()->GetQueue();
+  if(!pl_queue_num_frames(*pQueue))
+  {
+	CLog::LogF(LOGDEBUG, "pl_queue is empty");
+  }
+  else
+  {
+	// Prepare queue update params
+	double screenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
 	struct pl_frame_mix mix {};
 	pl_queue_params qParams {};
-	qParams.pts = renderPts / 1000000; // + 3*buffer->duration / 1000000 ;   
+	qParams.pts = renderPts / 1000000; // + videoSettings.m_PlaceboTest / 1000.0; // - 0.021; // + 3*buffer->duration / 1000000 ;   
 	qParams.radius = pl_frame_mix_radius(params) * videoSettings.m_PlaceboFrameMixerRadiusFactor;
 	qParams.vsync_duration = 1.0 / screenFps; //cl 
 	qParams.timeout = 0; //UINT64_MAX;
 	//qParams.interpolation_threshold = 0.01;
 	//qParams.drift_compensation = true;
 
-	//----------------
-	// Render Image
-	//----------------
+    #if LOG_PL_QUEUE
+    // Find min max pts in queue for debug
+	pl_source_frame out = {};
+	double minPts = std::numeric_limits<double>::max();
+	double maxPts = std::numeric_limits<double>::lowest();
+	for(int i = 0; i < pl_queue_num_frames(*pQueue); ++i)
+	{
+	  pl_queue_peek(*pQueue, i, &out);
+	  if(out.pts < minPts) minPts = out.pts;
+	  if(out.pts > maxPts) maxPts = out.pts;
+	}
+	double renderPtsPos = (renderPts / 1000000.0 - minPts) / (maxPts - minPts);
+	double renderPtsShiftedPos = (qParams.pts - minPts) / (maxPts - minPts);
+    #endif
+
+	// Start timer
 	LARGE_INTEGER frequency;
 	QueryPerformanceFrequency(&frequency);
 	int64_t start = CurrentHostCounter();
-	pl_queue_status res = pl_queue_update(*PL::PLInstance::Get()->GetQueue(), &mix, &qParams);
+
+	// Queue update
+	pl_queue_status res = pl_queue_update(*pQueue, &mix, &qParams);
 	if(res != PL_QUEUE_OK)
 	{
 	  //CLog::LogF(LOGERROR, "pl_queue_update failed with status {}", res);
 	  if(res == PL_QUEUE_MORE)
-	    ++m_FrameMixerQueueMore;
-	  else if (res == PL_QUEUE_ERR)
+		++m_FrameMixerQueueMore;
+	  else if(res == PL_QUEUE_ERR)
 		++m_FrameMixerQueueErr;
+	  if(mix.num_frames == 0)
+	  {
+		// Nothing to present, there will be a timeout on OutputPicture down the road but it will recover. 
+		// We could present something anyway but it will not help much. 
+	  }
 	}
+
+	// Render
+	m_FrameMixerNumFrames = mix.num_frames;
 	bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
 	if(!res2)
 	{
 	  //CLog::LogF(LOGERROR, "pl_render_image_mix failed");
-	  ++m_FrameMixerMixErrors;
+	  ++m_FrameMixerRenderErrors;
 	}
 
+	// Stop timer
 	int64_t end = CurrentHostCounter();
 	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
-	m_FrameMixerNumFrames = mix.num_frames;
-	CLog::LogF(LOGDEBUG, "idx: {} bufferPts: {:.3f}, renderPts: {:.3f},qParamsPts: {:.3f}, mixNumFrames: {}, radius: {}", m_iBufferIndex, buffer->pts / 1000000.0, renderPts / 1000000, qParams.pts, mix.num_frames, qParams.radius);
-	//for(int i = 0; i < mix.num_frames; ++i)
-	//{
-	//CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) mix.frames [i]->user_data;
-	//CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
-	//}
-	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
-#else
-  //----------------
-  // Render Image
-  //----------------
-  LARGE_INTEGER frequency;
-  QueryPerformanceFrequency(&frequency);
-  int64_t start = CurrentHostCounter();
-  bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
-  int64_t end = CurrentHostCounter();
-  buffer->m_RenderDuration = (end - start)/(float)frequency.QuadPart;
-  buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
+
+#if LOG_PL_QUEUE
+	CLog::LogF(LOGDEBUG, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f},qParamsPts: {:.3f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, QFpsEst: {:f}, QVpsEst: {:f}, minPts: {:.3f}, maxPts: {:.3f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
+	  screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000000.0, renderPts / 1000000,
+	  qParams.pts, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), pl_queue_estimate_fps(*pQueue), pl_queue_estimate_vps(*pQueue), minPts, maxPts, renderPtsPos, renderPtsShiftedPos);
+	for(int i = 0; i < mix.num_frames; ++i)
+	{
+	  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) (mix.frames [i]->user_data);
+	  CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	}
+    #endif
+  }
   pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
-#endif
-   
+
   
   //pl_render_error err = pl_renderer_get_errors(PL::PLInstance::Get()->GetRenderer()).errors;
   // cl unclear, libplacebo disabled peak detection for dolby vision in renderer.c

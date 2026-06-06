@@ -969,7 +969,7 @@ int CGraphicContext::GetHeight() const
 
 float CGraphicContext::GetFPS() const
 {
-#if 1 //cl testing because of hard coded value and unreliable refresh rate info on some platforms
+#if 1 //cl testing because of hard coded value and unreliable refresh rate on my PC
   DXGI_MODE_DESC md = {};
   DX::DeviceResources::Get()->GetDisplayMode(&md); //cl wastefull?
   float screenFps = md.RefreshRate.Numerator / (float) md.RefreshRate.Denominator;

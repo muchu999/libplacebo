@@ -1126,6 +1126,113 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
   return m_queued.size() + m_discard.size();
 }
 
+class DynamicHistorySyncPLL {
+private:
+  double lastRawTimeUs;
+  double lastPredictedTimeUs;
+  double estimatedPeriodUs;
+
+  std::vector<double> deltaHistory;
+
+  // Dynamic Window Boundaries
+  const size_t MIN_HISTORY = 3;  // Fast mode (handles big changes instantly)
+  const size_t MAX_HISTORY = 21; // Steady mode (stops feedback oscillations)
+  size_t currentMaxHistory;
+
+  // Loop Filter gains (Dampened to prevent feedback loops)
+  const double kp = 0.03;
+  const double ki = 0.005;
+  double integratorUs = 0.0;
+  bool isInitialized = false;
+
+public:
+  DynamicHistorySyncPLL()
+	: lastRawTimeUs(0), lastPredictedTimeUs(0.0), estimatedPeriodUs(0.0),
+	currentMaxHistory(MIN_HISTORY) {
+  }
+
+  double process(double rawTimestampUs) {
+	if(!isInitialized) {
+	  if(lastRawTimeUs == 0) {
+		lastRawTimeUs = rawTimestampUs;
+		return rawTimestampUs;
+	  }
+
+	  double delta = rawTimestampUs - lastRawTimeUs;
+	  deltaHistory.push_back(delta);
+	  lastRawTimeUs = rawTimestampUs;
+
+	  if(deltaHistory.size() >= MIN_HISTORY) {
+		estimatedPeriodUs = delta;
+		lastPredictedTimeUs = rawTimestampUs;
+		isInitialized = true;
+	  }
+	  return rawTimestampUs;
+	}
+
+	// 1. Calculate raw incoming time delta
+	double rawDelta = rawTimestampUs - lastRawTimeUs;
+	lastRawTimeUs = rawTimestampUs;
+
+	// 2. Short-Term Variance Check (Detect an intentional change before the window fills)
+	// If the new delta deviates by more than 15% from our steady track, shrink history
+	if(estimatedPeriodUs > 0.0) {
+	  double deviation = std::abs(rawDelta - estimatedPeriodUs) / estimatedPeriodUs;
+	  if(deviation > 0.15) {
+		// Crisis mode: Drop historical weight to react immediately
+		currentMaxHistory = MIN_HISTORY;
+		while(deltaHistory.size() > currentMaxHistory) {
+		  deltaHistory.erase(deltaHistory.begin());
+		}
+	  }
+	  else {
+		// Stable mode: Gradually grow back to maximum smoothing
+		if(currentMaxHistory < MAX_HISTORY) {
+		  currentMaxHistory += 2; // Grow by steps to avoid sudden jumps
+		}
+	  }
+	}
+
+	// 3. Maintain the dynamic rolling history window
+	if(deltaHistory.size() >= currentMaxHistory) {
+	  deltaHistory.erase(deltaHistory.begin());
+	}
+	deltaHistory.push_back(rawDelta);
+
+	// 4. Extract the median velocity from our scaled window
+	std::vector<double> sortedDeltas = deltaHistory;
+	std::sort(sortedDeltas.begin(), sortedDeltas.end());
+	double cleanMeasuredPeriodUs = sortedDeltas [sortedDeltas.size() / 2];
+
+	// 5. Calculate phase error
+	double expectedTimeUs = lastPredictedTimeUs + estimatedPeriodUs;
+	double phaseErrorUs = rawTimestampUs - expectedTimeUs;
+
+	// 6. Hard Reset Trigger (Safety backup for instant mode switches)
+	if(std::abs(phaseErrorUs) > (estimatedPeriodUs * 0.4)) {
+	  currentMaxHistory = MIN_HISTORY;
+	  deltaHistory.clear();
+	  deltaHistory.push_back(cleanMeasuredPeriodUs);
+	  estimatedPeriodUs = cleanMeasuredPeriodUs;
+	  integratorUs = 0.0;
+	  lastPredictedTimeUs = rawTimestampUs;
+	  return rawTimestampUs;
+	}
+
+	// 7. PI Loop Updates
+	integratorUs += ki * phaseErrorUs;
+	double maxIntegrator = estimatedPeriodUs * 0.05;
+	integratorUs = std::max(-maxIntegrator, std::min(maxIntegrator, integratorUs));
+
+	estimatedPeriodUs = cleanMeasuredPeriodUs + (kp * phaseErrorUs) + integratorUs;
+
+	// 8. Generate clean timeline output
+	lastPredictedTimeUs = expectedTimeUs;
+	return expectedTimeUs;
+  }
+};
+DynamicHistorySyncPLL synchPLL;
+
 void CRenderManager::PrepareNextRender()
 {
   if (m_queued.empty())
@@ -1139,17 +1246,24 @@ void CRenderManager::PrepareNextRender()
   if (!m_showVideo && !m_forceNext)
     return;
 
-  double frameOnScreen = m_dvdClock.GetClock();
-  double frametime = 1.0 /
-                     static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS()) *
-                     DVD_TIME_BASE;
+  double fps = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS(); //cl Changed GetFPS implementation because it was always returning 60 on my PC, irrespective of the real value.
+  double frametime = DVD_TIME_BASE / fps;
+ 
+  static double lastFrameOnScreen = 0;
+  static double lastClock = 0;
+  double clock = m_dvdClock.GetClock();
+  double frameOnScreen = synchPLL.process(clock);
+  double diff = frameOnScreen - lastFrameOnScreen;
+  double diffClock = clock - lastClock;
+  lastFrameOnScreen = frameOnScreen;
+  lastClock = clock;
   m_displayLatency = DVD_MSEC_TO_TIME(
       m_latencyTweak +
       static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetDisplayLatency()) -
       m_videoDelay -
       static_cast<double>(CServiceBroker::GetWinSystem()->GetFrameLatencyAdjustment()));
 
-  double renderPts = frameOnScreen + m_displayLatency;
+  double renderPts = frameOnScreen + m_displayLatency;  //cl latency = delay between frame being rendered and actually being visible on screen
 
   double nextFramePts = m_Queue[m_queued.front()].pts;
   if (m_dvdClock.GetClockSpeed() < 0)
@@ -1158,18 +1272,18 @@ void CRenderManager::PrepareNextRender()
   if (m_clockSync.m_enabled)
   {
     double err = fmod(renderPts - nextFramePts, frametime);
-    m_clockSync.m_error += err;
-    m_clockSync.m_errCount ++;
-    if (m_clockSync.m_errCount > 30)
+	m_clockSync.m_error += err;
+	m_clockSync.m_errCount ++;
+	if(m_clockSync.m_errCount > 30) //cl adjust average offset between frame timestamp and target render time every 30 presentation frames
     {
       double average = m_clockSync.m_error / m_clockSync.m_errCount;
       m_clockSync.m_syncOffset = average;
       m_clockSync.m_error = 0;
       m_clockSync.m_errCount = 0;
 
-      m_dvdClock.SetVsyncAdjust(-average);
+      m_dvdClock.SetVsyncAdjust(-average); //cl for audio sync
     }
-    renderPts += frametime / 2 - m_clockSync.m_syncOffset;
+	renderPts += frametime / 2 - m_clockSync.m_syncOffset; //cl for video, always render with  a half frame offset + periodic adjustement based on 30 frame average
   }
   else
   {
@@ -1179,9 +1293,9 @@ void CRenderManager::PrepareNextRender()
   m_renderPts = renderPts;
   CLog::LogFC(LOGDEBUG, LOGAVTIMING,
               "frameOnScreen: {:f} renderPts: {:f} nextFramePts: {:f} -> diff: {:f}  render: {} "
-              "forceNext: {} Queued: {} Discard: {} Free: {}",
+              "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:f}, OnscreenDiff: {:f}",
               frameOnScreen, renderPts, nextFramePts, (renderPts - nextFramePts),
-              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size());
+              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff);
 
   bool combined = false;
   if (m_presentsourcePast >= 0)

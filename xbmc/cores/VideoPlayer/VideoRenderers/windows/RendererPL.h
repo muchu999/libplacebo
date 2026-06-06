@@ -109,7 +109,7 @@ private:
   pl_color_transfer m_displayTransfer;
   pl_color_primaries m_displayPrimaries;
   int m_FrameMixerNumFrames = 0;
-  int m_FrameMixerMixErrors = 0;
+  int m_FrameMixerRenderErrors = 0;
   int m_FrameMixerQueueMore = 0;
   int m_FrameMixerQueueErr = 0;
 
