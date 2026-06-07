@@ -1590,7 +1590,6 @@ void CGUIDialogVideoSettings::InitializeSettings()
   CreateGroup(groupSigmoid, category);
   CreateGroup(groupDither, category);
   CreateGroup(groupCone, category);
-  CreateGroup(groupDeinterlace, category);
   CreateGroup(groupMisc, category);
   CreateGroup(groupLut, category);
 
