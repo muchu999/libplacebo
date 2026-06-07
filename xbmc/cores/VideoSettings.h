@@ -466,6 +466,7 @@ public:
 
   // SDR overrides when using SDR source in HDR mode, mostly anything affecting colorspace conversion and 
   // tone mapping, but also saturation as it can be used to mitigate desaturation from gamut mapping.
+  //float m_PlaceboTest;
   float m_PlaceboSdrSaturation;
   bool m_PlaceboSdrColorMapInverseToneMapping;
   bool m_PlaceboSdrColorMapGamutExpansion;

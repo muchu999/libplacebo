@@ -84,6 +84,7 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboShaderApply = other.m_PlaceboShaderApply;
   m_PlaceboUseHdrForSdr = other.m_PlaceboUseHdrForSdr;
   m_PlaceboSdrSaturation = other.m_PlaceboSdrSaturation;
+  //m_PlaceboTest = other.m_PlaceboTest;
   m_PlaceboSdrColorMapInverseToneMapping = other.m_PlaceboSdrColorMapInverseToneMapping;
   m_PlaceboSdrColorMapGamutExpansion = other.m_PlaceboSdrColorMapGamutExpansion;
   m_PlaceboSdrColorMapIntent = other.m_PlaceboSdrColorMapIntent;
@@ -209,6 +210,7 @@ void CVideoSettings::ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type)
   // Overriding SDR default values for SDR to HDR mapping
   m_PlaceboDisplaySdrPeakLuminance = 480;
   m_PlaceboSdrSaturation = 55.0; //cl best defaults for good image?
+  //m_PlaceboTest = 0.0f;
   m_PlaceboSdrColorMapInverseToneMapping = true;
   m_PlaceboSdrColorMapGamutExpansion = true;
   m_PlaceboSdrColorMapIntent = PL_INTENT_PERCEPTUAL; // PL_INTENT_SATURATION PL_INTENT_PERCEPTUAL
@@ -287,6 +289,7 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if (m_PlaceboUseHdrForSdr != right.m_PlaceboUseHdrForSdr) return true;  
 
   if(m_PlaceboSdrSaturation != right.m_PlaceboSdrSaturation) return true;
+  //if(m_PlaceboTest != right.m_PlaceboTest) return true;
   if(m_PlaceboSdrColorMapInverseToneMapping != right.m_PlaceboSdrColorMapInverseToneMapping) return true;
   if(m_PlaceboSdrColorMapGamutExpansion != right.m_PlaceboSdrColorMapGamutExpansion) return true;
   if(m_PlaceboSdrColorMapIntent != right.m_PlaceboSdrColorMapIntent) return true;

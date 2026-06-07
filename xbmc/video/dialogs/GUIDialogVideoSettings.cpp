@@ -112,6 +112,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_COLOR_ADJUSTMENT_ENABLED "video.libplacebo.color_adjustment.enabled"
 #define SETTING_LIB_PLACEBO_SATURATION            "video.libplacebo.color_adjustment.saturation"
 #define SETTING_LIB_PLACEBO_SDR_SATURATION        "video.libplacebo.color_adjustment.sdr_saturation"
+//#define SETTING_LIB_PLACEBO_TEST                  "video.libplacebo.test"  
 #define SETTING_LIB_PLACEBO_SDR_COLOR_MAP_INVERSE_TONE_MAPPING "video.libplacebo.sdr_color_map_inverse_tone_mapping"
 #define SETTING_LIB_PLACEBO_SDR_TO_HDR_LABEL             "video.libplacebo.sdr_to_hdr_label"
 #define SETTING_LIB_PLACEBO_SDR_TO_HDR_LOAD_PRESET    "video.libplacebo.sdr_to_hdr_load_preset"
@@ -390,6 +391,11 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboSdrSaturation = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
+  //else if(settingId == SETTING_LIB_PLACEBO_TEST)
+  //{
+  //vs.m_PlaceboTest = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+  //appPlayer->SetVideoSettings(vs);
+  //}
   else if(settingId == SETTING_LIB_PLACEBO_SDR_COLOR_MAP_INVERSE_TONE_MAPPING)
   {
 	vs.m_PlaceboSdrColorMapInverseToneMapping = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
