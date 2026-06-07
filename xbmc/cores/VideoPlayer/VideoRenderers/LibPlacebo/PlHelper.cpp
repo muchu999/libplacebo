@@ -599,9 +599,9 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetFloat(pNode, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::SetBoolean(pNode, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
   XMLUtils::SetBoolean(pNode, "placebosdrcolormapgamutexpansion", vs.m_PlaceboSdrColorMapGamutExpansion);
-  XMLUtils::SetInt(pNode, "placebosdrcolormapgamutmapping", vs.m_PlaceboSdrColorMapGamutMapping);
-  XMLUtils::SetInt(pNode, "placebosdrcolormaptone_mapping", vs.m_PlaceboSdrColorMapToneMapping);
-  XMLUtils::SetInt(pNode, "placebosdrcolormapintent", vs.m_PlaceboSdrColorMapIntent);
+  XMLUtils::SetString(pNode, "placebosdrcolormapgamutmapping", vs.m_PlaceboSdrColorMapGamutMapping == -1 ? "disabled" : pl_gamut_map_functions [vs.m_PlaceboSdrColorMapGamutMapping]->description == nullptr ? "" : pl_gamut_map_functions [vs.m_PlaceboSdrColorMapGamutMapping]->description);
+  XMLUtils::SetString(pNode, "placebosdrcolormaptonemapping", vs.m_PlaceboSdrColorMapToneMapping == -1 ? "disabled" : pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->description == nullptr ? "" : pl_tone_map_functions [vs.m_PlaceboSdrColorMapToneMapping]->description);
+  XMLUtils::SetString(pNode, "placebosdrcolormapintent", CPLHelper::getColorMapIntentDescriptionFromIndex(vs.m_PlaceboSdrColorMapIntent));
   XMLUtils::SetFloat(pNode, "placebosdrtoneconstantexposure", vs.m_PlaceboSdrToneConstantExposure);
   XMLUtils::SetFloat(pNode, "placebosdrtoneconstantkneeadaptation", vs.m_PlaceboSdrToneConstantKneeAdaptation);
   XMLUtils::SetFloat(pNode, "placebosdrtoneconstantkneedefault", vs.m_PlaceboSdrToneConstantKneeDefault);
@@ -765,13 +765,12 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetBoolean(pElement, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::GetBoolean(pElement, "placeboshaderapply", vs.m_PlaceboShaderApply);
   XMLUtils::GetFloat(pElement, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
-
   XMLUtils::GetFloat(pElement, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapgamutexpansion", vs.m_PlaceboSdrColorMapGamutExpansion);
-  XMLUtils::GetInt(pElement,   "placebosdrcolormapgamutmapping", vs.m_PlaceboSdrColorMapGamutMapping);
-  XMLUtils::GetInt(pElement,   "placebosdrcolormaptoneMapping", vs.m_PlaceboSdrColorMapToneMapping);
-  XMLUtils::GetInt(pElement,   "placebosdrcolormapintent", vs.m_PlaceboSdrColorMapIntent);
+  XMLUtils::GetString(pElement, "placebosdrcolormapgamutmapping", value); vs.m_PlaceboColorMapGamutMapping = CPLHelper::getGamutMapIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebosdrcolormaptoneMapping", value); vs.m_PlaceboColorMapToneMapping = CPLHelper::getToneMapIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebosdrcolormapintent", value); vs.m_PlaceboColorMapIntent = CPLHelper::getColorMapIntentIndexFromDescription(value);
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantexposure", vs.m_PlaceboSdrToneConstantExposure);
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneeadaptation", vs.m_PlaceboSdrToneConstantKneeAdaptation);
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneedefault", vs.m_PlaceboSdrToneConstantKneeDefault);
