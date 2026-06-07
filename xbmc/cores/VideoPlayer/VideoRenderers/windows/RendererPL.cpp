@@ -144,7 +144,7 @@ void CRendererPL::UnmapFrame(pl_gpu gpu, struct pl_frame* frame, const struct pl
   CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
 
-  plbuffer->m_NeedFrame = false;
+  plbuffer->m_NeedFrame = false;  //cl crash here during pl_queue_destroy from PLInstance::Reset from ~CrendererPL, src is valid, frame_data looks like a ok pointer but rb is bad
 }
 
 CRendererBase* CRendererPL::Create(CVideoSettings& videoSettings)
