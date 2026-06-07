@@ -1585,6 +1585,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
   CreateGroup(groupSdr, category);
   CreateGroup(groupScaler, category);
   CreateGroup(groupMixer, category);
+  CreateGroup(groupDeinterlace, category);
   CreateGroup(groupDeband, category);
   CreateGroup(groupSigmoid, category);
   CreateGroup(groupDither, category);
@@ -1786,7 +1787,8 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	
 	// Mixer
 	AddList(groupMixer, SETTING_LIB_PLACEBO_FRAME_MIXER, 55227, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixer, CPLHelper::PlFrameMixerOptionFiller, 55227);
-	AddSlider(groupMixer, SETTING_LIB_PLACEBO_FRAME_MIXER_RADIUS_FACTOR, 55354, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixerRadiusFactor, "{0:3.1f}", (float) 0.1, (float) 0.1, (float) 2.0, 55354, usePopup);
+	//AddSlider(groupMixer, SETTING_LIB_PLACEBO_FRAME_MIXER_RADIUS_FACTOR, 55354, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixerRadiusFactor, "{0:3.1f}", (float) 0.1, (float) 0.1, (float) 2.0, 55354, usePopup);
+	//AddSlider(groupMixer, SETTING_LIB_PLACEBO_TEST, 55354, SettingLevel::Basic, videoSettings.m_PlaceboTest, "{0:4.0f}", (float) -100, (float) 5, (float) 100, 55354, usePopup);
 
 	// Color map
 	AddToggle(groupColorMap, SETTING_LIB_PLACEBO_COLOR_MAP_ENABLED, 55248, SettingLevel::Basic, videoSettings.m_PlaceboColorMapEnabled);
