@@ -1272,8 +1272,54 @@ public:
 	return expectedTimeUs;
   }
 };
+class PrecisionTimestampUpsampler {
+private:
+  int64_t lastRawPtsUs;
+  int64_t highResPtsUs;
+  bool isInitialized;
 
+public:
+  PrecisionTimestampUpsampler() : lastRawPtsUs(0), highResPtsUs(0), isInitialized(false) {}
+
+  // Call this to convert a jagged 1ms PTS into a smooth 1µs timeline
+  int64_t upsample(double targetFreqHz, int64_t rawPtsUs) {
+	double nominalPeriodUs = 1000000.0 / targetFreqHz;
+
+	if(!isInitialized) {
+	  lastRawPtsUs = rawPtsUs;
+	  highResPtsUs = rawPtsUs;
+	  isInitialized = true;
+	  return highResPtsUs;
+	}
+
+	// 1. Check if the PTS actually advanced to a new frame
+	// (Since 1ms is much larger than 0, any change means a new frame boundary)
+	if(rawPtsUs != lastRawPtsUs) {
+	  // Calculate how many frames the application thinks passed
+	  double rawDelta = static_cast<double>(rawPtsUs - lastRawPtsUs);
+	  double estimatedFrames = std::round(rawDelta / nominalPeriodUs);
+
+	  // Handle edge case where frame count rounds to 0 due to 1ms truncation
+	  if(estimatedFrames < 1.0) estimatedFrames = 1.0;
+
+	  // 2. Instead of using the truncated rawPtsUs, advance our high-resolution 
+	  // timeline by the exact mathematical period multiplied by the frame step.
+	  highResPtsUs += static_cast<int64_t>(std::round(nominalPeriodUs * estimatedFrames));
+	  lastRawPtsUs = rawPtsUs;
+	}
+
+	// Returns a pristine timeline where the 3 lowest digits vary smoothly by microseconds
+	return highResPtsUs;
+  }
+
+  void reset() {
+	isInitialized = false;
+	lastRawPtsUs = 0;
+	highResPtsUs = 0;
+  }
+};
 GuidedHybridPLL  synchPLL;
+PrecisionTimestampUpsampler upSampler;
 
 void CRenderManager::PrepareNextRender()
 {
@@ -1307,13 +1353,55 @@ void CRenderManager::PrepareNextRender()
 
   double renderPts = frameOnScreen + m_displayLatency;  //cl latency = delay between frame being rendered and actually being visible on screen
 
-  double nextFramePts = m_Queue[m_queued.front()].pts;
+  double pts = m_Queue[m_queued.front()].pts;
+  double nextFramePts = upSampler.upsample(fps, pts);
+  double err = 0.0;
+
   if (m_dvdClock.GetClockSpeed() < 0)
     nextFramePts = renderPts;
-
+  double audioAdjustmentUs = 0.0;
   if (m_clockSync.m_enabled)
   {
-    double err = fmod(renderPts - nextFramePts, frametime);
+#if 0
+	//cl Use a better filter to adjust the audio offset
+	// Don't update the video pts. The loop is now much more stable...
+	static double lastProcessedPts = -1;
+	static double audioIntegratorUs = 0.0;
+	
+	// Check for jumps
+	if(std::abs(nextFramePts - lastProcessedPts) > frametime * 2.0)
+	{
+	  // Seek or something. Reset the integrator to avoid a long recovery time.
+	  audioIntegratorUs = 0.0;
+	  lastProcessedPts = nextFramePts;
+	  m_dvdClock.SetVsyncAdjust(0);
+	}
+	// Only run this logic when a NEW unique frame is being submitted
+	else if(nextFramePts != lastProcessedPts)
+	{
+	  lastProcessedPts = nextFramePts;
+
+	  // 1. Measure the clean difference in the native video domain
+	  double currentSyncErrorUs = renderPts - nextFramePts;
+	  err = currentSyncErrorUs;
+
+	  // 2. Use a Proportional-Integral (PI) Filter
+	  const double audioKp = 0.01;  
+	  const double audioKi = 0.0005;
+
+	  audioIntegratorUs += audioKi * currentSyncErrorUs;
+
+	  const double maxIntegratorUs = 20000.0;
+	  audioIntegratorUs = std::max(-maxIntegratorUs, std::min(maxIntegratorUs, audioIntegratorUs));
+
+	  audioAdjustmentUs = (audioKp * currentSyncErrorUs) + audioIntegratorUs;
+
+	  // 3. Apply this adjustment ONLY to the audio clock
+	  m_dvdClock.SetVsyncAdjust(-audioAdjustmentUs); //cl for audio sync
+	}
+	renderPts += frametime / 2 ; //cl for video, always render with  a half frame offset
+#else
+    err = fmod(renderPts - nextFramePts, frametime);
 	m_clockSync.m_error += err;
 	m_clockSync.m_errCount ++;
 	if(m_clockSync.m_errCount > 30) //cl adjust average offset between frame timestamp and target render time every 30 presentation frames
@@ -1322,10 +1410,11 @@ void CRenderManager::PrepareNextRender()
       m_clockSync.m_syncOffset = average;
       m_clockSync.m_error = 0;
       m_clockSync.m_errCount = 0;
-
-      m_dvdClock.SetVsyncAdjust(-average); //cl for audio sync
+	  m_dvdClock.SetVsyncAdjust(-average); //cl for audio sync
     }
-	renderPts += frametime / 2 - m_clockSync.m_syncOffset; //cl for video, always render with  a half frame offset + periodic adjustement based on 30 frame average
+	renderPts += frametime / 2; // - m_clockSync.m_syncOffset; //cl for video, always render with  a half frame offset + periodic adjustement based on 30 frame average
+	audioAdjustmentUs = -m_clockSync.m_syncOffset;
+#endif
   }
   else
   {
@@ -1335,10 +1424,10 @@ void CRenderManager::PrepareNextRender()
   m_renderPts = renderPts;
   m_renderPts2 = renderPts + frametime; // In case of interleaved material, the present function is only called once.
   CLog::LogFC(LOGDEBUG, LOGAVTIMING,
-              "frameOnScreen: {:f} renderPts: {:f} nextFramePts: {:f} -> diff: {:f}  render: {} "
-              "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:f}, OnscreenDiff: {:f}",
-              frameOnScreen, renderPts, nextFramePts, (renderPts - nextFramePts),
-              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff);
+              "frameOnScreen: {:f} renderPts: {:f} pts: {:f}, nextFramePts: {:f} diff: {:f}  render: {} "
+              "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:f}, OnscreenDiff: {:f}, VsyncAdjust: {:f}, err: {:f}",
+              frameOnScreen, renderPts, pts, nextFramePts, (renderPts - nextFramePts),
+              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff, audioAdjustmentUs, err);
 
   bool combined = false;
   if (m_presentsourcePast >= 0)
