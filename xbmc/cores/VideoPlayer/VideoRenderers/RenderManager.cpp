@@ -1378,7 +1378,7 @@ void CRenderManager::PrepareNextRender()
   double renderPts = frameOnScreen + m_displayLatency;  //cl latency = delay between frame being rendered and actually being visible on screen
 
   double pts = m_Queue[m_queued.front()].pts;
-  double nextFramePts = upSampler.upsample(fps, pts);
+  double nextFramePts = pts; //upSampler.upsample(fps, pts);
   double err = 0.0;
 
   if (m_dvdClock.GetClockSpeed() < 0)
