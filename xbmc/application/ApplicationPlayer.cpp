@@ -931,6 +931,13 @@ bool CApplicationPlayer::IsRenderingVideoLayer() const
     return false;
 }
 
+void CApplicationPlayer::RecordFlipEndTime()
+{
+  const std::shared_ptr<IPlayer> player = GetInternal();
+  if(player)
+	player->RecordFlipEndTime();
+}
+
 bool CApplicationPlayer::Supports(EINTERLACEMETHOD method) const
 {
   const std::shared_ptr<const IPlayer> player = GetInternal();

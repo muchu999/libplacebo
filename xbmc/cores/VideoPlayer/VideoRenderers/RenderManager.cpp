@@ -252,6 +252,11 @@ bool CRenderManager::IsConfigured() const
     return false;
 }
 
+void CRenderManager::RecordFlipEndTime() 
+{
+  m_flipEndTime = m_dvdClock.GetClock();
+}
+
 void CRenderManager::ShowVideo(bool enable)
 {
   m_showVideo = enable;
@@ -1347,6 +1352,7 @@ ErrorCorrectingUpsampler upSampler;
 
 void CRenderManager::PrepareNextRender()
 {
+  static double lastFramePts = 0;
   if (m_queued.empty())
   {
     CLog::Log(LOGERROR, "CRenderManager::PrepareNextRender - asked to prepare with nothing available");
@@ -1363,11 +1369,12 @@ void CRenderManager::PrepareNextRender()
  
   static double lastFrameOnScreen = 0;
   static double lastClock = 0;
-  // 1. Block right here until the DXGI hardware queue is ready to accept a frame
-  DWORD waitResult = WaitForSingleObjectEx(DX::DeviceResources::Get()->dxgiWaitHandle, 1000, TRUE);
-
-  //if(waitResult == WAIT_OBJECT_0) {
   double clock = m_dvdClock.GetClock();
+  double clockDiff = clock - m_flipEndTime;
+  if((abs(m_flipEndTime-clock) < 15000)) //cl sanity check??
+  {
+	clock = m_flipEndTime;
+  }
   double frameOnScreen = synchPLL.process(fps, clock);
   double diff = frameOnScreen - lastFrameOnScreen;
   double diffClock = clock - lastClock;
@@ -1387,75 +1394,38 @@ void CRenderManager::PrepareNextRender()
 
   if (m_dvdClock.GetClockSpeed() < 0)
     nextFramePts = renderPts;
-  double audioAdjustmentUs = 0.0;
+  static double average = 0.0;
   if (m_clockSync.m_enabled)
   {
-#if 0
-	//cl Use a better filter to adjust the audio offset
-	// Don't update the video pts. The loop is now much more stable...
-	static double lastProcessedPts = -1;
-	static double audioIntegratorUs = 0.0;
-	
-	// Check for jumps
-	if(std::abs(nextFramePts - lastProcessedPts) > frametime * 2.0)
+	if(nextFramePts != lastFramePts)
 	{
-	  // Seek or something. Reset the integrator to avoid a long recovery time.
-	  audioIntegratorUs = 0.0;
-	  lastProcessedPts = nextFramePts;
-	  m_dvdClock.SetVsyncAdjust(0);
+	  err = fmod(renderPts - nextFramePts, frametime);
+	  m_clockSync.m_error += err;
+	  m_clockSync.m_errCount ++;
+	  if(m_clockSync.m_errCount > 30) //cl adjust average offset between frame timestamp and target render time every 30 presentation frames
+	  {
+		average = m_clockSync.m_error / m_clockSync.m_errCount;
+		m_clockSync.m_syncOffset = average;
+		m_clockSync.m_error = 0;
+		m_clockSync.m_errCount = 0;
+		m_dvdClock.SetVsyncAdjust(-average); //cl for audio sync, the actual value is not used, just a test if it's different from 0 which allows correction to take place with error calculated somewhere else
+	  }
+	  renderPts += frametime / 2; // - m_clockSync.m_syncOffset; //cl 
 	}
-	// Only run this logic when a NEW unique frame is being submitted
-	else if(nextFramePts != lastProcessedPts)
-	{
-	  lastProcessedPts = nextFramePts;
-
-	  // 1. Measure the clean difference in the native video domain
-	  double currentSyncErrorUs = renderPts - nextFramePts;
-	  err = currentSyncErrorUs;
-
-	  // 2. Use a Proportional-Integral (PI) Filter
-	  const double audioKp = 0.01;  
-	  const double audioKi = 0.0005;
-
-	  audioIntegratorUs += audioKi * currentSyncErrorUs;
-
-	  const double maxIntegratorUs = 20000.0;
-	  audioIntegratorUs = std::max(-maxIntegratorUs, std::min(maxIntegratorUs, audioIntegratorUs));
-
-	  audioAdjustmentUs = (audioKp * currentSyncErrorUs) + audioIntegratorUs;
-
-	  // 3. Apply this adjustment ONLY to the audio clock
-	  m_dvdClock.SetVsyncAdjust(-audioAdjustmentUs); //cl for audio sync
-	}
-	renderPts += frametime / 2 ; //cl for video, always render with  a half frame offset
-#else
-    err = fmod(renderPts - nextFramePts, frametime);
-	m_clockSync.m_error += err;
-	m_clockSync.m_errCount ++;
-	if(m_clockSync.m_errCount > 30) //cl adjust average offset between frame timestamp and target render time every 30 presentation frames
-    {
-      double average = m_clockSync.m_error / m_clockSync.m_errCount;
-      m_clockSync.m_syncOffset = average;
-      m_clockSync.m_error = 0;
-      m_clockSync.m_errCount = 0;
-	  m_dvdClock.SetVsyncAdjust(-average); //cl for audio sync
-    }
-	renderPts += frametime / 2; // - m_clockSync.m_syncOffset; //cl for video, always render with  a half frame offset + periodic adjustement based on 30 frame average
-	audioAdjustmentUs = -m_clockSync.m_syncOffset;
-#endif
   }
   else
   {
     m_dvdClock.SetVsyncAdjust(0);
   }
 
+  lastFramePts = nextFramePts;
   m_renderPts = renderPts;
   m_renderPts2 = renderPts + frametime; // In case of interleaved material, the present function is only called once.
   CLog::LogFC(LOGDEBUG, LOGAVTIMING,
               "frameOnScreen: {:f} renderPts: {:f} pts: {:f}, nextFramePts: {:f} diff: {:f}  render: {} "
-              "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:f}, OnscreenDiff: {:f}, VsyncAdjust: {:f}, err: {:f}",
+              "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:f}, OnscreenDiff: {:f}, VsyncAdjust: {:f}, err: {:f}, clockDiff: {:f}",
               frameOnScreen, renderPts, pts, nextFramePts, (renderPts - nextFramePts),
-              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff, audioAdjustmentUs, err);
+              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff, average, err, clockDiff);
 
   bool combined = false;
   if (m_presentsourcePast >= 0)

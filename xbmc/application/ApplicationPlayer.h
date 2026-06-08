@@ -61,6 +61,7 @@ public:
   bool IsRenderingVideo() const;
   bool IsRenderingGuiLayer() const;
   bool IsRenderingVideoLayer() const;
+  void RecordFlipEndTime();
   bool Supports(EINTERLACEMETHOD method) const;
   EINTERLACEMETHOD GetDeinterlacingMethodDefault() const;
   bool Supports(ESCALINGMETHOD method) const;

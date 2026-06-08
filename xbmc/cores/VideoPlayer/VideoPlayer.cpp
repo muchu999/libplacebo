@@ -5358,6 +5358,10 @@ void CVideoPlayer::TriggerUpdateResolution()
   std::string stereomode;
   m_renderManager.TriggerUpdateResolution(0, 0, 0, stereomode);
 }
+void CVideoPlayer::RecordFlipEndTime() 
+{
+  m_renderManager.RecordFlipEndTime();
+}
 
 bool CVideoPlayer::IsRenderingVideo() const
 {

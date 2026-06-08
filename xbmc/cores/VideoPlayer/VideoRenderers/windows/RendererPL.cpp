@@ -49,6 +49,11 @@ using namespace Microsoft::WRL;
 
 CRendererPL::~CRendererPL()
 {
+  if(*PL::PLInstance::Get()->GetQueue()) 
+  {
+	pl_queue_destroy(PL::PLInstance::Get()->GetQueue()); //cl need to unmap te buffers before flushing them
+	*PL::PLInstance::Get()->GetQueue() = NULL;
+  }
   Flush(false); // Must free buffers before resetting libplacebo
   PL::PLInstance::Get()->Reset();
 
@@ -1008,7 +1013,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //----------------
   // Render Image
   //----------------
-  #define LOG_PL_QUEUE 0
+  #define LOG_PL_QUEUE 1
   pl_queue* pQueue = PL::PLInstance::Get()->GetQueue();
   if(!pl_queue_num_frames(*pQueue))
   {
@@ -1061,7 +1066,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 		++m_FrameMixerQueueErr;
 	  if(mix.num_frames == 0)
 	  {
-		// Nothing to present, there will be a timeout on OutputPicture down the road but it will recover. 
+		// Nothing to present, there will be a timeout on FinalOutput down the road but it will recover. 
 		// We could present something anyway but it will not help much. 
 	  }
 	}

@@ -893,8 +893,8 @@ void CApplication::Render()
     infoMgr.GetInfoProviders().GetSystemInfoProvider().UpdateFPS();
   }
 
-  CServiceBroker::GetWinSystem()->GetGfxContext().Flip(hasRendered,
-                                                       appPlayer->IsRenderingVideoLayer());
+  CServiceBroker::GetWinSystem()->GetGfxContext().Flip(hasRendered, appPlayer->IsRenderingVideoLayer()); //cl 
+  appPlayer->RecordFlipEndTime();
 
   CTimeUtils::UpdateFrameTime(hasRendered);
 }

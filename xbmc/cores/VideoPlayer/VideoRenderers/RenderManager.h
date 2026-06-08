@@ -74,6 +74,7 @@ public:
   void UnInit();
   bool Flush(bool wait, bool saveBuffers);
   bool IsConfigured() const;
+  void RecordFlipEndTime();
   void ToggleDebug();
   void ToggleDebugVideo();
 
@@ -226,6 +227,7 @@ protected:
   CEvent m_initEvent;
   CDVDClock &m_dvdClock;
   IRenderMsg *m_playerPort;
+  double m_flipEndTime = 0.0;
 
   struct CClockSync
   {
