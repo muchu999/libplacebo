@@ -1164,17 +1164,18 @@ void DX::DeviceResources::Present()
   // to sleep until the next VSync. This ensures we don't waste any cycles rendering
   // frames that will never be displayed to the screen.
   DXGI_PRESENT_PARAMETERS parameters = {};
-  //int64_t start = CurrentHostCounter();
+  int64_t start = CurrentHostCounter();
   HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
 
 #if 0
   // Take a look at jitter assuming the flip happens at the end of present(), which sometimes take a long time because of GPU memory copy
   int64_t end = CurrentHostCounter();
   static int64_t lastEnd = 0;
+  int64_t presentDuration = end - start;
   int64_t duration = end - lastEnd;
   lastEnd = end;
   static int64_t freq = CurrentHostFrequency();
-  CLog::LogF(LOGDEBUG,"DX::DeviceResources::Present Inter frame time = {}", duration/(float)freq);
+  CLog::LogF(LOGDEBUG,"Present duration: {} ms, Present Inter frame time: {} ms", presentDuration / (float)freq * 1000, duration / (float)freq * 1000);
 #endif
 
   // If the device was removed either by a disconnection or a driver upgrade, we
