@@ -1272,54 +1272,78 @@ public:
 	return expectedTimeUs;
   }
 };
-class PrecisionTimestampUpsampler {
+
+class ErrorCorrectingUpsampler {
 private:
-  int64_t lastRawPtsUs;
-  int64_t highResPtsUs;
+  double lastRawPtsUs;
+  double smoothPtsUs;
+  double nominalPeriodUs;
+
+  // Low-pass correction factor (Adjusts how fast it follows true file drift)
+  // 0.01 means it takes about 100 frames to fully adapt to a file speed change,
+  // which perfectly smooths out the local 1ms stairs while preventing lag.
+  const double alpha = 0.01;
+
   bool isInitialized;
 
 public:
-  PrecisionTimestampUpsampler() : lastRawPtsUs(0), highResPtsUs(0), isInitialized(false) {}
+  ErrorCorrectingUpsampler()
+	: lastRawPtsUs(0), smoothPtsUs(0.0), nominalPeriodUs(0.0), isInitialized(false) {
+  }
 
-  // Call this to convert a jagged 1ms PTS into a smooth 1µs timeline
-  int64_t upsample(double targetFreqHz, int64_t rawPtsUs) {
-	double nominalPeriodUs = 1000000.0 / targetFreqHz;
-
+  // Convert a jagged 1ms PTS into a smooth, drift-adaptive 1µs timeline
+  double upsample(double targetFreqHz, double rawPtsUs) {
 	if(!isInitialized) {
+	  nominalPeriodUs = 1000000.0 / targetFreqHz;
+	  smoothPtsUs = rawPtsUs;
 	  lastRawPtsUs = rawPtsUs;
-	  highResPtsUs = rawPtsUs;
 	  isInitialized = true;
-	  return highResPtsUs;
+	  return rawPtsUs;
 	}
 
-	// 1. Check if the PTS actually advanced to a new frame
-	// (Since 1ms is much larger than 0, any change means a new frame boundary)
+	// 1. Check if the PTS actually stepped to a new frame
 	if(rawPtsUs != lastRawPtsUs) {
-	  // Calculate how many frames the application thinks passed
-	  double rawDelta = static_cast<double>(rawPtsUs - lastRawPtsUs);
-	  double estimatedFrames = std::round(rawDelta / nominalPeriodUs);
-
-	  // Handle edge case where frame count rounds to 0 due to 1ms truncation
-	  if(estimatedFrames < 1.0) estimatedFrames = 1.0;
-
-	  // 2. Instead of using the truncated rawPtsUs, advance our high-resolution 
-	  // timeline by the exact mathematical period multiplied by the frame step.
-	  highResPtsUs += static_cast<int64_t>(std::round(nominalPeriodUs * estimatedFrames));
+	  double rawDelta = rawPtsUs - lastRawPtsUs;
 	  lastRawPtsUs = rawPtsUs;
+
+	  // Calculate how many discrete frame intervals occurred in this step
+	  double frameSteps = std::round(rawDelta / nominalPeriodUs);
+	  if(frameSteps < 1.0) frameSteps = 1.0;
+
+	  // 2. Step our internal clock forward by the perfect mathematical step
+	  smoothPtsUs += (nominalPeriodUs * frameSteps);
 	}
 
-	// Returns a pristine timeline where the 3 lowest digits vary smoothly by microseconds
-	return highResPtsUs;
+	// 3. PHASE ERROR CORRECTION CORNERSTONE
+	// Calculate the drift distance between our smooth line and the real file PTS
+	double trackingErrorUs = rawPtsUs - smoothPtsUs;
+
+	// CRITICAL HANDLE: Look for an intentional discontinuity (like a user Seek)
+	if(std::abs(trackingErrorUs) > (nominalPeriodUs * 0.45)) {
+	  // The file jumped completely. Hard-snap immediately to prevent breaking.
+	  smoothPtsUs = rawPtsUs;
+	  lastRawPtsUs = rawPtsUs;
+	  return rawPtsUs;
+	}
+
+	// 4. Low-pass nudge: Gently pull the smooth timeline toward the real data trend.
+	// This acts as a dampening spring. It completely ignores the 1ms rapid jagged steps 
+	// but smoothly bends the timeline if the source files permanently drift over minutes.
+	smoothPtsUs += (alpha * trackingErrorUs);
+
+	return smoothPtsUs;
   }
 
   void reset() {
 	isInitialized = false;
 	lastRawPtsUs = 0;
-	highResPtsUs = 0;
+	smoothPtsUs = 0.0;
+	nominalPeriodUs = 0.0;
   }
 };
+
 GuidedHybridPLL  synchPLL;
-PrecisionTimestampUpsampler upSampler;
+ErrorCorrectingUpsampler upSampler;
 
 void CRenderManager::PrepareNextRender()
 {

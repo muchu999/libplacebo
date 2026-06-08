@@ -1008,7 +1008,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //----------------
   // Render Image
   //----------------
-  #define LOG_PL_QUEUE 0
+  #define LOG_PL_QUEUE 1
   pl_queue* pQueue = PL::PLInstance::Get()->GetQueue();
   if(!pl_queue_num_frames(*pQueue))
   {
@@ -1028,7 +1028,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	//qParams.drift_compensation = true;
 
     #if LOG_PL_QUEUE
-	qParams.pts += videoSettings.m_PlaceboTest / 1000.0;
+	//qParams.pts += videoSettings.m_PlaceboTest / 1000.0;
     // Find min max pts in queue for debug
 	pl_source_frame out = {};
 	double minPts = std::numeric_limits<double>::max();
