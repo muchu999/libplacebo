@@ -1013,7 +1013,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //----------------
   // Render Image
   //----------------
-  #define LOG_PL_QUEUE 1
+  #define LOG_PL_QUEUE 0
   pl_queue* pQueue = PL::PLInstance::Get()->GetQueue();
   if(!pl_queue_num_frames(*pQueue))
   {
