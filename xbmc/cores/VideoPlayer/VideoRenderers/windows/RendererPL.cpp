@@ -51,11 +51,11 @@ CRendererPL::~CRendererPL()
 {
   if(*PL::PLInstance::Get()->GetQueue()) 
   {
-	pl_queue_destroy(PL::PLInstance::Get()->GetQueue()); //cl need to unmap te buffers before flushing them
+	pl_queue_destroy(PL::PLInstance::Get()->GetQueue()); //cl need to unmap the buffers before flushing them
 	*PL::PLInstance::Get()->GetQueue() = NULL;
   }
   Flush(false); // Must free buffers before resetting libplacebo
-  PL::PLInstance::Get()->Reset();
+  PL::PLInstance::Get()->Reset(); //cl reset the rest
 
   //cl Force restore default color space on exit, non-hdr content messes up hdr color space, should save and restore instead
   if(DX::Windowing()->IsHDROutput())
@@ -149,7 +149,7 @@ void CRendererPL::UnmapFrame(pl_gpu gpu, struct pl_frame* frame, const struct pl
   CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
 
-  plbuffer->m_NeedFrame = false;  //cl crash here during pl_queue_destroy from PLInstance::Reset from ~CrendererPL, src is valid, frame_data looks like a ok pointer but rb is bad
+  plbuffer->m_NeedFrame = false; 
 }
 
 CRendererBase* CRendererPL::Create(CVideoSettings& videoSettings)
@@ -1113,9 +1113,9 @@ void CRendererPL::ProcessHDR(CRenderBuffer* rb)
   
   if(  m_AutoSwitchHDR && !DX::Windowing()->IsHDROutput() && (rb->color_transfer == AVCOL_TRC_SMPTE2084 || rb->color_transfer == AVCOL_TRC_ARIB_STD_B67 || m_videoSettings.m_PlaceboUseHdrForSdr) )
   {
-	PL::PLInstance::Get()->DestroySwapchain();
+	//PL::PLInstance::Get()->DestroySwapchain();
 	DX::Windowing()->ToggleHDR(); // Toggle display HDR ON
-	PL::PLInstance::Get()->CreateSwapchain();
+	//PL::PLInstance::Get()->CreateSwapchain();
   }
 
   m_HdrType = HDR_TYPE::HDR_HDR10; //cl

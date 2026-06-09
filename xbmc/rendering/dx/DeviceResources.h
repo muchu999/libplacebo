@@ -57,6 +57,19 @@ namespace DX
     virtual ~DeviceResources();
     void Release();
 
+	using EventCallback = std::function<void(const std::string&)>;
+	class listener {
+	public:
+	  size_t id;
+	  EventCallback callback;
+	};
+
+
+	// Register a callback and return a unique ID for unregistration
+	size_t RegisterSwapchainListener(EventCallback callback);
+    void UnregisterSwapchainListener(size_t id);
+	void NotifySwapchainListeners(const std::string& message);
+
     void ValidateDevice();
     void HandleDeviceLost(bool removed);
     bool Begin();
@@ -164,7 +177,9 @@ namespace DX
 	bool InitializeDecoderResources(int dxva2Adapter);
 
   private:
-    class CBackBuffer : public CD3DTexture
+	std::vector<listener> listeners;
+	size_t nextId = 0;
+	class CBackBuffer : public CD3DTexture
     {
     public:
       CBackBuffer() : CD3DTexture() {}

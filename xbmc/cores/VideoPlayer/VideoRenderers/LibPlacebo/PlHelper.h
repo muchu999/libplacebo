@@ -40,6 +40,7 @@ extern "C" {
 #include <libplacebo/swapchain.h>
 #include <libplacebo/cache.h>
 #include <libplacebo/utils/frame_queue.h>
+#include <rendering/dx/DeviceResources.h>
 
 #define MAX_FRAME_PASSES 256
 #define MAX_BLEND_PASSES 8
@@ -68,6 +69,9 @@ namespace PL
 	void Reset();
 	bool CreateSwapchain(void);
 	void DestroySwapchain(void);
+	void SetupSwapchainCallback(DX::DeviceResources& publisher);
+	void OnSwapchainEventReceived(const std::string& message);
+	void TeardownSwapchainCallback(DX::DeviceResources& publisher);
 
 	pl_d3d11 GetD3d11() { return m_plD3d11; }
 	pl_swapchain GetSwapchain() { return m_plSwapchain; }
@@ -79,6 +83,7 @@ namespace PL
 	void LogCurrent();
 
   private:
+	size_t m_swapchainCallbackId;
 	bool m_isInitialized = false;
 	pl_cache m_plCache = nullptr;
 	pl_queue m_plQueue = nullptr;

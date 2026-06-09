@@ -140,6 +140,8 @@ bool PL::PLInstance::Init()
   if(!CreateSwapchain())
 	return false;
 
+  SetupSwapchainCallback(*DX::DeviceResources::Get());
+
   //Renderer
   m_plRenderer = pl_renderer_create(m_plLog, m_plD3d11->gpu);
 
@@ -188,6 +190,31 @@ bool PL::PLInstance::CreateSwapchain(void)
   return true;
 }
 
+void  PL::PLInstance::SetupSwapchainCallback(DX::DeviceResources& publisher)
+{
+  m_swapchainCallbackId = DX::DeviceResources::Get()->RegisterSwapchainListener([this](const std::string& msg) 
+	{
+	this->OnSwapchainEventReceived(msg);
+	});
+}
+
+void PL::PLInstance::TeardownSwapchainCallback(DX::DeviceResources& publisher) 
+{
+  publisher.UnregisterSwapchainListener(m_swapchainCallbackId);
+}
+
+void  PL::PLInstance::OnSwapchainEventReceived(const std::string& message)
+{
+  if(message=="DestroySwapChain")
+  {
+	DestroySwapchain();
+  }
+  else if(message=="CreateSwapChain")
+  {
+	CreateSwapchain();
+  }
+}
+
 void PL::PLInstance::Reset()
 {
   if(m_isInitialized)
@@ -195,6 +222,7 @@ void PL::PLInstance::Reset()
 	if(m_plCache) pl_cache_destroy(&m_plCache);
 	if(m_plQueue) pl_queue_destroy(&m_plQueue);
 	if(m_plRenderer) pl_renderer_destroy(&m_plRenderer);
+	TeardownSwapchainCallback(*DX::DeviceResources::Get());
 	if(m_plSwapchain) pl_swapchain_destroy(&m_plSwapchain);
 	if(m_plD3d11) pl_d3d11_destroy(&m_plD3d11);
 	if(m_plLog) pl_log_destroy(&m_plLog);

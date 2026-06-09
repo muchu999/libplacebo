@@ -761,7 +761,13 @@ bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
     }
     else if (m_picture.pts == DVD_NOPTS_VALUE)
       m_picture.pts = m_picture.dts;
+	//cl upsample pts, many containers have very bad pts precision, e.g 1ms
+	//double pts1 = m_picture.pts;
 	m_picture.pts = upSampler.upsample(1000000.0/frametime, m_picture.pts);
+	//static double oldPts = 0;
+	//CLog::Log(LOGDEBUG, "pts1: {:f}ms, pts: {:f}ms, diff: {:f}ms, upsampler diff:{:f}ms", pts1/1000.0, m_picture.pts / 1000.0, (m_picture.pts - pts1) / 1000.0, (m_picture.pts - oldPts) / 1000.0);
+	//oldPts = m_picture.pts; 
+		
     // use forced aspect if any
     if (m_fForcedAspectRatio != 0.0f)
     {
