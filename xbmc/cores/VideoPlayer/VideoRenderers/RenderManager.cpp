@@ -1278,77 +1278,7 @@ public:
   }
 };
 
-class ErrorCorrectingUpsampler {
-private:
-  double lastRawPtsUs;
-  double smoothPtsUs;
-  double nominalPeriodUs;
-
-  // Low-pass correction factor (Adjusts how fast it follows true file drift)
-  // 0.01 means it takes about 100 frames to fully adapt to a file speed change,
-  // which perfectly smooths out the local 1ms stairs while preventing lag.
-  const double alpha = 0.01;
-
-  bool isInitialized;
-
-public:
-  ErrorCorrectingUpsampler()
-	: lastRawPtsUs(0), smoothPtsUs(0.0), nominalPeriodUs(0.0), isInitialized(false) {
-  }
-
-  // Convert a jagged 1ms PTS into a smooth, drift-adaptive 1µs timeline
-  double upsample(double targetFreqHz, double rawPtsUs) {
-	if(!isInitialized) {
-	  nominalPeriodUs = 1000000.0 / targetFreqHz;
-	  smoothPtsUs = rawPtsUs;
-	  lastRawPtsUs = rawPtsUs;
-	  isInitialized = true;
-	  return rawPtsUs;
-	}
-
-	// 1. Check if the PTS actually stepped to a new frame
-	if(rawPtsUs != lastRawPtsUs) {
-	  double rawDelta = rawPtsUs - lastRawPtsUs;
-	  lastRawPtsUs = rawPtsUs;
-
-	  // Calculate how many discrete frame intervals occurred in this step
-	  double frameSteps = std::round(rawDelta / nominalPeriodUs);
-	  if(frameSteps < 1.0) frameSteps = 1.0;
-
-	  // 2. Step our internal clock forward by the perfect mathematical step
-	  smoothPtsUs += (nominalPeriodUs * frameSteps);
-	}
-
-	// 3. PHASE ERROR CORRECTION CORNERSTONE
-	// Calculate the drift distance between our smooth line and the real file PTS
-	double trackingErrorUs = rawPtsUs - smoothPtsUs;
-
-	// CRITICAL HANDLE: Look for an intentional discontinuity (like a user Seek)
-	if(std::abs(trackingErrorUs) > (nominalPeriodUs * 0.45)) {
-	  // The file jumped completely. Hard-snap immediately to prevent breaking.
-	  smoothPtsUs = rawPtsUs;
-	  lastRawPtsUs = rawPtsUs;
-	  return rawPtsUs;
-	}
-
-	// 4. Low-pass nudge: Gently pull the smooth timeline toward the real data trend.
-	// This acts as a dampening spring. It completely ignores the 1ms rapid jagged steps 
-	// but smoothly bends the timeline if the source files permanently drift over minutes.
-	smoothPtsUs += (alpha * trackingErrorUs);
-
-	return smoothPtsUs;
-  }
-
-  void reset() {
-	isInitialized = false;
-	lastRawPtsUs = 0;
-	smoothPtsUs = 0.0;
-	nominalPeriodUs = 0.0;
-  }
-};
-
 GuidedHybridPLL  synchPLL;
-ErrorCorrectingUpsampler upSampler;
 
 void CRenderManager::PrepareNextRender()
 {
@@ -1389,7 +1319,7 @@ void CRenderManager::PrepareNextRender()
   double renderPts = frameOnScreen + m_displayLatency;  //cl latency = delay between frame being rendered and actually being visible on screen
 
   double pts = m_Queue[m_queued.front()].pts;
-  double nextFramePts = pts; //upSampler.upsample(fps, pts);
+  double nextFramePts = pts; 
   double err = 0.0;
 
   if (m_dvdClock.GetClockSpeed() < 0)
