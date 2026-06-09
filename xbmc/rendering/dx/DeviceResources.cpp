@@ -815,7 +815,7 @@ void DX::DeviceResources::ResizeBuffers()
       CreateWindowSizeDependentResources();
       return;
     }
-    CHECK_ERR(); //cl crash here when resizing window with video playing, hr = E_INVALIDARG
+    CHECK_ERR();
   }
   else // Otherwise, create a new one using the same adapter as the existing Direct3D device.
   {
