@@ -1085,9 +1085,11 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
 
 #if LOG_PL_QUEUE
-	CLog::LogF(LOGDEBUG, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f},qParamsPts: {:.3f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, QFpsEst: {:f}, QVpsEst: {:f}, minPts: {:.3f}, maxPts: {:.3f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
-	  screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000000.0, renderPts / 1000000,
-	  qParams.pts, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), pl_queue_estimate_fps(*pQueue), pl_queue_estimate_vps(*pQueue), minPts, maxPts, renderPtsPos, renderPtsShiftedPos);
+	static double oldRenderPts = 0.0;
+	CLog::LogF(LOGDEBUG, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}, qParamsPts: {:.3f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, QFpsEst: {:f}, QVpsEst: {:f}, minPts: {:.3f}, maxPts: {:.3f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
+	  screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000,
+	  (renderPts - oldRenderPts)/1000.0, qParams.pts, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), pl_queue_estimate_fps(*pQueue), pl_queue_estimate_vps(*pQueue), minPts, maxPts, renderPtsPos, renderPtsShiftedPos);
+	oldRenderPts = renderPts;
 	for(int i = 0; i < mix.num_frames; ++i)
 	{
 	  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) (mix.frames [i]->user_data);

@@ -1301,7 +1301,7 @@ void CRenderManager::PrepareNextRender()
   static double lastClock = 0;
   double clock = m_dvdClock.GetClock();
   double clockDiff = clock - m_flipEndTime;
-  if((abs(m_flipEndTime-clock) < 15000)) //cl sanity check??
+  //if((abs(m_flipEndTime-clock) < 15000)) //cl sanity check??
   {
 	clock = m_flipEndTime;
   }
@@ -1350,10 +1350,10 @@ void CRenderManager::PrepareNextRender()
 
   lastFramePts = nextFramePts;
   m_renderPts = renderPts;
-  m_renderPts2 = renderPts + frametime; // In case of interleaved material, the present function is only called once.
+  m_renderPts2 = renderPts + frametime; // In case of interleaved material, the PrepareNextRender function is only called once.
   CLog::LogFC(LOGDEBUG, LOGAVTIMING,
-              "frameOnScreen: {:f} renderPts: {:f} pts: {:f}, nextFramePts: {:f} diff: {:f}  render: {} "
-              "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:f}, OnscreenDiff: {:f}, VsyncAdjust: {:f}, err: {:f}, clockDiff: {:f}",
+              "frameOnScreen: {:.0f} renderPts: {:.0f} pts: {:.0f}, nextFramePts: {:.0f} diff: {:.0f}  render: {} "
+              "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:.0f}, OnscreenDiff: {:.0f}, VsyncAdjust: {:.0f}, err: {:.0f}, clockDiff: {:.0f}",
               frameOnScreen, renderPts, pts, nextFramePts, (renderPts - nextFramePts),
               renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff, average, err, clockDiff);
 
