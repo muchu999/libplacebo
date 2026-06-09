@@ -728,21 +728,21 @@ HRESULT DX::DeviceResources::CreateSwapChain(DXGI_SWAP_CHAIN_DESC1& desc, DXGI_S
 
 size_t DX::DeviceResources::RegisterSwapchainListener(EventCallback callback)
 {
-  size_t id = nextId++;
-  listeners.push_back({id, callback});
+  size_t id = m_nextSwapchainListenerId++;
+  m_swapchainListeners.push_back({id, callback});
   return id;
 }
 
 void  DX::DeviceResources::UnregisterSwapchainListener(size_t id)
 {
-  listeners.erase(std::remove_if(listeners.begin(), listeners.end(),
+  m_swapchainListeners.erase(std::remove_if(m_swapchainListeners.begin(), m_swapchainListeners.end(),
 	[id](const auto& listener) { return listener.id == id; }),
-	listeners.end());
+	m_swapchainListeners.end());
 }
 
 void DX::DeviceResources::NotifySwapchainListeners(const std::string& message) 
 {
-  for(const auto& entry : listeners) 
+  for(const auto& entry : m_swapchainListeners) 
   {
 	entry.callback(message);
   }

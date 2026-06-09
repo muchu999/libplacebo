@@ -175,8 +175,8 @@ namespace DX
 	bool InitializeDecoderResources(int dxva2Adapter);
 
   private:
-	std::vector<listener> listeners;
-	size_t nextId = 0;
+	std::vector<listener> m_swapchainListeners;
+	size_t m_nextSwapchainListenerId = 0;
 	class CBackBuffer : public CD3DTexture
     {
     public:
