@@ -64,8 +64,6 @@ namespace DX
 	  EventCallback callback;
 	};
 
-
-	// Register a callback and return a unique ID for unregistration
 	size_t RegisterSwapchainListener(EventCallback callback);
     void UnregisterSwapchainListener(size_t id);
 	void NotifySwapchainListeners(const std::string& message);
