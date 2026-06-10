@@ -796,9 +796,9 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapgamutexpansion", vs.m_PlaceboSdrColorMapGamutExpansion);
-  XMLUtils::GetString(pElement, "placebosdrcolormapgamutmapping", value); vs.m_PlaceboColorMapGamutMapping = CPLHelper::getGamutMapIndexFromDescription(value);
-  XMLUtils::GetString(pElement, "placebosdrcolormaptoneMapping", value); vs.m_PlaceboColorMapToneMapping = CPLHelper::getToneMapIndexFromDescription(value);
-  XMLUtils::GetString(pElement, "placebosdrcolormapintent", value); vs.m_PlaceboColorMapIntent = CPLHelper::getColorMapIntentIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebosdrcolormapgamutmapping", value); vs.m_PlaceboColorMapGamutMapping = value == "" ? vs.m_PlaceboColorMapGamutMapping : CPLHelper::getGamutMapIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebosdrcolormaptoneMapping", value); vs.m_PlaceboColorMapToneMapping = value == "" ? vs.m_PlaceboColorMapToneMapping : CPLHelper::getToneMapIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebosdrcolormapintent", value); vs.m_PlaceboColorMapIntent = value == "" ? vs.m_PlaceboColorMapIntent : CPLHelper::getColorMapIntentIndexFromDescription(value);
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantexposure", vs.m_PlaceboSdrToneConstantExposure);
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneeadaptation", vs.m_PlaceboSdrToneConstantKneeAdaptation);
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantkneedefault", vs.m_PlaceboSdrToneConstantKneeDefault);
@@ -829,11 +829,11 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement, "placebopeakdetectblackcutoff", vs.m_PlaceboPeakDetectBlackCutoff);
   XMLUtils::GetBoolean(pElement, "placebopeakdetectallowdelayed", vs.m_PlaceboPeakDetectAllowDelayed);
 
-  XMLUtils::GetString(pElement, "placeboupscaler", value); vs.m_PlaceboUpscaler = CPLHelper::getFilterIndexFromDescription(value);
-  XMLUtils::GetString(pElement, "placebodownscaler", value); vs.m_PlaceboDownscaler = CPLHelper::getFilterIndexFromDescription(value);
-  XMLUtils::GetString(pElement, "placeboplaneupscaler", value); vs.m_PlaceboPlaneUpscaler = CPLHelper::getFilterIndexFromDescription(value);
-  XMLUtils::GetString(pElement, "placeboplanedownscaler", value); vs.m_PlaceboPlaneDownscaler = CPLHelper::getFilterIndexFromDescription(value);
-  XMLUtils::GetString(pElement, "placeboframemixer", value); vs.m_PlaceboFrameMixer = CPLHelper::getFilterIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placeboupscaler", value); vs.m_PlaceboUpscaler = value == "" ? vs.m_PlaceboUpscaler : CPLHelper::getFilterIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebodownscaler", value); vs.m_PlaceboDownscaler = value == "" ? vs.m_PlaceboDownscaler : CPLHelper::getFilterIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placeboplaneupscaler", value); vs.m_PlaceboPlaneUpscaler = value == "" ? vs.m_PlaceboPlaneUpscaler : CPLHelper::getFilterIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placeboplanedownscaler", value); vs.m_PlaceboPlaneDownscaler = value == "" ? vs.m_PlaceboPlaneDownscaler : CPLHelper::getFilterIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placeboframemixer", value); vs.m_PlaceboFrameMixer = value == "" ? vs.m_PlaceboFrameMixer : CPLHelper::getFilterIndexFromDescription(value);
 
   XMLUtils::GetBoolean(pElement, "placebodebandenabled", vs.m_PlaceboDebandEnabled);
   XMLUtils::GetFloat(pElement, "placebodebandgrain", vs.m_PlaceboDebandGrain);
@@ -848,8 +848,8 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement, "placebocolormapcontrastrecovery", vs.m_PlaceboColorMapContrastRecovery);
   XMLUtils::GetFloat(pElement, "placebocolormapcontrastsmoothness", vs.m_PlaceboColorMapContrastSmoothness);
   XMLUtils::GetBoolean(pElement, "placebocolormapgamutexpansion", vs.m_PlaceboColorMapGamutExpansion);
-  XMLUtils::GetString(pElement, "placebocolormapgamutmapping", value); vs.m_PlaceboColorMapGamutMapping = CPLHelper::getGamutMapIndexFromDescription(value);
-  XMLUtils::GetString(pElement, "placebocolormaptonemapping", value); vs.m_PlaceboColorMapToneMapping = CPLHelper::getToneMapIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebocolormapgamutmapping", value); vs.m_PlaceboColorMapGamutMapping = value == "" ? vs.m_PlaceboColorMapGamutMapping : CPLHelper::getGamutMapIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebocolormaptonemapping", value); vs.m_PlaceboColorMapToneMapping = value == "" ? vs.m_PlaceboColorMapToneMapping : CPLHelper::getToneMapIndexFromDescription(value);
   XMLUtils::GetBoolean(pElement, "placebocolormapinversetonemapping", vs.m_PlaceboColorMapInverseToneMapping);
   XMLUtils::GetInt(pElement, "placebocolormaplut3dsizei", vs.m_PlaceboColorMapLut3dSizeI);
   XMLUtils::GetInt(pElement, "placebocolormaplut3dsizec", vs.m_PlaceboColorMapLut3dSizeC);
@@ -857,7 +857,7 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetBoolean(pElement, "placebocolormaplut3dtricubic", vs.m_PlaceboColorMapLut3dTricubic);
   XMLUtils::GetInt(pElement, "placebocolormaplutsize", vs.m_PlaceboColorMapLutSize);
   XMLUtils::GetBoolean(pElement, "placebocolormapshowclipping", vs.m_PlaceboColorMapShowClipping);
-  XMLUtils::GetString(pElement, "placebocolormapintent", value); vs.m_PlaceboColorMapIntent = CPLHelper::getColorMapIntentIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebocolormapintent", value); vs.m_PlaceboColorMapIntent = value == "" ? vs.m_PlaceboColorMapIntent : CPLHelper::getColorMapIntentIndexFromDescription(value);
   XMLUtils::GetBoolean(pElement, "placebocolormapforcetonemappinglut", vs.m_PlaceboColorMapForceToneMappingLut);
   XMLUtils::GetBoolean(pElement, "placebocolormapvisualizelut", vs.m_PlaceboColorMapVisualizeLut);
   XMLUtils::GetFloat(pElement, "placebocolormapvisualizerectx0", vs.m_PlaceboColorMapVisualizeRectX0);
@@ -868,20 +868,20 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement, "placebocolormapvisualizetheta", vs.m_PlaceboColorMapVisualizeTheta);
 
   XMLUtils::GetBoolean(pElement, "placebodeinterlaceenabled", vs.m_PlaceboDeinterlaceEnabled);
-  XMLUtils::GetString(pElement, "placebodeinterlacealgo", value); vs.m_PlaceboDeinterlaceAlgo = CPLHelper::getDeinterlaceAlgoIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebodeinterlacealgo", value); vs.m_PlaceboDeinterlaceAlgo = value == "" ? vs.m_PlaceboDeinterlaceAlgo : CPLHelper::getDeinterlaceAlgoIndexFromDescription(value);
   XMLUtils::GetBoolean(pElement, "placebodeinterlaceskipspatialcheck", vs.m_PlaceboDeinterlaceSkipSpatialCheck);
   XMLUtils::GetBoolean(pElement, "placebosigmoidenabled", vs.m_PlaceboSigmoidEnabled);
   XMLUtils::GetFloat(pElement, "placebosigmoidcenter", vs.m_PlaceboSigmoidCenter);
   XMLUtils::GetFloat(pElement, "placebosigmoidslope", vs.m_PlaceboSigmoidSlope);
   XMLUtils::GetBoolean(pElement, "placeboconeenabled", vs.m_PlaceboConeEnabled);
-  XMLUtils::GetString(pElement, "placeboconecones", value); vs.m_PlaceboConeCones = CPLHelper::getConeConesIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placeboconecones", value); vs.m_PlaceboConeCones = value == "" ? vs.m_PlaceboConeCones: CPLHelper::getConeConesIndexFromDescription(value);
   XMLUtils::GetFloat(pElement, "placeboconestrength", vs.m_PlaceboConeStrength);
 
   XMLUtils::GetBoolean(pElement, "placeboditherenabled", vs.m_PlaceboDitherEnabled);
-  XMLUtils::GetString(pElement, "placebodithermethod", value); vs.m_PlaceboDitherMethod = CPLHelper::getDitherMethodIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebodithermethod", value); vs.m_PlaceboDitherMethod = value == "" ? vs.m_PlaceboDitherMethod: CPLHelper::getDitherMethodIndexFromDescription(value);
   XMLUtils::GetInt(pElement, "placeboditherlutsize", vs.m_PlaceboDitherLutSize);
   XMLUtils::GetBoolean(pElement, "placebodithertemporal", vs.m_PlaceboDitherTemporal);
-  XMLUtils::GetString(pElement, "placebodithertransfer", value); vs.m_PlaceboDitherTransfer = CPLHelper::getDitherTransferIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placebodithertransfer", value); vs.m_PlaceboDitherTransfer = value == "" ? vs.m_PlaceboDitherTransfer : CPLHelper::getDitherTransferIndexFromDescription(value);
 
   XMLUtils::GetFloat(pElement, "placebotoneconstantexposure", vs.m_PlaceboToneConstantExposure);
   XMLUtils::GetFloat(pElement, "placebotoneconstantkneeadaptation", vs.m_PlaceboToneConstantKneeAdaptation);
@@ -901,14 +901,14 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement, "placebogamutconstantssoftclipdesat", vs.m_PlaceboGamutConstantsSoftclipDesat);
   XMLUtils::GetFloat(pElement, "placebogamutconstantssoftclipknee", vs.m_PlaceboGamutConstantsSoftclipKnee);
 
-  XMLUtils::GetString(pElement, "placeboluttype", value); vs.m_PlaceboLutType = CPLHelper::getLutTypeIndexFromDescription(value); //params.lut will be updated in UpdateLibPLaceboParamsFromVideoSettings 
+  XMLUtils::GetString(pElement, "placeboluttype", value); vs.m_PlaceboLutType = value == "" ? vs.m_PlaceboLutType : CPLHelper::getLutTypeIndexFromDescription(value); //params.lut will be updated in UpdateLibPLaceboParamsFromVideoSettings 
   XMLUtils::GetFloat(pElement, "placeboantiringingstrength", vs.m_PlaceboAntiringingStrength);
   XMLUtils::GetBoolean(pElement, "placebocorrectsubpixeloffset", vs.m_PlaceboCorrectSubpixelOffset);
   XMLUtils::GetBoolean(pElement, "placebodisablebuiltinscalers", vs.m_PlaceboDisableBuiltinScalers);
   XMLUtils::GetBoolean(pElement, "placebodisabledithergammacorrection", vs.m_PlaceboDisableDitherGammaCorrection);
   XMLUtils::GetBoolean(pElement, "placebodisablelinearscaling", vs.m_PlaceboDisableLinearScaling);
   XMLUtils::GetBoolean(pElement, "placebodynamicconstant", vs.m_PlaceboDynamicConstant);
-  XMLUtils::GetString(pElement, "placeboerrordiffusion", value); vs.m_PlaceboErrorDiffusion = CPLHelper::getErrorDiffusionIndexFromDescription(value);
+  XMLUtils::GetString(pElement, "placeboerrordiffusion", value); vs.m_PlaceboErrorDiffusion = value == "" ? vs.m_PlaceboErrorDiffusion : CPLHelper::getErrorDiffusionIndexFromDescription(value);
   XMLUtils::GetBoolean(pElement, "placeboforcedither", vs.m_PlaceboForceDither);
   XMLUtils::GetBoolean(pElement, "placeboforcelowbitdepthfbos", vs.m_PlaceboForceLowBitDepthFbos);
   XMLUtils::GetBoolean(pElement, "placeboignoreiccprofiles", vs.m_PlaceboIgnoreIccProfiles);

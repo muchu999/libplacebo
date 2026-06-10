@@ -132,7 +132,6 @@ void CVideoSettings::copy(const CVideoSettings& other)
 
 CVideoSettings::CVideoSettings()
 {
-  m_placeboOptions = new PlOptionsWrapper();
 
   // Kodi video settings
   m_InterlaceMethod = VS_INTERLACEMETHOD_AUTO;
@@ -182,12 +181,11 @@ CVideoSettings::CVideoSettings()
   m_PlaceboShadersFilename = {};
   m_PlaceboShadersParams = {};
 
-  // m_placeboOptions already reset in constructor, just update
+  m_placeboOptions = new PlOptionsWrapper();
+  ResetRenderSettings();
   CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(*this);
 
 
-  // Reset default values that are not part of libplacebo
-  ResetRenderSettings();
 }
 
 void CVideoSettings::ResetRenderSettings(PlOptionsWrapper::reset_type type)
