@@ -326,8 +326,6 @@ public:
   void ResetDitherSettings(PlOptionsWrapper::reset_type type);
   void ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type);
 
-  bool operator!=(const CVideoSettings &right) const;
-
   EINTERLACEMETHOD m_InterlaceMethod;
   ESCALINGMETHOD m_ScalingMethod;
   int m_ViewMode; // current view mode
