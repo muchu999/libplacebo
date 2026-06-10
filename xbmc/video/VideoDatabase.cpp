@@ -1441,13 +1441,13 @@ int CVideoDatabase::AddSet(const std::string& strSet,
       return -1;
 
     std::string strSQL =
-        PrepareSQL("SELECT idSet FROM sets WHERE strOriginalSet='%s'",
+        PrepareSQL("SELECT idSet FROM `sets` WHERE strOriginalSet='%s'",
                    strOriginalSet.empty() ? strSet.c_str() : strOriginalSet.c_str());
     m_pDS->query(strSQL);
     if (m_pDS->num_rows() == 0)
     {
       m_pDS->close();
-      strSQL = PrepareSQL("INSERT INTO sets (idSet, strSet, strOverview, strOriginalSet) "
+      strSQL = PrepareSQL("INSERT INTO `sets` (idSet, strSet, strOverview, strOriginalSet) "
                           "VALUES(NULL, '%s', '%s', '%s')",
                           strSet.c_str(), strOverview.c_str(),
                           strOriginalSet.empty() ? strSet.c_str() : strOriginalSet.c_str());
@@ -1461,10 +1461,10 @@ int CVideoDatabase::AddSet(const std::string& strSet,
 
       // update set data
       if (updateOverview)
-        strSQL = PrepareSQL("UPDATE sets SET strSet = '%s', strOverview = '%s' WHERE idSet = %i",
+        strSQL = PrepareSQL("UPDATE `sets` SET strSet = '%s', strOverview = '%s' WHERE idSet = %i",
                             strSet.c_str(), strOverview.c_str(), id);
       else
-        strSQL = PrepareSQL("UPDATE sets SET strSet = '%s' WHERE idSet = %i", strSet.c_str(), id);
+        strSQL = PrepareSQL("UPDATE `sets` SET strSet = '%s' WHERE idSet = %i", strSet.c_str(), id);
 
       m_pDS->exec(strSQL);
 
@@ -2164,7 +2164,7 @@ bool CVideoDatabase::GetSetInfo(int idSet, CVideoInfoTag& details, CFileItem* it
       return false;
 
     Filter filter;
-    filter.where = PrepareSQL("sets.idSet=%d", idSet);
+    filter.where = PrepareSQL("`sets`.`idSet`=%d", idSet);
     CFileItemList items;
     if (!GetSetsByWhere("videodb://movies/sets/", filter, items) ||
         items.Size() != 1 ||
@@ -2538,7 +2538,8 @@ int CVideoDatabase::SetDetailsForMovieSet(const CVideoInfoTag& details,
     }
 
     // and insert the new row
-    std::string sql = PrepareSQL("UPDATE sets SET strSet='%s', strOverview='%s' WHERE idSet=%i", details.m_strTitle.c_str(), details.m_strPlot.c_str(), idSet);
+    std::string sql = PrepareSQL("UPDATE `sets` SET strSet='%s', strOverview='%s' WHERE idSet=%i",
+                                 details.m_strTitle.c_str(), details.m_strPlot.c_str(), idSet);
     m_pDS->exec(sql);
 
     if (!inTransaction)
@@ -3499,6 +3500,50 @@ void CVideoDatabase::GetEpisodesByFileId(int idFile, std::vector<CVideoInfoTag>&
   }
 }
 
+bool CVideoDatabase::GetEpisodeMap(int idShow, EpisodeFileMap& fileMap, int idFile /* = -1 */) const
+{
+  if (!m_pDB)
+    return false;
+
+  std::unique_ptr<dbiplus::Dataset> ds{m_pDB->CreateDataset()};
+  if (!ds)
+    return false;
+
+  return GetEpisodeMap(idShow, fileMap, *ds, idFile);
+}
+
+namespace
+{
+struct BookmarkFieldNames
+{
+  const char* timeInSeconds;
+  const char* totalTimeInSeconds;
+  const char* thumbNailImage;
+  const char* player;
+  const char* playerState;
+  const char* type;
+};
+
+constexpr BookmarkFieldNames bookmarkFields{"timeInSeconds", "totalTimeInSeconds", "thumbNailImage",
+                                            "player",        "playerState",        "type"};
+
+constexpr BookmarkFieldNames episodeBookmarkFields{"epBookmarkTime",  "epBookmarkTotalTime",
+                                                   "epBookmarkThumb", "epBookmarkPlayer",
+                                                   "epBookmarkState", "epBookmarkType"};
+
+void ParseBookmarkFields(dbiplus::Dataset& ds,
+                         CBookmark& bookmark,
+                         const BookmarkFieldNames& fields)
+{
+  bookmark.timeInSeconds = ds.fv(fields.timeInSeconds).get_asDouble();
+  bookmark.totalTimeInSeconds = ds.fv(fields.totalTimeInSeconds).get_asDouble();
+  bookmark.thumbNailImage = ds.fv(fields.thumbNailImage).get_asString();
+  bookmark.player = ds.fv(fields.player).get_asString();
+  bookmark.playerState = ds.fv(fields.playerState).get_asString();
+  bookmark.type = static_cast<CBookmark::EType>(ds.fv(fields.type).get_asInt());
+}
+} // namespace
+
 bool CVideoDatabase::GetEpisodeMap(int idShow,
                                    EpisodeFileMap& fileMap,
                                    dbiplus::Dataset& pDS,
@@ -3507,12 +3552,21 @@ bool CVideoDatabase::GetEpisodeMap(int idShow,
   try
   {
     const std::string sql{PrepareSQL(
-        "select episode_view.*, streamdetails.iVideoDuration as duration from "
-        "episode_view left join streamdetails on episode_view.idFile = streamdetails.idFile "
+        "select episode_view.*, streamdetails.iVideoDuration as duration, "
+        "epBookmark.timeInSeconds as epBookmarkTime, "
+        "epBookmark.totalTimeInSeconds as epBookmarkTotalTime, "
+        "epBookmark.thumbNailImage as epBookmarkThumb, "
+        "epBookmark.player as epBookmarkPlayer, "
+        "epBookmark.playerState as epBookmarkState, "
+        "epBookmark.type as epBookmarkType "
+        "from episode_view "
+        "left join streamdetails on episode_view.idFile = streamdetails.idFile "
         "and streamdetails.iStreamType = %i "
+        "left join bookmark as epBookmark on epBookmark.idBookmark = episode_view.c%02d "
         "where episode_view.idShow = %i "
         "order by cast(episode_view.c%02d as integer), cast(episode_view.c%02d as integer)",
-        CStreamDetail::VIDEO, idShow, VIDEODB_ID_EPISODE_SEASON, VIDEODB_ID_EPISODE_EPISODE)};
+        CStreamDetail::VIDEO, VIDEODB_ID_EPISODE_BOOKMARK, idShow, VIDEODB_ID_EPISODE_SEASON,
+        VIDEODB_ID_EPISODE_EPISODE)};
     pDS.query(sql);
 
     // Generate map of episodes in each file (finding base file for bluray://) of show
@@ -3525,12 +3579,25 @@ bool CVideoDatabase::GetEpisodeMap(int idShow,
                                                        pDS.fv("strFileName").get_asString())};
       const std::string baseFile{URIUtils::IsBlurayPath(file) ? URIUtils::GetDiscFile(file) : file};
       // Different scrapers put duration in different places
+      // @todo: this has been fixed in latest tmdb scraper and this (+SQL) can be simplified after PR #27769 is merged
       const unsigned int streamDetailsDuration{pDS.fv("duration").get_asUInt()};
       const unsigned int episodeViewDuration{
           pDS.fv(StringUtils::Format("c{:02}", VIDEODB_ID_EPISODE_RUNTIME).c_str()).get_asUInt()};
       episodeInformation.duration =
           episodeViewDuration > 0 ? episodeViewDuration : streamDetailsDuration;
       episodeInformation.index = index;
+      episodeInformation.season =
+          pDS.fv(StringUtils::Format("c{:02}", VIDEODB_ID_EPISODE_SEASON).c_str()).get_asInt();
+      episodeInformation.episode =
+          pDS.fv(StringUtils::Format("c{:02}", VIDEODB_ID_EPISODE_EPISODE).c_str()).get_asInt();
+
+      // See if there is an episode bookmark for this episode
+      if (!pDS.fv("epBookmarkTime").get_isNull())
+      {
+        CBookmark bookmark;
+        ParseBookmarkFields(pDS, bookmark, episodeBookmarkFields);
+        episodeInformation.bookmark = bookmark;
+      }
 
       fileMap.insert({baseFile, episodeInformation});
       if (idFile > 0 && episodeFile.empty() && pDS.fv("idFile").get_asInt() == idFile)
@@ -3700,21 +3767,22 @@ bool CVideoDatabase::ClearBookMarksOfFile(int idFile,
   return true;
 }
 
+bool CVideoDatabase::GetBookMarkForEpisode(const CVideoInfoTag& tag, CBookmark& bookmark) const
+{
+  return GetBookMarkForEpisode(tag.m_iDbId, bookmark);
+}
 
-bool CVideoDatabase::GetBookMarkForEpisode(const CVideoInfoTag& tag, CBookmark& bookmark)
+bool CVideoDatabase::GetBookMarkForEpisode(int dbId, CBookmark& bookmark) const
 {
   try
   {
-    std::string strSQL = PrepareSQL("select bookmark.* from bookmark join episode on episode.c%02d=bookmark.idBookmark where episode.idEpisode=%i", VIDEODB_ID_EPISODE_BOOKMARK, tag.m_iDbId);
+    std::string strSQL = PrepareSQL("select bookmark.* from bookmark join episode on "
+                                    "episode.c%02d=bookmark.idBookmark where episode.idEpisode=%i",
+                                    VIDEODB_ID_EPISODE_BOOKMARK, dbId);
     m_pDS2->query( strSQL );
     if (!m_pDS2->eof())
     {
-      bookmark.timeInSeconds = m_pDS2->fv("timeInSeconds").get_asDouble();
-      bookmark.totalTimeInSeconds = m_pDS2->fv("totalTimeInSeconds").get_asDouble();
-      bookmark.thumbNailImage = m_pDS2->fv("thumbNailImage").get_asString();
-      bookmark.playerState = m_pDS2->fv("playerState").get_asString();
-      bookmark.player = m_pDS2->fv("player").get_asString();
-      bookmark.type = (CBookmark::EType)m_pDS2->fv("type").get_asInt();
+      ParseBookmarkFields(*m_pDS2, bookmark, bookmarkFields);
     }
     else
     {
@@ -4051,9 +4119,9 @@ void CVideoDatabase::DeleteSet(int idSet)
       return;
 
     std::string strSQL;
-    strSQL=PrepareSQL("delete from sets where idSet = %i", idSet);
+    strSQL = PrepareSQL("delete from `sets` where idSet = %i", idSet);
     m_pDS->exec(strSQL);
-    strSQL=PrepareSQL("update movie set idSet = null where idSet = %i", idSet);
+    strSQL = PrepareSQL("update movie set idSet = null where idSet = %i", idSet);
     m_pDS->exec(strSQL);
   }
   catch (...)
@@ -5735,6 +5803,7 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
         CPLHelper::UpdateLibPLaceboParamsFromVideoSettings(settings);
 
         m_pDS->close();
+		settings.m_isDefaultVideoSettings = false;
         return true;
       }
     }
@@ -7289,7 +7358,8 @@ void CVideoDatabase::UpdateMovieTitle(int idMovie,
     else if (iType == VideoDbContentType::MOVIE_SETS)
     {
       CLog::Log(LOGINFO, "Changing Movie set:id:{} New Title:{}", idMovie, strNewMovieTitle);
-      std::string strSQL = PrepareSQL("UPDATE sets SET strSet='%s' WHERE idSet=%i", strNewMovieTitle.c_str(), idMovie );
+      std::string strSQL = PrepareSQL("UPDATE `sets` SET strSet='%s' WHERE idSet=%i",
+                                      strNewMovieTitle.c_str(), idMovie);
       m_pDS->exec(strSQL);
     }
 
@@ -7669,10 +7739,10 @@ bool CVideoDatabase::GetSetsByWhere(const std::string& strBaseDir, const Filter 
       return false;
 
     Filter setFilter = filter;
-    setFilter.join += " JOIN sets ON movie_view.idSet = sets.idSet";
+    setFilter.join += " JOIN `sets` ON movie_view.idSet = `sets`.idSet";
     if (!setFilter.order.empty())
       setFilter.order += ",";
-    setFilter.order += "sets.idSet";
+    setFilter.order += "`sets`.idSet";
 
     if (!GetMoviesByWhere(strBaseDir, setFilter, items))
       return false;
@@ -9271,7 +9341,7 @@ bool CVideoDatabase::HasSets() const
       return false;
 
     m_pDS->query("SELECT movie_view.idSet,COUNT(1) AS c FROM movie_view "
-                 "JOIN sets ON sets.idSet = movie_view.idSet "
+                 "JOIN `sets` ON `sets`.idSet = movie_view.idSet "
                  "GROUP BY movie_view.idSet HAVING c>1");
 
     bool bResult = (m_pDS->num_rows() > 0);
@@ -11011,8 +11081,8 @@ void CVideoDatabase::CleanDatabase(CGUIDialogProgressBarHandle* handle,
       m_pDS->exec(sql);
 
       CLog::LogFC(LOGDEBUG, LOGDATABASE, "Cleaning set table");
-      sql = "DELETE FROM sets "
-            "WHERE NOT EXISTS (SELECT 1 FROM movie WHERE movie.idSet = sets.idSet)";
+      sql = "DELETE FROM `sets` "
+            "WHERE NOT EXISTS (SELECT 1 FROM movie WHERE movie.idSet = `sets`.idSet)";
       m_pDS->exec(sql);
 
       CommitTransaction();
@@ -11516,7 +11586,7 @@ void CVideoDatabase::ExportToXML(const std::string &path, bool singleFile /* = t
     if (!movieSetsDir.empty())
     {
       // find all movie sets
-      sql = "select * from sets";
+      sql = "select * from `sets`";
       m_pDS->query(sql);
       total = m_pDS->num_rows();
 
@@ -12127,6 +12197,7 @@ void CVideoDatabase::ImportFromXML(const std::string &path)
     movie = root->FirstChildElement();
     std::string lastTitle;
     int lastMovieId{-1};
+    KODI::REGEXP::RegExpCache regexpCache;
     while (movie)
     {
       std::string currentTitle{};
@@ -12227,8 +12298,9 @@ void CVideoDatabase::ImportFromXML(const std::string &path)
         // season artwork
         KODI::ART::SeasonsArtwork seasonArt;
         artItem.GetVideoInfoTag()->m_strPath = artPath;
-        CVideoInfoScanner::GetSeasonThumbs(*artItem.GetVideoInfoTag(), seasonArt,
-                                           CVideoThumbLoader::GetArtTypes(MediaTypeSeason), true);
+        CVideoInfoScanner::GetSeasonThumbs(
+            *artItem.GetVideoInfoTag(), seasonArt, CVideoThumbLoader::GetArtTypes(MediaTypeSeason),
+            true, CVideoInfoScanner::UseRemoteArtWithLocalScraper::YES, &regexpCache);
         for (const auto& [seasonNumber, art] : seasonArt)
         {
           const int seasonID = AddSeason(showID, seasonNumber);

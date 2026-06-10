@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2026 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -12,6 +12,7 @@
 #include "music/MusicDatabase.h"
 #include "threads/IRunnable.h"
 #include "threads/Thread.h"
+#include "utils/RegExp.h"
 
 #include <string>
 
@@ -262,8 +263,8 @@ protected:
   int GetPathHash(const CFileItemList &items, std::string &hash);
 
   void Run() override;
-  int CountFiles(const CFileItemList& items, bool recursive);
-  int CountFilesRecursively(const std::string& strPath);
+  int CountFiles(const CFileItemList& items, bool recursive, int depth = 0);
+  int CountFilesRecursively(const std::string& strPath, int depth = 0);
 
   /*! \brief Resolve a MusicBrainzID to a URL
    If we have a MusicBrainz ID for an artist or album,
@@ -289,5 +290,6 @@ protected:
   std::set<std::string> m_seenPaths;
   int m_flags;
   CThread m_fileCountReader;
+  mutable KODI::REGEXP::RegExpCache m_regexpCache;
 };
 }

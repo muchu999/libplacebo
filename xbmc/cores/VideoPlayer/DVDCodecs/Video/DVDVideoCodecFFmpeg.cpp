@@ -827,6 +827,14 @@ CDVDVideoCodec::VCReturn CDVDVideoCodecFFmpeg::GetPicture(VideoPicture* pVideoPi
     m_started = true;
     m_iLastKeyframe = m_pCodecContext->has_b_frames + 2;
   }
+  // AV1 with keyframe-filtering=2 encodes hidden keyframes (show_frame=0) that
+  // are decoded but never output. The first visible frame is INTER, not KEY.
+  // The decoder only outputs frames with valid references, so trust it.
+  else if (m_pCodecContext->codec_id == AV_CODEC_ID_AV1 && !m_started)
+  {
+    m_started = true;
+    m_iLastKeyframe = m_pCodecContext->has_b_frames + 2;
+  }
   if (m_pDecodedFrame->flags & AV_FRAME_FLAG_INTERLACED)
     m_interlaced = true;
   else
@@ -1059,24 +1067,11 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
   pVideoPicture->m_originalColorPrimaries = pVideoPicture->color_primaries;
   pVideoPicture->color_transfer = m_pCodecContext->color_trc == AVCOL_TRC_UNSPECIFIED ? m_hints.colorTransferCharacteristic : m_pCodecContext->color_trc;
   pVideoPicture->color_space = m_pCodecContext->colorspace == AVCOL_SPC_UNSPECIFIED ? m_hints.colorSpace : m_pCodecContext->colorspace;
-  pVideoPicture->colorBits = 8;
-
-  // determine how number of bits of encoded video
-  if (m_pCodecContext->pix_fmt == AV_PIX_FMT_YUV420P12)
-    pVideoPicture->colorBits = 12;
-  else if (m_pCodecContext->pix_fmt == AV_PIX_FMT_YUV420P10)
-    pVideoPicture->colorBits = 10;
-  else if (m_pCodecContext->codec_id == AV_CODEC_ID_HEVC &&
-           m_pCodecContext->profile == AV_PROFILE_HEVC_MAIN_10)
-    pVideoPicture->colorBits = 10;
-  else if (m_pCodecContext->codec_id == AV_CODEC_ID_H264 &&
-           (m_pCodecContext->profile == AV_PROFILE_H264_HIGH_10 ||
-            m_pCodecContext->profile == AV_PROFILE_H264_HIGH_10_INTRA))
-    pVideoPicture->colorBits = 10;
-  else if ((m_pCodecContext->codec_id == AV_CODEC_ID_VP9 ||
-            m_pCodecContext->codec_id == AV_CODEC_ID_AV1) &&
-           m_pCodecContext->sw_pix_fmt == AV_PIX_FMT_YUV420P10)
-    pVideoPicture->colorBits = 10;
+  // sw_pix_fmt always describes the actual pixel layout (pix_fmt is opaque
+  // for hwaccel paths like AV_PIX_FMT_VAAPI). libavutil api covers every
+  // codec, chroma layout, and bit depth without per-profile enumeration.
+  const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(m_pCodecContext->sw_pix_fmt);
+  pVideoPicture->colorBits = desc ? desc->comp[0].depth : 8;
 
   if (m_pCodecContext->color_range == AVCOL_RANGE_JPEG ||
     m_pCodecContext->pix_fmt == AV_PIX_FMT_YUVJ420P)

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2026 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -264,6 +264,21 @@ int CDataCacheCore::GetAudioBitsPerSample()
   return m_playerAudioInfo.bitsPerSample;
 }
 
+// player subtitle info
+void CDataCacheCore::SetSubtitleDecoderName(std::string name)
+{
+  std::unique_lock lock(m_subtitlePlayerSection);
+
+  m_playerSubtitleInfo.m_decoderName = std::move(name);
+}
+
+std::string CDataCacheCore::GetSubtitleDecoderName()
+{
+  std::unique_lock lock(m_subtitlePlayerSection);
+
+  return m_playerSubtitleInfo.m_decoderName;
+}
+
 void CDataCacheCore::SetEditList(const std::vector<EDL::Edit>& editList)
 {
   std::unique_lock lock(m_contentSection);
@@ -310,6 +325,18 @@ const std::vector<std::pair<std::string, int64_t>>& CDataCacheCore::GetChapters(
 {
   std::unique_lock lock(m_contentSection);
   return m_contentInfo.GetChapters();
+}
+
+void CDataCacheCore::SetBookmarks(const std::vector<std::chrono::milliseconds>& bookmarks)
+{
+  std::unique_lock lock(m_contentSection);
+  m_contentInfo.SetBookmarks(bookmarks);
+}
+
+const std::vector<std::chrono::milliseconds>& CDataCacheCore::GetBookmarks() const
+{
+  std::unique_lock lock(m_contentSection);
+  return m_contentInfo.GetBookmarks();
 }
 
 void CDataCacheCore::SetRenderClockSync(bool enable)

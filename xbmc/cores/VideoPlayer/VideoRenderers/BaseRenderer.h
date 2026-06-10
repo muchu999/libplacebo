@@ -63,6 +63,7 @@ public:
   virtual void ReleaseBuffer(int idx) { }
   virtual bool NeedBuffer(int idx) { return false; }
   virtual bool IsGuiLayer() { return true; }
+  virtual bool HasVideoPlane() { return !IsGuiLayer(); }
   // Render info, can be called before configure
   virtual CRenderInfo GetRenderInfo() { return CRenderInfo(); }
   virtual void Update() = 0;
@@ -77,6 +78,7 @@ public:
 
   virtual bool WantsDoublePass() { return false; }
 
+  void SetFps(float fps) { m_fps = fps; }
   void SetViewMode(int viewMode);
 
   /*! \brief Get video rectangle and view window

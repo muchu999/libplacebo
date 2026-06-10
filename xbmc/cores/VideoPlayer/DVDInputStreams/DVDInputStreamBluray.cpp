@@ -16,7 +16,6 @@
 #include "URL.h"
 #include "filesystem/BlurayCallback.h"
 #include "filesystem/SpecialProtocol.h"
-#include "settings/DiscSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/Geometry.h"
@@ -210,7 +209,12 @@ bool CDVDInputStreamBluray::Open()
       URIUtils::RemoveSlashAtEnd(strPath);
     }
     root = strPath;
-    filename = URIUtils::GetFileName(m_item.GetPath());
+    // Use the resolved (dynamic) path so playlist selectors survive plugin
+    // resolution and library .strm playback. m_item.GetPath() returns the
+    // original library reference (e.g. .strm file) which has no .mpls
+    // extension, causing the MPLS title selector to be lost and playback
+    // to fall through to navigation/main-feature mode.
+    filename = URIUtils::GetFileName(m_item.GetDynPath());
   }
 
   // root should not have trailing slash
@@ -325,17 +329,10 @@ bool CDVDInputStreamBluray::Open()
     return false;
   }
 
-  int mode = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_DISC_PLAYBACK);
-
   if (URIUtils::HasExtension(filename, ".mpls"))
   {
     m_navmode = false;
     m_titleInfo = GetTitleFile(filename);
-  }
-  else if (mode == BD_PLAYBACK_MAIN_TITLE)
-  {
-    m_navmode = false;
-    m_titleInfo = GetTitleLongest();
   }
   else if (resumable && m_item.GetStartOffset() == STARTOFFSET_RESUME && m_item.IsResumable())
   {

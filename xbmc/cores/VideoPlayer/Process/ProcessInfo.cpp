@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2026 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -413,6 +413,39 @@ bool CProcessInfo::AllowDTSHDDecode()
   return true;
 }
 
+//******************************************************************************
+// player subtitle info
+//******************************************************************************
+
+void CProcessInfo::ResetSubtitleCodecInfo()
+{
+  std::unique_lock lock(m_subtitleCodecSection);
+
+  m_subtitleDecoderName.clear();
+
+  if (m_dataCache)
+  {
+    m_dataCache->SetSubtitleDecoderName(m_subtitleDecoderName);
+  }
+}
+
+void CProcessInfo::SetSubtitleDecoderName(const std::string& name)
+{
+  std::unique_lock lock(m_subtitleCodecSection);
+
+  m_subtitleDecoderName = name;
+
+  if (m_dataCache)
+    m_dataCache->SetSubtitleDecoderName(m_subtitleDecoderName);
+}
+
+std::string CProcessInfo::GetSubtitleDecoderName()
+{
+  std::unique_lock lock(m_subtitleCodecSection);
+
+  return m_subtitleDecoderName;
+}
+
 void CProcessInfo::SetRenderClockSync(bool enabled)
 {
   std::unique_lock lock(m_renderSection);
@@ -593,7 +626,8 @@ float CProcessInfo::MaxTempoPlatform()
 bool CProcessInfo::IsTempoAllowed(float tempo)
 {
   if (tempo > MinTempoPlatform() &&
-      (tempo < MaxTempoPlatform() || tempo < CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_maxTempo))
+      (tempo < MaxTempoPlatform() ||
+       tempo < CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_maxTempo + 0.05f))
     return true;
 
   return false;

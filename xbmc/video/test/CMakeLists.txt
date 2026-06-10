@@ -1,7 +1,7 @@
-set(SOURCES TestStacks.cpp
+set(SOURCES TestBookmark.cpp
+            TestStacks.cpp
             TestVideoDbUrl.cpp
             TestVideoFileItemClassify.cpp
-            TestVideoInfoScanner.cpp
             TestVideoInfoTag.cpp
             TestVideoUtils.cpp)
 

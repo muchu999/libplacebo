@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2026 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -777,7 +777,7 @@ constexpr std::array<InfoMap, 7> integer_bools = {{
 ///                  \anchor Player_Editlist
 ///                  _string_,
 ///     @return The editlist of the currently playing item as csv in the format start1\,end1\,start2\,end2\,...
-///     Tokens must have values in the range from 0.0 to 100.0. end token must be less or equal than start token.
+///     Tokens have values in the range from 0.0 to 100.0. end token is greater or equal to the  start token.
 ///     @note This infolabel does not contain EDL cuts. Edits start and end times are adjusted according to cuts
 ///     defined for the media item.
 ///     <p><hr>
@@ -788,7 +788,7 @@ constexpr std::array<InfoMap, 7> integer_bools = {{
 ///                  \anchor Player_Cuts
 ///                  _string_,
 ///     @return The EDL cut markers of the currently playing item as csv in the format start1\,end1\,start2\,end2\,...
-///     Tokens must have values in the range from 0.0 to 100.0. end token must be less or equal than start token.
+///     Tokens have values in the range from 0.0 to 100.0. end token is greater or equal to the  start token.
 ///     <p><hr>
 ///     @skinning_v20 **[New Infolabel]** \link Player_Cuts `Player.Cuts`\endlink
 ///     <p>
@@ -797,7 +797,7 @@ constexpr std::array<InfoMap, 7> integer_bools = {{
 ///                  \anchor Player_SceneMarkers
 ///                  _string_,
 ///     @return The EDL scene markers of the currently playing item as csv in the format start1\,end1\,start2\,end2\,...
-///     Tokens must have values in the range from 0.0 to 100.0. end token must be less or equal than start token.
+///     Tokens have values in the range from 0.0 to 100.0. end token is greater or equal to the  start token.
 ///     <p><hr>
 ///     @skinning_v20 **[New Infolabel]** \link Player_SceneMarkers `Player.SceneMarkers`\endlink
 ///     <p>
@@ -814,9 +814,26 @@ constexpr std::array<InfoMap, 7> integer_bools = {{
 ///                  \anchor Player_Chapters
 ///                  _string_,
 ///     @return The chapters of the currently playing item as csv in the format start1\,end1\,start2\,end2\,...
-///     Tokens must have values in the range from 0.0 to 100.0. end token must be less or equal than start token.
+///     Tokens have values in the range from 0.0 to 100.0. end token is greater or equal to the  start token.
 ///     <p><hr>
 ///     @skinning_v19 **[New Infolabel]** \link Player_Chapters `Player.Chapters`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`Player.Bookmarks`</b>,
+///                  \anchor Player_Bookmarks
+///                  _string_,
+///     @return The bookmarks of the currently playing item as csv in the format start1\,end1\,start2\,end2\,...
+///     Tokens have values in the range from 0.0 to 100.0. end token is greater or equal to the  start token.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link Player_Bookmarks `Player.Bookmarks`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`Player.HasBookmarks`</b>,
+///                  \anchor Player_HasBookmarks
+///                  _boolean_,
+///     @return **True** if the item being played has bookmarks\, **False** otherwise
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link Player_HasBookmarks `Player.HasBookmarks`\endlink
 ///     <p>
 ///   }
 ///   \table_row3{   <b>`Player.IsExternal`</b>,
@@ -844,7 +861,7 @@ constexpr std::array<InfoMap, 7> integer_bools = {{
 ///     <p>
 ///   }
 // clang-format off
-constexpr std::array<InfoMap, 58> player_labels = {{
+constexpr std::array<InfoMap, 60> player_labels = {{
     {"hasmedia",              PLAYER_HAS_MEDIA},
     {"hasaudio",              PLAYER_HAS_AUDIO},
     {"hasvideo",              PLAYER_HAS_VIDEO},
@@ -903,6 +920,8 @@ constexpr std::array<InfoMap, 58> player_labels = {{
     {"scenemarkers",          PLAYER_SCENE_MARKERS},
     {"hasscenemarkers",       PLAYER_HAS_SCENE_MARKERS},
     {"chapters",              PLAYER_CHAPTERS},
+    {"bookmarks",             PLAYER_BOOKMARKS},
+    {"hasbookmarks",          PLAYER_HAS_BOOKMARKS},
 }};
 // clang-format on
 
@@ -1120,7 +1139,7 @@ constexpr std::array<InfoMap, 10> player_times = {{
 ///   \table_row3{   <b>`Player.Process(audiochannels)`</b>,
 ///                  \anchor Player_Process_audiochannels
 ///                  _string_,
-///     @return The audiodecoder name of the currently playing item.
+///     @return The audiochannels string of the currently playing item.
 ///     <p><hr>
 ///     @skinning_v17 **[New Infolabel]** \link Player_Process_audiochannels `Player.Process(audiochannels)`\endlink
 ///     <p>
@@ -1141,11 +1160,20 @@ constexpr std::array<InfoMap, 10> player_times = {{
 ///     @skinning_v17 **[New Infolabel]** \link Player_Process_audiobitspersample `Player.Process(audiobitspersample)`\endlink
 ///     <p>
 ///   }
+///   \table_row3{   <b>`Player.Process(subtitledecoder)`</b>,
+///                  \anchor Player_Process_subtitledecoder
+///                  _string_,
+///     @return The name of the active subtitle decoder for the currently playing item\, for example
+///             ff-pgssub or SSA Subtitle Decoder.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link Player_Process_subtitledecoder `Player.Process(subtitledecoder)`\endlink
+///     <p>
+///   }
 /// \table_end
 ///
 /// -----------------------------------------------------------------------------
 // clang-format off
-constexpr std::array<InfoMap, 13> player_process = {{
+constexpr std::array<InfoMap, 14> player_process = {{
     {"videodecoder",        PLAYER_PROCESS_VIDEODECODER},
     {"deintmethod",         PLAYER_PROCESS_DEINTMETHOD},
     {"pixformat",           PLAYER_PROCESS_PIXELFORMAT},
@@ -1159,6 +1187,7 @@ constexpr std::array<InfoMap, 13> player_process = {{
     {"audiosamplerate",     PLAYER_PROCESS_AUDIOSAMPLERATE},
     {"audiobitspersample",  PLAYER_PROCESS_AUDIOBITSPERSAMPLE},
     {"videoscantype",       PLAYER_PROCESS_VIDEOSCANTYPE},
+    {"subtitledecoder",     PLAYER_PROCESS_SUBTITLEDECODER},
 }};
 // clang-format on
 
@@ -3925,6 +3954,35 @@ constexpr std::array<InfoMap, 46> musicplayer = {{
 ///     @skinning_v13 **[New Infolabel]** \link VideoPlayer_SubtitlesLanguage `VideoPlayer.SubtitlesLanguage`\endlink
 ///     <p>
 ///   }
+///   \table_row3{   <b>`VideoPlayer.SubtitleCodec`</b>,
+///                  \anchor VideoPlayer_SubtitleCodec
+///                  _string_,
+///     @return The codec of the current subtitles of the currently playing video. Possible values include:
+///       - <b>ass</b>
+///       - <b>dvb_subtitle</b>
+///       - <b>dvb_teletext</b>
+///       - <b>dvd_subtitle</b>
+///       - <b>hdmv_pgs_subtitle</b>
+///       - <b>microdvd</b>
+///       - <b>mov_text</b>
+///       - <b>mpl2</b>
+///       - <b>realtext</b>
+///       - <b>sami</b>
+///       - <b>srt</b>
+///       - <b>ssa</b>
+///       - <b>subrip</b>
+///       - <b>text</b>
+///       - <b>ttml</b>
+///       - <b>vplayer</b>
+///       - <b>webvtt</b>
+///       - <b>xsub</b>
+///
+///     @note `VideoPlayer.SubtitleCodec` holds the codec of the next available subtitles stream
+///     if subtitles are disabled in the player.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link VideoPlayer_SubtitleCodec `VideoPlayer.SubtitleCodec`\endlink
+///     <p>
+///   }
 ///   \table_row3{   <b>`VideoPlayer.StereoscopicMode`</b>,
 ///                  \anchor VideoPlayer_StereoscopicMode
 ///                  _string_,
@@ -4171,7 +4229,7 @@ constexpr std::array<InfoMap, 46> musicplayer = {{
 ///
 /// -----------------------------------------------------------------------------
 // clang-format off
-constexpr std::array<InfoMap, 83> videoplayer = {{
+constexpr std::array<InfoMap, 84> videoplayer = {{
     {"title",                 VIDEOPLAYER_TITLE},
     {"genre",                 VIDEOPLAYER_GENRE},
     {"country",               VIDEOPLAYER_COUNTRY},
@@ -4219,6 +4277,7 @@ constexpr std::array<InfoMap, 83> videoplayer = {{
     {"hassubtitles",          VIDEOPLAYER_HASSUBTITLES},
     {"subtitlesenabled",      VIDEOPLAYER_SUBTITLESENABLED},
     {"subtitleslanguage",     VIDEOPLAYER_SUBTITLES_LANG},
+    {"subtitlecodec",         VIDEOPLAYER_SUBTITLE_CODEC},
     {"starttime",             VIDEOPLAYER_STARTTIME},
     {"endtime",               VIDEOPLAYER_ENDTIME},
     {"nexttitle",             VIDEOPLAYER_NEXT_TITLE},
@@ -4300,14 +4359,140 @@ constexpr std::array<InfoMap, 83> videoplayer = {{
 ///     @skinning_v18 **[New Infolabel]** \link RetroPlayer_VideoRotation `RetroPlayer.VideoRotation`\endlink
 ///     <p>
 ///   }
+///   \table_row3{   <b>`RetroPlayer.SupportsEject`</b>,
+///                  \anchor RetroPlayer_SupportsEject
+///                  _boolean_,
+///     @return **True** if the game's disc can be ejected\, **False** if the
+///     game isn't disc-based or doesn't support ejecting the disc.
+///     <p><hr>
+///     @skinning_v22 **[New Boolean Condition]** \link RetroPlayer_SupportsEject `RetroPlayer.SupportsEject`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.DiscEjected`</b>,
+///                  \anchor RetroPlayer_DiscEjected
+///                  _boolean_,
+///     @return **True** if the game's disc is ejected (tray is open)\, **False**
+///     if the game isn't disc-based or the tray is closed.
+///     <p><hr>
+///     @skinning_v22 **[New Boolean Condition]** \link RetroPlayer_DiscEjected `RetroPlayer.DiscEjected`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.DiscLabel`</b>,
+///                  \anchor RetroPlayer_DiscLabel
+///                  _string_,
+///     @return The human-readable label of the currently inserted disc\, or
+///     an empty string if no disc is in the tray/floppy drive or the game
+///     isn't disc-based.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_DiscLabel `RetroPlayer.DiscLabel`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.EmptyTray`</b>,
+///                  \anchor RetroPlayer_EmptyTray
+///                  _boolean_,
+///     @return **True** if the selected disc state is "No disc"\, **False** if a
+///     disc is selected or the game isn't disc-based.
+///     <p><hr>
+///     @skinning_v22 **[New Boolean Condition]** \link RetroPlayer_EmptyTray `RetroPlayer.EmptyTray`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.Title`</b>,
+///                  \anchor RetroPlayer_Title
+///                  _string_,
+///     @return The title of the currently-playing game.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_Title `RetroPlayer.Title`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.Platform`</b>,
+///                  \anchor RetroPlayer_Platform
+///                  _string_,
+///     @return The platform of the currently-playing game\, or an empty string
+///     if the platform is unknown.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_Platform `RetroPlayer.Platform`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.Genres`</b>,
+///                  \anchor RetroPlayer_Genres
+///                  _string_,
+///     @return The genres of the currently-playing game\, joined by "\, ".
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_Genres `RetroPlayer.Genres`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.Publisher`</b>,
+///                  \anchor RetroPlayer_Publisher
+///                  _string_,
+///     @return The publisher of the currently-playing game (e.g. "Nintendo").
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_Publisher `RetroPlayer.Publisher`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.Developer`</b>,
+///                  \anchor RetroPlayer_Developer
+///                  _string_,
+///     @return The developer of the currently-playing game (e.g. "Square").
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_Developer `RetroPlayer.Developer`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.Overview`</b>,
+///                  \anchor RetroPlayer_Overview
+///                  _string_,
+///     @return The overview/summary of the currently-playing game.
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_Overview `RetroPlayer.Overview`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.GameClient`</b>,
+///                  \anchor RetroPlayer_GameClient
+///                  _string_,
+///     @return The add-on ID of the game client (a.k.a. emulator) used to play the
+///     currently-playing game (e.g. `game.libretro.beetle-psx`).
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_GameClient `RetroPlayer.GameClient`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.GameClientName`</b>,
+///                  \anchor RetroPlayer_GameClientName
+///                  _string_,
+///     @return The emulator/core name parsed from the game client's add-on name
+///     (e.g. `bsnes-mercury Performance`).
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_GameClientName `RetroPlayer.GameClientName`\endlink
+///     <p>
+///   }
+///   \table_row3{   <b>`RetroPlayer.GameClientPlatforms`</b>,
+///                  \anchor RetroPlayer_GameClientPlatforms
+///                  _string_,
+///     @return The platform or platform group supported by the game client
+///     (e.g. an emulator might report "Nintendo - SNES / SFC / Game Boy / Color").
+///     <p><hr>
+///     @skinning_v22 **[New Infolabel]** \link RetroPlayer_GameClientPlatforms `RetroPlayer.GameClientPlatforms`\endlink
+///     <p>
+///   }
 /// \table_end
 ///
 /// -----------------------------------------------------------------------------
 // clang-format off
-constexpr std::array<InfoMap, 3> retroplayer = {{
+constexpr std::array<InfoMap, 16> retroplayer = {{
     {"videofilter",   RETROPLAYER_VIDEO_FILTER},
     {"stretchmode",   RETROPLAYER_STRETCH_MODE},
     {"videorotation", RETROPLAYER_VIDEO_ROTATION},
+    {"title", RETROPLAYER_TITLE},
+    {"platform", RETROPLAYER_PLATFORM},
+    {"genres", RETROPLAYER_GENRES},
+    {"publisher", RETROPLAYER_PUBLISHER},
+    {"developer", RETROPLAYER_DEVELOPER},
+    {"overview", RETROPLAYER_OVERVIEW},
+    {"gameclient", RETROPLAYER_GAME_CLIENT},
+    {"gameclientname", RETROPLAYER_GAME_CLIENT_NAME},
+    {"gameclientplatforms", RETROPLAYER_GAME_CLIENT_PLATFORMS},
+    {"supportseject", RETROPLAYER_SUPPORTS_EJECT},
+    {"discejected", RETROPLAYER_DISC_EJECTED},
+    {"disclabel", RETROPLAYER_DISC_LABEL},
+    {"emptytray", RETROPLAYER_EMPTY_TRAY},
 }};
 // clang-format on
 
@@ -6384,7 +6569,7 @@ constexpr std::array<InfoMap, 3> container_str = {{
 ///       - <b>aac_ltp</b>
 ///       - <b>ac3</b>
 ///       - <b>cook</b>
-///       - <b>dca</b>
+///       - <b>dts</b>
 ///       - <b>dtshd_hra</b>
 ///       - <b>dtshd_ma</b>
 ///       - <b>dtshd_ma_x</b>
@@ -7302,6 +7487,15 @@ constexpr std::array<InfoMap, 3> container_str = {{
 ///     @return String containing the name of the detected HDR type or empty if not HDR. See \ref StreamHdrType for the list of possible values.
 ///     <p><hr>
 ///     @skinning_v20 **[New Infolabel]** \link ListItem_HdrType `ListItem.HdrType`\endlink
+///   }
+///   \table_row3{   <b>`ListItem.Property(HdrType.[n])`</b>,
+///                  \anchor ListItem_Property_HdrType
+///                  _string_,
+///     @return The HDR type of the numbered stream of the currently selected video or empty if not HDR. See \ref StreamHdrType for the list of possible values.
+///     @param n - the number of the videostream.
+///     <p><hr>
+///     @skinning_v20 **[New Infolabel]** \link ListItem_Property_HdrType `ListItem.Property(HdrType.[n])`\endlink
+///     <p>
 ///   }
 ///   \table_row3{   <b>`ListItem.HdrDetail`</b>,
 ///                  \anchor ListItem_HdrDetail

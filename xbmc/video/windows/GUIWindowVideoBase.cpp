@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2025 Team Kodi
+ *  Copyright (C) 2005-2026 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -310,10 +310,11 @@ bool CGUIWindowVideoBase::OnItemInfo(const CFileItem& fileItem)
       const std::vector<std::string>& excludeFromScan = CServiceBroker::GetSettingsComponent()
                                                             ->GetAdvancedSettings()
                                                             ->m_moviesExcludeFromScanRegExps;
+      KODI::REGEXP::RegExpCache cache;
       for (const auto& i : items)
       {
         if (VIDEO::IsVideo(*i) && !PLAYLIST::IsPlayList(*i) &&
-            !CUtil::ExcludeFileOrFolder(i->GetPath(), excludeFromScan))
+            !CUtil::ExcludeFileOrFolder(i->GetPath(), excludeFromScan, &cache))
         {
           item.SetPath(i->GetPath());
           item.SetFolder(false);
@@ -434,13 +435,14 @@ CGUIWindowVideoBase::ShowInfoResult CGUIWindowVideoBase::ShowInfo(
     movieDetails = *item->GetVideoInfoTag();
   }
 
+  // @todo add support to refresh movie version information
+  pDlgInfo->EnableItemRefresh((info != nullptr && info->Content() != ContentType::NONE &&
+                               !VIDEO::IsVideoAssetFile(*item)) ||
+                              item->GetVideoContentType() == VideoDbContentType::MOVIE_SETS);
+
   bool needsRefresh = false;
   if (bHasInfo)
   {
-    // @todo add support to refresh movie version information
-    if ((!info || info->Content() == ContentType::NONE || VIDEO::IsVideoAssetFile(*item)) &&
-        item->GetVideoContentType() != VideoDbContentType::MOVIE_SETS)
-      item->SetProperty("xxuniqueid", "xx" + movieDetails.GetUniqueID()); // disable refresh button
     item->SetProperty("CheckAutoPlayNextItem", IsActive());
     *item->GetVideoInfoTag() = movieDetails;
     pDlgInfo->SetMovie(item.get());
@@ -533,7 +535,7 @@ bool CGUIWindowVideoBase::ShowInfoAndRefresh(const CFileItemPtr& item, const Scr
       if (IsActive())
       {
         const int selectedItem{m_viewControl.GetSelectedItem()};
-        Refresh();
+        Refresh(true);
         m_viewControl.SetSelectedItem(selectedItem);
       }
       return true;

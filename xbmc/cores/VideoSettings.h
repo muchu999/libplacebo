@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2026 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -12,6 +12,7 @@
 #include "libplacebo/gpu.h"
 #include "utils/Map.h"
 
+#include <optional>
 #include <memory>
 #include <string_view>
 #include <variant>
@@ -24,25 +25,25 @@
 #include <string>
 #include <vector>
 
- // VideoSettings.h: interface for the CVideoSettings class.
- //
- //////////////////////////////////////////////////////////////////////
+// VideoSettings.h: interface for the CVideoSettings class.
+//
+//////////////////////////////////////////////////////////////////////
 
 enum EINTERLACEMETHOD
 {
-  VS_INTERLACEMETHOD_NONE = 0,
-  VS_INTERLACEMETHOD_AUTO = 1,
-  VS_INTERLACEMETHOD_RENDER_BLEND = 2,
-  VS_INTERLACEMETHOD_RENDER_WEAVE = 4,
-  VS_INTERLACEMETHOD_RENDER_BOB = 6,
-  VS_INTERLACEMETHOD_DEINTERLACE = 7,
-  VS_INTERLACEMETHOD_VDPAU_BOB = 8,
-  VS_INTERLACEMETHOD_VDPAU_INVERSE_TELECINE = 11,
-  VS_INTERLACEMETHOD_VDPAU_TEMPORAL = 12,
-  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF = 13,
-  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL = 14,
-  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF = 15,
-  VS_INTERLACEMETHOD_DEINTERLACE_HALF = 16,
+  VS_INTERLACEMETHOD_NONE=0,
+  VS_INTERLACEMETHOD_AUTO=1,
+  VS_INTERLACEMETHOD_RENDER_BLEND=2,
+  VS_INTERLACEMETHOD_RENDER_WEAVE=4,
+  VS_INTERLACEMETHOD_RENDER_BOB=6,
+  VS_INTERLACEMETHOD_DEINTERLACE=7,
+  VS_INTERLACEMETHOD_VDPAU_BOB=8,
+  VS_INTERLACEMETHOD_VDPAU_INVERSE_TELECINE=11,
+  VS_INTERLACEMETHOD_VDPAU_TEMPORAL=12,
+  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF=13,
+  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL=14,
+  VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF=15,
+  VS_INTERLACEMETHOD_DEINTERLACE_HALF=16,
   VS_INTERLACEMETHOD_VAAPI_BOB = 22,
   VS_INTERLACEMETHOD_VAAPI_MADI = 23,
   VS_INTERLACEMETHOD_VAAPI_MACI = 24,
@@ -56,38 +57,44 @@ struct fmt::formatter<EINTERLACEMETHOD> : fmt::formatter<std::string_view>
   template<typename FormatContext>
   constexpr auto format(const EINTERLACEMETHOD& interlaceMethod, FormatContext& ctx)
   {
-	const auto it = interlaceMethodMap.find(interlaceMethod);
-	if (it == interlaceMethodMap.cend())
-	  throw std::range_error("no interlace method string found");
+    const auto it = interlaceMethodMap.find(interlaceMethod);
+    if (it == interlaceMethodMap.cend())
+      throw std::range_error("no interlace method string found");
 
-	return fmt::formatter<string_view>::format(it->second, ctx);
+    return fmt::formatter<string_view>::format(it->second, ctx);
+  }
+
+  static constexpr std::string_view ToString(EINTERLACEMETHOD m) noexcept
+  {
+    const auto it = interlaceMethodMap.find(m);
+    return it != interlaceMethodMap.cend() ? it->second : "unknown";
   }
 
 private:
   static constexpr auto interlaceMethodMap = make_map<EINTERLACEMETHOD, std::string_view>({
-	  {VS_INTERLACEMETHOD_NONE, "none"},
-	  {VS_INTERLACEMETHOD_AUTO, "auto"},
-	  {VS_INTERLACEMETHOD_RENDER_BLEND, "render blend"},
-	  {VS_INTERLACEMETHOD_RENDER_WEAVE, "render weave"},
-	  {VS_INTERLACEMETHOD_RENDER_BOB, "render bob"},
-	  {VS_INTERLACEMETHOD_DEINTERLACE, "deinterlace"},
-	  {VS_INTERLACEMETHOD_VDPAU_BOB, "vdpau bob"},
-	  {VS_INTERLACEMETHOD_VDPAU_INVERSE_TELECINE, "vdpau inverse telecine"},
-	  {VS_INTERLACEMETHOD_VDPAU_TEMPORAL, "vdpau temporal"},
-	  {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF, "vdpau temporal half"},
-	  {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL, "vdpau temporal spatial"},
-	  {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF, "vdpau temporal spatial half"},
-	  {VS_INTERLACEMETHOD_DEINTERLACE_HALF, "deinterlace half"},
-	  {VS_INTERLACEMETHOD_VAAPI_BOB, "vaapi bob"},
-	  {VS_INTERLACEMETHOD_VAAPI_MADI, "vaapi madi"},
-	  {VS_INTERLACEMETHOD_VAAPI_MACI, "vaapi maci"},
-	  {VS_INTERLACEMETHOD_DXVA_AUTO, "dxva auto"},
-	});
+      {VS_INTERLACEMETHOD_NONE, "none"},
+      {VS_INTERLACEMETHOD_AUTO, "auto"},
+      {VS_INTERLACEMETHOD_RENDER_BLEND, "render blend"},
+      {VS_INTERLACEMETHOD_RENDER_WEAVE, "render weave"},
+      {VS_INTERLACEMETHOD_RENDER_BOB, "render bob"},
+      {VS_INTERLACEMETHOD_DEINTERLACE, "deinterlace"},
+      {VS_INTERLACEMETHOD_VDPAU_BOB, "vdpau bob"},
+      {VS_INTERLACEMETHOD_VDPAU_INVERSE_TELECINE, "vdpau inverse telecine"},
+      {VS_INTERLACEMETHOD_VDPAU_TEMPORAL, "vdpau temporal"},
+      {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_HALF, "vdpau temporal half"},
+      {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL, "vdpau temporal spatial"},
+      {VS_INTERLACEMETHOD_VDPAU_TEMPORAL_SPATIAL_HALF, "vdpau temporal spatial half"},
+      {VS_INTERLACEMETHOD_DEINTERLACE_HALF, "deinterlace half"},
+      {VS_INTERLACEMETHOD_VAAPI_BOB, "vaapi bob"},
+      {VS_INTERLACEMETHOD_VAAPI_MADI, "vaapi madi"},
+      {VS_INTERLACEMETHOD_VAAPI_MACI, "vaapi maci"},
+      {VS_INTERLACEMETHOD_DXVA_AUTO, "dxva auto"},
+  });
 };
 
 enum ESCALINGMETHOD
 {
-  VS_SCALINGMETHOD_NEAREST = 0,
+  VS_SCALINGMETHOD_NEAREST=0,
   VS_SCALINGMETHOD_LINEAR,
   VS_SCALINGMETHOD_CUBIC_B_SPLINE,
   VS_SCALINGMETHOD_CUBIC_MITCHELL,
@@ -116,39 +123,45 @@ public:
   template<typename FormatContext>
   constexpr auto format(const ESCALINGMETHOD& scalingMethod, FormatContext& ctx)
   {
-	const auto it = scalingMethodMap.find(scalingMethod);
-	if (it == scalingMethodMap.cend())
-	  throw std::range_error("no scaling method string found");
+    const auto it = scalingMethodMap.find(scalingMethod);
+    if (it == scalingMethodMap.cend())
+      throw std::range_error("no scaling method string found");
 
-	return fmt::formatter<string_view>::format(it->second, ctx);
+    return fmt::formatter<string_view>::format(it->second, ctx);
+  }
+
+  static constexpr std::string_view ToString(ESCALINGMETHOD m) noexcept
+  {
+    const auto it = scalingMethodMap.find(m);
+    return it != scalingMethodMap.cend() ? it->second : "unknown";
   }
 
 private:
   static constexpr auto scalingMethodMap = make_map<ESCALINGMETHOD, std::string_view>({
-	  {VS_SCALINGMETHOD_NEAREST, "nearest neighbour"},
-	  {VS_SCALINGMETHOD_LINEAR, "linear"},
-	  {VS_SCALINGMETHOD_CUBIC_B_SPLINE, "cubic b spline"},
-	  {VS_SCALINGMETHOD_CUBIC_MITCHELL, "cubic mitchell"},
-	  {VS_SCALINGMETHOD_CUBIC_CATMULL, "cubic catmull"},
-	  {VS_SCALINGMETHOD_CUBIC_0_075, "cubic 0/075"},
-	  {VS_SCALINGMETHOD_CUBIC_0_1, "cubic 0/1"},
-	  {VS_SCALINGMETHOD_LANCZOS2, "lanczos2"},
-	  {VS_SCALINGMETHOD_LANCZOS3_FAST, "lanczos3 fast"},
-	  {VS_SCALINGMETHOD_LANCZOS3, "lanczos3"},
-	  {VS_SCALINGMETHOD_SINC8, "sinc8"},
-	  {VS_SCALINGMETHOD_BICUBIC_SOFTWARE, "bicubic software"},
-	  {VS_SCALINGMETHOD_LANCZOS_SOFTWARE, "lanczos software"},
-	  {VS_SCALINGMETHOD_SINC_SOFTWARE, "sinc software"},
-	  {VS_SCALINGMETHOD_VDPAU_HARDWARE, "vdpau"},
-	  {VS_SCALINGMETHOD_DXVA_HARDWARE, "dxva"},
-	  {VS_SCALINGMETHOD_AUTO, "auto"},
-	  {VS_SCALINGMETHOD_SPLINE36_FAST, "spline32 fast"},
-	  {VS_SCALINGMETHOD_SPLINE36, "spline32"},
-	});
+      {VS_SCALINGMETHOD_NEAREST, "nearest neighbour"},
+      {VS_SCALINGMETHOD_LINEAR, "linear"},
+      {VS_SCALINGMETHOD_CUBIC_B_SPLINE, "cubic b spline"},
+      {VS_SCALINGMETHOD_CUBIC_MITCHELL, "cubic mitchell"},
+      {VS_SCALINGMETHOD_CUBIC_CATMULL, "cubic catmull"},
+      {VS_SCALINGMETHOD_CUBIC_0_075, "cubic 0/075"},
+      {VS_SCALINGMETHOD_CUBIC_0_1, "cubic 0/1"},
+      {VS_SCALINGMETHOD_LANCZOS2, "lanczos2"},
+      {VS_SCALINGMETHOD_LANCZOS3_FAST, "lanczos3 fast"},
+      {VS_SCALINGMETHOD_LANCZOS3, "lanczos3"},
+      {VS_SCALINGMETHOD_SINC8, "sinc8"},
+      {VS_SCALINGMETHOD_BICUBIC_SOFTWARE, "bicubic software"},
+      {VS_SCALINGMETHOD_LANCZOS_SOFTWARE, "lanczos software"},
+      {VS_SCALINGMETHOD_SINC_SOFTWARE, "sinc software"},
+      {VS_SCALINGMETHOD_VDPAU_HARDWARE, "vdpau"},
+      {VS_SCALINGMETHOD_DXVA_HARDWARE, "dxva"},
+      {VS_SCALINGMETHOD_AUTO, "auto"},
+      {VS_SCALINGMETHOD_SPLINE36_FAST, "spline36 fast"},
+      {VS_SCALINGMETHOD_SPLINE36, "spline36"},
+  });
 
   static_assert(VS_SCALINGMETHOD_MAX == scalingMethodMap.size(),
-	"scalingMethodMap doesn't match the size of ESCALINGMETHOD, did you forget to "
-	"add/remove a mapping?");
+                "scalingMethodMap doesn't match the size of ESCALINGMETHOD, did you forget to "
+                "add/remove a mapping?");
 };
 
 enum ETONEMAPMETHOD
@@ -167,24 +180,30 @@ public:
   template<typename FormatContext>
   constexpr auto format(const ETONEMAPMETHOD& tonemapMethod, FormatContext& ctx)
   {
-	const auto it = tonemapMethodMap.find(tonemapMethod);
-	if (it == tonemapMethodMap.cend())
-	  throw std::range_error("no tonemap method string found");
+    const auto it = tonemapMethodMap.find(tonemapMethod);
+    if (it == tonemapMethodMap.cend())
+      throw std::range_error("no tonemap method string found");
 
-	return fmt::formatter<string_view>::format(it->second, ctx);
+    return fmt::formatter<string_view>::format(it->second, ctx);
+  }
+
+  static constexpr std::string_view ToString(ETONEMAPMETHOD m) noexcept
+  {
+    const auto it = tonemapMethodMap.find(m);
+    return it != tonemapMethodMap.cend() ? it->second : "unknown";
   }
 
 private:
   static constexpr auto tonemapMethodMap = make_map<ETONEMAPMETHOD, std::string_view>({
-	  {VS_TONEMAPMETHOD_OFF, "off"},
-	  {VS_TONEMAPMETHOD_REINHARD, "reinhard"},
-	  {VS_TONEMAPMETHOD_ACES, "aces"},
-	  {VS_TONEMAPMETHOD_HABLE, "hable"},
-	});
+      {VS_TONEMAPMETHOD_OFF, "off"},
+      {VS_TONEMAPMETHOD_REINHARD, "reinhard"},
+      {VS_TONEMAPMETHOD_ACES, "aces"},
+      {VS_TONEMAPMETHOD_HABLE, "hable"},
+  });
 
   static_assert(VS_TONEMAPMETHOD_MAX == tonemapMethodMap.size(),
-	"tonemapMethodMap doesn't match the size of ETONEMAPMETHOD, did you forget to "
-	"add/remove a mapping?");
+                "tonemapMethodMap doesn't match the size of ETONEMAPMETHOD, did you forget to "
+                "add/remove a mapping?");
 };
 
 enum ViewMode
@@ -307,6 +326,7 @@ public:
   void ResetDitherSettings(PlOptionsWrapper::reset_type type);
   void ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type);
 
+  bool operator!=(const CVideoSettings &right) const;
 
   EINTERLACEMETHOD m_InterlaceMethod;
   ESCALINGMETHOD m_ScalingMethod;
@@ -319,8 +339,8 @@ public:
   float m_VolumeAmplification;
   int m_SubtitleStream;
   float m_SubtitleDelay;
-  int m_subtitleVerticalPosition{ 0 };
-  bool m_subtitleVerticalPositionSave{ false };
+  int m_subtitleVerticalPosition{0};
+  bool m_subtitleVerticalPositionSave{false};
   bool m_SubtitleOn;
   float m_Brightness;
   float m_Contrast;
@@ -493,22 +513,19 @@ public:
   float m_PlaceboSdrGamutConstantsSoftclipDesat;
   float m_PlaceboSdrGamutConstantsSoftclipKnee;
 
-
-
-
-
-
+  std::optional<bool>
+      m_isDefaultVideoSettings; //!< true: default video settings, false: video specific
 };
 
 class CCriticalSection;
 class CVideoSettingsLocked
 {
 public:
-  CVideoSettingsLocked(CVideoSettings& vs, CCriticalSection& critSection);
+  CVideoSettingsLocked(CVideoSettings &vs, CCriticalSection &critSection);
   virtual ~CVideoSettingsLocked() = default;
 
-  CVideoSettingsLocked(CVideoSettingsLocked const&) = delete;
-  void operator=(CVideoSettingsLocked const& x) = delete;
+  CVideoSettingsLocked(CVideoSettingsLocked const &) = delete;
+  void operator=(CVideoSettingsLocked const &x) = delete;
 
   void SetSubtitleStream(int stream);
   void SetSubtitleVisible(bool visible);
@@ -529,6 +546,6 @@ public:
   void SetVolumeAmplification(float amp);
 
 protected:
-  CVideoSettings& m_videoSettings;
-  CCriticalSection& m_critSection;
+  CVideoSettings &m_videoSettings;
+  CCriticalSection &m_critSection;
 };

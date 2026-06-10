@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2005-2018 Team Kodi
+ *  Copyright (C) 2005-2026 Team Kodi
  *  This file is part of Kodi - https://kodi.tv
  *
  *  SPDX-License-Identifier: GPL-2.0-or-later
@@ -73,6 +73,11 @@ public:
   virtual bool AllowDTSHDDecode();
   virtual bool WantsRawPassthrough() { return false; }
 
+  // subtitle info
+  void ResetSubtitleCodecInfo();
+  void SetSubtitleDecoderName(const std::string& name);
+  std::string GetSubtitleDecoderName();
+
   // render info
   void SetRenderClockSync(bool enabled);
   bool IsRenderClockSync();
@@ -101,8 +106,6 @@ public:
   void SetNewTempo(float tempo);
   float GetNewTempo();
   bool IsTempoAllowed(float tempo);
-  virtual float MinTempoPlatform();
-  virtual float MaxTempoPlatform();
   void SetLevelVQ(int level);
   int GetLevelVQ();
   void SetGuiRender(bool gui);
@@ -121,6 +124,10 @@ public:
 
 protected:
   CProcessInfo();
+
+  virtual float MinTempoPlatform();
+  virtual float MaxTempoPlatform();
+
   static std::map<std::string, CreateProcessControl> m_processControls;
   CDataCacheCore *m_dataCache = nullptr;
 
@@ -147,6 +154,10 @@ protected:
   int m_audioSampleRate;
   int m_audioBitsPerSample;
   CCriticalSection m_audioCodecSection;
+
+  // player subtitle info
+  std::string m_subtitleDecoderName;
+  CCriticalSection m_subtitleCodecSection;
 
   // render info
   CCriticalSection m_renderSection;

@@ -30,6 +30,7 @@
 #include "platform/win32/CharsetConverter.h"
 #endif
 
+#include "Util.h"
 #include "application/Application.h"
 
 #include <algorithm>
@@ -291,16 +292,19 @@ void URIUtils::RemoveExtension(std::string& path)
 
   // Extensions to remove
   const std::string extensions{
-      CServiceBroker::GetFileExtensionProvider().GetPictureExtensions() +
-      CServiceBroker::GetFileExtensionProvider().GetMusicExtensions() +
-      CServiceBroker::GetFileExtensionProvider().GetVideoExtensions() +
-      CServiceBroker::GetFileExtensionProvider().GetSubtitleExtensions() +
-      CServiceBroker::GetFileExtensionProvider().GetCompoundArchiveExtensions() +
-      CServiceBroker::GetFileExtensionProvider().GetArchiveExtensions() +
+      // clang-format off
+      CServiceBroker::GetFileExtensionProvider().GetPictureExtensions() + "|" +
+      CServiceBroker::GetFileExtensionProvider().GetMusicExtensions() + "|" +
+      CServiceBroker::GetFileExtensionProvider().GetVideoExtensions() + "|" +
+      CServiceBroker::GetFileExtensionProvider().GetSubtitleExtensions() + "|" +
+      CServiceBroker::GetFileExtensionProvider().GetCompoundArchiveExtensions() + "|" +
+      CServiceBroker::GetFileExtensionProvider().GetArchiveExtensions() + "|" +
+      CServiceBroker::GetFileExtensionProvider().GetGameExtensions() +
       "|.py|.xml|.milk|.xbt|.cdg"
 #ifdef TARGET_DARWIN
       + "|.app|.applescript|.workflow"
 #endif
+      // clang-format on
   };
 
   if (const int extension{FindExtension(path, extensions, FindExtensions::ONLY_IN_LIST,
@@ -601,27 +605,30 @@ bool URIUtils::GetParentPath(const std::string& strPath, std::string& strParent)
 
 std::string URIUtils::GetBasePath(const std::string& strPath)
 {
-  std::string strCheck{strPath};
   if (IsStack(strPath))
     return CStackDirectory::GetBasePath(strPath);
 
-  if (IsBDFile(strCheck) || IsDVDFile(strCheck))
-    return GetDiscBasePath(strCheck);
+  std::string basepath{strPath};
+  if (IsBDFile(strPath) || IsDVDFile(strPath))
+    basepath = GetDiscBasePath(strPath);
 
 #ifdef HAVE_LIBBLURAY
-  if (IsBlurayPath(strCheck))
-    return CBlurayDirectory::GetBasePath(CURL(strCheck));
+  if (IsBlurayPath(strPath))
+    basepath = CBlurayDirectory::GetBasePath(CURL(strPath));
 #endif
 
   if (const CURL url(strPath); IsArchive(url))
   {
     if (const std::string & hostname{url.GetHostName()}; !hostname.empty())
-      strCheck = hostname;
+      basepath = hostname;
   }
 
-  std::string strDirectory = GetDirectory(strCheck);
+  basepath = GetDirectory(basepath);
 
-  return strDirectory;
+  basepath =
+      CUtil::RemoveTrailingPartNumberSegmentFromPath(basepath, CUtil::PreserveFileName::REMOVE);
+
+  return basepath;
 }
 
 bool URIUtils::IsDiscPath(const std::string& path)
@@ -691,6 +698,11 @@ std::string URIUtils::GetDiscUnderlyingFile(const CURL& url)
   return AddFileToFolder(host, filename);
 }
 
+std::string URIUtils::GetBlurayMenuPath(const std::string& path)
+{
+  return AddFileToFolder(GetBlurayPath(path), "menu");
+}
+
 std::string URIUtils::GetBlurayRootPath(const std::string& path)
 {
   return AddFileToFolder(GetBlurayPath(path), "root");
@@ -699,6 +711,11 @@ std::string URIUtils::GetBlurayRootPath(const std::string& path)
 std::string URIUtils::GetBlurayTitlesPath(const std::string& path)
 {
   return AddFileToFolder(GetBlurayPath(path), "root", "titles");
+}
+
+std::string URIUtils::GetBlurayMainTitlePath(const std::string& path)
+{
+  return AddFileToFolder(GetBlurayPath(path), "root", "main");
 }
 
 std::string URIUtils::GetBlurayEpisodePath(const std::string& path, int season, int episode)
@@ -1053,6 +1070,12 @@ bool URIUtils::IsHostOnLAN(const std::string& host, LanCheckMode lanCheckMode)
   }
 
   return false;
+}
+
+bool URIUtils::IsLocalOrLAN(const std::string& path)
+{
+  // Check if item is on local drive or network share
+  return (IsHD(path) || IsOnLAN(path, LanCheckMode::ANY_PRIVATE_SUBNET)) && !IsInternetStream(path);
 }
 
 bool URIUtils::IsMultiPath(const std::string& strPath)

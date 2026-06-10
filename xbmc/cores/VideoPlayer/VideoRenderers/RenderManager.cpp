@@ -99,10 +99,21 @@ bool CRenderManager::Configure(const VideoPicture& picture, float fps, unsigned 
     if (!m_bRenderGUI)
       return true;
 
-    if (m_picture.IsSameParams(picture) && m_fps == fps && m_orientation == orientation &&
-        m_NumberBuffers == buffers && m_pRenderer != nullptr &&
-        !m_pRenderer->ConfigChanged(picture))
+    if (m_pRenderer != nullptr && m_picture.IsSameParams(picture) && m_orientation == orientation &&
+        m_NumberBuffers == buffers && !m_pRenderer->ConfigChanged(picture))
     {
+      if (m_fps != fps)
+      {
+        CLog::Log(LOGDEBUG, "CRenderManager::Configure - framerate changed from {:4.2f} to {:4.2f}",
+                  m_fps, fps);
+        m_fps = fps;
+        m_pRenderer->SetFps(fps);
+        m_bTriggerUpdateResolution = true;
+        // Clear stale vsync/late-frame state from the old framerate; CheckEnableClockSync() will recalibrate on the next FrameMove on the main thread.
+        m_clockSync.Reset();
+        m_dvdClock.SetVsyncAdjust(0);
+        m_lateframes = -1;
+      }
       return true;
     }
   }
@@ -206,7 +217,7 @@ bool CRenderManager::Configure()
 
     m_playerPort->UpdateRenderInfo(info);
     m_playerPort->UpdateGuiRender(true);
-    m_playerPort->UpdateVideoRender(!m_pRenderer->IsGuiLayer());
+    m_playerPort->UpdateVideoRender(m_pRenderer->HasVideoPlane());
 
     m_queued.clear();
     m_discard.clear();
@@ -346,7 +357,7 @@ void CRenderManager::FrameMove()
     m_bRenderGUI = true;
   }
 
-  m_playerPort->UpdateGuiRender(IsGuiLayer() || firstFrame);
+  m_playerPort->UpdateGuiRender(IsGuiLayer() || !m_pRenderer->HasVideoPlane() || firstFrame);
 
   ManageCaptures();
 }
@@ -812,20 +823,6 @@ bool CRenderManager::IsGuiLayer()
       return true;
 
     if (m_renderDebug && m_debugTimer.IsTimePast())
-      return true;
-  }
-  return false;
-}
-
-bool CRenderManager::IsVideoLayer()
-{
-  {
-    std::unique_lock lock(m_statelock);
-
-    if (!m_pRenderer)
-      return false;
-
-    if (!m_pRenderer->IsGuiLayer())
       return true;
   }
   return false;
