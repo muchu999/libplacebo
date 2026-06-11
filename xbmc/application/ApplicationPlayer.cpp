@@ -570,6 +570,20 @@ void CApplicationPlayer::FrameAdvance(int frames)
     player->FrameAdvance(frames);
 }
 
+void CApplicationPlayer::SetVideoDebug(bool bEnable)
+{
+  std::shared_ptr<IPlayer> player = GetInternal();
+  if(player)
+	player->EnableVideoDebug(bEnable);
+}
+
+void CApplicationPlayer::SetDebug(bool bEnable)
+{
+  std::shared_ptr<IPlayer> player = GetInternal();
+  if(player)
+	player->EnableDebug(bEnable);
+}
+
 std::string CApplicationPlayer::GetPlayerState()
 {
   std::shared_ptr<IPlayer> player = GetInternal();

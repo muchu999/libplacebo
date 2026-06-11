@@ -511,6 +511,10 @@ public:
   float m_PlaceboSdrGamutConstantsSoftclipDesat;
   float m_PlaceboSdrGamutConstantsSoftclipKnee;
 
+  // Unsaved values
+  bool m_PlaceboDebugOsd = false;
+  bool m_PlaceboVideoDebugOsd = true;  //cl need sync between setting and actual OSD display...
+
   std::optional<bool>
       m_isDefaultVideoSettings; //!< true: default video settings, false: video specific
 };

@@ -700,6 +700,7 @@ void CGraphicContext::GetGUIScaling(const RESOLUTION_INFO &res, float &scaleX, f
       // adjust for aspect ratio as zoom is given in the vertical direction and we don't
       // do aspect ratio corrections in the gui code
       fZoom = fZoom / info.fPixelRatio;
+
       fToPosY -= fToHeight * fZoom * 0.5f;
       fToHeight *= fZoom + 1.0f;
 
@@ -711,10 +712,13 @@ void CGraphicContext::GetGUIScaling(const RESOLUTION_INFO &res, float &scaleX, f
       float fZoom = (100 + vs.m_PlaceboSkinZoomHint) * 0.01f;
       fZoom -= 1.0f;
 
-      // Left top aligned
+      // Left aligned
       fToWidth *= fZoom + 1.0f;
       fZoom = fZoom / info.fPixelRatio;
-      fToHeight *= fZoom + 1.0f;
+
+	  fToPosY -= fToHeight * fZoom * 0.5f;
+	  fToHeight *= fZoom + 1.0f;
+
       scaleX = fFromWidth / fToWidth;
       scaleY = fFromHeight / fToHeight;
     }

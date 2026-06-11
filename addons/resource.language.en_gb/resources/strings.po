@@ -25585,6 +25585,15 @@ msgctxt "#55354"
 msgid "Frame mixing radius factor"
 msgstr ""
 
+msgctxt "#55355"
+msgid "Debug OSD"
+msgstr ""
+
+msgctxt "#55356"
+msgid "Debug OSD type"
+msgstr ""
+
+
 
 
 

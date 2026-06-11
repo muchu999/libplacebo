@@ -3954,6 +3954,16 @@ void CVideoPlayer::FrameAdvance(int frames)
   m_messenger.Put(std::make_shared<CDVDMsgInt>(CDVDMsg::PLAYER_FRAME_ADVANCE, frames));
 }
 
+void CVideoPlayer::EnableVideoDebug(bool bEnable)
+{
+  m_renderManager.ToggleDebugVideo(bEnable);
+}
+
+void CVideoPlayer::EnableDebug(bool bEnable)
+{
+  m_renderManager.ToggleDebug(bEnable);
+}
+
 bool CVideoPlayer::SupportsTempo() const
 {
   return m_State.cantempo;

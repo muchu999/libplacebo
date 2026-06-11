@@ -50,6 +50,8 @@ public:
   void SetPlaySpeed(float speed);
   void SetTempo(float tempo);
   void FrameAdvance(int frames);
+  void SetVideoDebug(bool bEnable);
+  void SetDebug(bool bEnable);
 
   void FrameMove();
   void Render(bool clear, uint32_t alpha = 255, bool gui = true);

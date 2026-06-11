@@ -240,7 +240,8 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_SHADER_PARAM                        "video.libplacebo.shader_param"
 #define SETTING_LIB_PLACEBO_SHADER_APPLY                        "video.libplacebo.shader_apply"
 #define SETTING_LIB_PLACEBO_SHADER_INVALID                      "video.libplacebo.shader_invalid"
-
+#define SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD                     "video.libplacebo.video_debug_osd"
+#define SETTING_LIB_PLACEBO_DEBUG_OSD                           "video.libplacebo.debug_osd"
 
 #define CreateGroup(thegroup,thecategory) std::shared_ptr<CSettingGroup> thegroup = AddGroup(thecategory); if (thegroup == NULL) {CLog::Log(LOGERROR, "CGUIDialogLibplacebo: unable to setup settings");  return; }
 
@@ -1158,6 +1159,18 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	m_placeboOptions->params.skip_caching_single_frame = vs.m_PlaceboSkipCachingSingleFrame;
 	appPlayer->SetVideoSettings(vs);
   }
+  
+  else if(settingId == SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD)
+  {
+	vs.m_PlaceboVideoDebugOsd = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetVideoDebug(vs.m_PlaceboVideoDebugOsd);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_DEBUG_OSD)
+  {
+	vs.m_PlaceboDebugOsd = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetDebug(vs.m_PlaceboDebugOsd);
+  }
+
   else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_ENABLED))
   {
 	int shaderNumber = std::stoi(settingId.substr(std::strlen(SETTING_LIB_PLACEBO_SHADER_ENABLED) + 1, 2));
@@ -1932,6 +1945,8 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_PRESERVE_MIXING_CACHE, 55310, SettingLevel::Basic, videoSettings.m_PlaceboPreserveMixingCache);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING, 55311, SettingLevel::Basic, videoSettings.m_PlaceboSkipAntiAliasing);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME, 55312, SettingLevel::Basic, videoSettings.m_PlaceboSkipCachingSingleFrame);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DEBUG_OSD, 55355, SettingLevel::Basic, videoSettings.m_PlaceboDebugOsd);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD, 55356, SettingLevel::Basic, videoSettings.m_PlaceboVideoDebugOsd);
 
 	InitializeShaderMenu(videoSettings, category);
 	CreateGroup(groupShaderLoad, category);

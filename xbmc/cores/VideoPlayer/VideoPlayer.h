@@ -349,6 +349,8 @@ public:
   void SetTempo(float tempo) override;
   bool SupportsTempo() const override;
   void FrameAdvance(int frames) override;
+  void EnableVideoDebug(bool bEnable) override;
+  void EnableDebug(bool bEnable) override;
   bool OnAction(const CAction &action) override;
 
   void GetAudioStreamInfo(int index, AudioStreamInfo& info) const override;

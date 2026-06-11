@@ -925,30 +925,54 @@ void CRenderManager::TriggerUpdateResolution(float fps, int width, int height, s
   m_bTriggerUpdateResolution = true;
 }
 
-void CRenderManager::ToggleDebug()
+void CRenderManager::ToggleDebug(std::optional<bool> enable)
 {
-  bool isEnabled = !m_renderDebug;
-  if (isEnabled)
-    m_debugRenderer.Initialize();
-  else
-    m_debugRenderer.Dispose();
+  if(enable.has_value())
+  {
+	m_renderDebug = enable.value();
+	if(m_renderDebug)
+	  m_debugRenderer.Initialize();
+	else
+	  m_debugRenderer.Dispose();
 
-  m_renderDebug = isEnabled;
-  m_debugTimer.SetExpired();
-  m_renderDebugVideo = false;
+	m_debugTimer.SetExpired();
+  }
+  else
+  {
+	bool isEnabled = !m_renderDebug;
+
+	if(isEnabled)
+	  m_debugRenderer.Initialize();
+	else
+	  m_debugRenderer.Dispose();
+
+	m_renderDebug = isEnabled;
+	m_debugTimer.SetExpired();
+	m_renderDebugVideo = false;
+  }
 }
 
-void CRenderManager::ToggleDebugVideo()
+void CRenderManager::ToggleDebugVideo(std::optional<bool> enable)
 {
-  bool isEnabled = !m_renderDebug;
-  if (isEnabled)
-    m_debugRenderer.Initialize();
-  else
-    m_debugRenderer.Dispose();
+  if(enable.has_value())
+  {
+	m_renderDebugVideo = enable.value();
 
-  m_renderDebug = isEnabled;
-  m_debugTimer.SetExpired();
-  m_renderDebugVideo = true;
+	m_debugTimer.SetExpired();
+  }
+  else
+  {
+	bool isEnabled = !m_renderDebug;
+
+	if(isEnabled)
+	  m_debugRenderer.Initialize();
+	else
+	  m_debugRenderer.Dispose();
+
+	m_renderDebug = isEnabled;
+	m_debugTimer.SetExpired();
+	m_renderDebugVideo = true;
+  }
 }
 
 void CRenderManager::SetSubtitleVerticalPosition(int value, bool save)
@@ -1345,7 +1369,6 @@ void CRenderManager::PrepareNextRender()
     m_dvdClock.SetVsyncAdjust(0);
   }
 
-  lastFramePts = nextFramePts;
   m_renderPts = renderPts;
   m_renderPts2 = renderPts + frametime; // In case of interleaved material, the PrepareNextRender function is only called once.
   CLog::LogFC(LOGDEBUG, LOGAVTIMING,
@@ -1353,6 +1376,7 @@ void CRenderManager::PrepareNextRender()
               "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:.0f}, OnscreenDiff: {:.0f}, VsyncAdjust: {:.0f}, err: {:.0f}, clockDiff: {:.0f}",
               frameOnScreen, renderPts, pts, nextFramePts, (renderPts - nextFramePts),
               renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff, average, err, clockDiff);
+  lastFramePts = nextFramePts;
 
   bool combined = false;
   if (m_presentsourcePast >= 0)

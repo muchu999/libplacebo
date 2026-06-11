@@ -198,6 +198,8 @@ public:
   virtual void SetTempo(float tempo) {}
   virtual bool SupportsTempo() const { return false; }
   virtual void FrameAdvance(int frames) {}
+  virtual void EnableVideoDebug(bool bEnable) {}
+  virtual void EnableDebug(bool bEnable) {}
 
   //Returns true if not playback (paused or stopped being filled)
   virtual bool IsCaching() const { return false; }

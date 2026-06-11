@@ -75,8 +75,8 @@ public:
   bool Flush(bool wait, bool saveBuffers);
   bool IsConfigured() const;
   void RecordFlipEndTime();
-  void ToggleDebug();
-  void ToggleDebugVideo();
+  void ToggleDebug(std::optional<bool> enable = std::nullopt);
+  void ToggleDebugVideo(std::optional<bool> enable = std::nullopt);
 
   /*!
    * \brief Set the subtitle vertical position,
