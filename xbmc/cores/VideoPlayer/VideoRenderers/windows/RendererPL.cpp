@@ -944,6 +944,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   .w = (int)target.GetWidth(),
   .h = (int)target.GetHeight()
   };
+
+  D3D11_TEXTURE2D_DESC desc;
+  target.Get()->GetDesc(&desc);
+  if(!(desc.BindFlags & D3D11_BIND_UNORDERED_ACCESS))
+    params->skip_target_clearing = true; // target clearing need D3D11_BIND_UNORDERED_ACCESS for D3D11+
+
   frameOut.num_planes = 1;
   frameOut.planes[0].texture = pl_d3d11_wrap(PL::PLInstance::Get()->GetGpu(), &d3dparams);
   frameOut.planes[0].components = 4;
@@ -967,7 +973,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
 
-  //params->skip_target_clearing = true; // target clearing need D3D11_BIND_UNORDERED_ACCESS for D3D11+
 
   // Data used for the video debug renderer
   m_displayTransfer = frameOut.color.transfer;
