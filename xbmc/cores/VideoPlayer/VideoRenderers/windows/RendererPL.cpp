@@ -104,25 +104,27 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
 	m_renderBuffers[index]->frameIdx = index;
 	//m_frameIdx += 2;
   }
-
-  CRenderBuffer* rb = m_renderBuffers[index];
-  struct pl_source_frame sframe{};
-  sframe.pts = rb->pts/1000000.0;
-  sframe.duration = rb->duration/1000000.0;
-  sframe.map = CRendererPL::MapFrame;
-  sframe.unmap = CRendererPL::UnmapFrame;
-  sframe.frame_data = rb;
-  sframe.discard = NULL;
-  if(picture.iFlags & DVP_FLAG_INTERLACED)
-	if(picture.iFlags& DVP_FLAG_TOP_FIELD_FIRST)
-      sframe.first_field = PL_FIELD_TOP;
+  if(m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer != NULL)
+  {
+	CRenderBuffer* rb = m_renderBuffers [index];
+	struct pl_source_frame sframe {};
+	sframe.pts = rb->pts / 1000000.0;
+	sframe.duration = rb->duration / 1000000.0;
+	sframe.map = CRendererPL::MapFrame;
+	sframe.unmap = CRendererPL::UnmapFrame;
+	sframe.frame_data = rb;
+	sframe.discard = NULL;
+	if(picture.iFlags & DVP_FLAG_INTERLACED)
+	  if(picture.iFlags & DVP_FLAG_TOP_FIELD_FIRST)
+		sframe.first_field = PL_FIELD_TOP;
+	  else
+		sframe.first_field = PL_FIELD_BOTTOM;
 	else
-	  sframe.first_field = PL_FIELD_BOTTOM;
-  else
-	sframe.first_field = PL_FIELD_NONE;
+	  sframe.first_field = PL_FIELD_NONE;
 
-  //CLog::LogF(LOGDEBUG, "pl_queue_push idx: {} pts: {}", index, rb->pts/1000000.0);
-  pl_queue_push(*PL::PLInstance::Get()->GetQueue(), &sframe);
+	//CLog::LogF(LOGDEBUG, "pl_queue_push idx: {} pts: {}", index, rb->pts/1000000.0);
+	pl_queue_push(*PL::PLInstance::Get()->GetQueue(), &sframe);
+  }
 }
 
 bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame* src, struct pl_frame* frameIn)
@@ -682,6 +684,37 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   CRenderBufferImpl* buffer = static_cast<CRenderBufferImpl*>(buf);
 
   InitializeFrameInFields(&frameIn, buffer); //cl wastefull, need cleanup
+  if(m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL)
+  {
+	if(buffer->m_bIsInterlaced)
+	{
+	  if((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_TOP))
+	  {
+		frameIn.field = PL_FIELD_TOP;
+		frameIn.first_field = PL_FIELD_TOP;
+	  }
+	  else if((flags & RENDER_FLAG_FIELD1) && (flags & RENDER_FLAG_BOT))
+	  {
+		frameIn.field = PL_FIELD_BOTTOM;
+		frameIn.first_field = PL_FIELD_TOP;
+	  }
+	  else if((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_BOT))
+	  {
+		frameIn.field = PL_FIELD_BOTTOM;
+		frameIn.first_field = PL_FIELD_BOTTOM;
+	  }
+	  else if((flags & RENDER_FLAG_FIELD1) && (flags & RENDER_FLAG_TOP))
+	  {
+		frameIn.field = PL_FIELD_TOP;
+		frameIn.first_field = PL_FIELD_BOTTOM;
+	  }
+	}
+	else
+	{
+	  frameIn.field = PL_FIELD_NONE;
+	  frameIn.first_field = PL_FIELD_NONE;
+	}
+  }
 
   pl_color_space target_csp{ };
     static DX::DeviceResources::mp_dxgi_factory_ctx ctx = {0}; //cl
@@ -934,8 +967,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
 
-  // Without this recent version of libplacebo would spam the debug log like crazy, its also set on an info level
-  params->skip_target_clearing = true;
+  //params->skip_target_clearing = true; // target clearing need D3D11_BIND_UNORDERED_ACCESS for D3D11+
 
   // Data used for the video debug renderer
   m_displayTransfer = frameOut.color.transfer;
@@ -964,7 +996,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	}
 	else
 	{
-	  //cl params.hooks = nullptr;  //cl crashed on render below on video startup without the shaders initialized, m_PlaceboShadersHooks size==0 but m_PlaceboShadersFilename size==1
 	  params->num_hooks = 0;
 	}
   }
@@ -1003,101 +1034,119 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	opt->color_map_params.gamut_constants.softclip_knee = videoSettings.m_PlaceboSdrGamutConstantsSoftclipKnee;
   }
   
-
-  if(queueCheck.needReset(buffer->duration, renderPts))
-  {
-	//CLog::LogF(LOGDEBUG, "pl_queue_reset");
-	pl_queue_reset(*PL::PLInstance::Get()->GetQueue());
-	m_FrameMixerQueueResets++;
-  }
   //----------------
   // Render Image
   //----------------
-  #define LOG_PL_QUEUE 0
-  pl_queue* pQueue = PL::PLInstance::Get()->GetQueue();
-  if(!pl_queue_num_frames(*pQueue))
+  double screenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
+  if(m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL)
   {
-	CLog::LogF(LOGDEBUG, "pl_queue is empty");
+	LARGE_INTEGER frequency;
+	static double oldRenderPts = 0.0;
+	QueryPerformanceFrequency(&frequency);
+	int64_t start = CurrentHostCounter();
+	bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
+	int64_t end = CurrentHostCounter();
+	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
+	buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
+	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
+	CLog::LogF(LOGDEBUG, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}",
+	  screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000,
+	  (renderPts - oldRenderPts) / 1000.0);
+	oldRenderPts = renderPts;
   }
   else
   {
-	// Prepare queue update params
-	double screenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
-	struct pl_frame_mix mix {};
-	pl_queue_params qParams {};
-	qParams.pts = renderPts / 1000000; // + videoSettings.m_PlaceboTest / 1000.0; // - 0.021; // + 3*buffer->duration / 1000000 ;   
-	qParams.radius = pl_frame_mix_radius(params) * videoSettings.m_PlaceboFrameMixerRadiusFactor;
-	qParams.vsync_duration = 1.0 / screenFps; //cl 
-	qParams.timeout = 0; //UINT64_MAX;
-	//qParams.interpolation_threshold = 0.01;
-	//qParams.drift_compensation = true;
-
-    #if LOG_PL_QUEUE
-	//qParams.pts += videoSettings.m_PlaceboTest / 1000.0;
-    // Find min max pts in queue for debug
-	pl_source_frame out = {};
-	double minPts = std::numeric_limits<double>::max();
-	double maxPts = std::numeric_limits<double>::lowest();
-	for(int i = 0; i < pl_queue_num_frames(*pQueue); ++i)
+	if(queueCheck.needReset(buffer->duration, renderPts))
 	{
-	  pl_queue_peek(*pQueue, i, &out);
-	  if(!out.pts && !out.duration) // for interleaved material, libplacebo internally inserts fake frames
-		continue;
-	  if(out.pts < minPts) minPts = out.pts;
-	  if(out.pts > maxPts) maxPts = out.pts;
+	  //CLog::LogF(LOGDEBUG, "pl_queue_reset");
+	  pl_queue_reset(*PL::PLInstance::Get()->GetQueue());
+	  m_FrameMixerQueueResets++;
 	}
-	double renderPtsPos = (maxPts == minPts) ? 0.5 : (renderPts / 1000000.0 - minPts) / (maxPts - minPts);
-	double renderPtsShiftedPos = (maxPts == minPts) ? 0.5 : (qParams.pts - minPts) / (maxPts - minPts);
-    #endif
-
-	// Start timer
-	LARGE_INTEGER frequency;
-	QueryPerformanceFrequency(&frequency);
-	int64_t start = CurrentHostCounter();
-
-	// Queue update
-	pl_queue_status res = pl_queue_update(*pQueue, &mix, &qParams);
-	if(res != PL_QUEUE_OK)
+    #define LOG_PL_QUEUE 1
+	pl_queue* pQueue = PL::PLInstance::Get()->GetQueue();
+	if(!pl_queue_num_frames(*pQueue))
 	{
-	  //CLog::LogF(LOGERROR, "pl_queue_update failed with status {}", res);
-	  if(res == PL_QUEUE_MORE)
-		++m_FrameMixerQueueMore;
-	  else if(res == PL_QUEUE_ERR)
-		++m_FrameMixerQueueErr;
-	  if(mix.num_frames == 0)
+	  CLog::LogF(LOGDEBUG, "pl_queue is empty");
+	}
+	else
+	{
+	  // Prepare queue update params
+	  struct pl_frame_mix mix {};
+	  pl_queue_params qParams {};
+	  qParams.pts = renderPts / 1000000; // + videoSettings.m_PlaceboTest / 1000.0; // - 0.021; // + 3*buffer->duration / 1000000 ;   
+	  qParams.radius = pl_frame_mix_radius(params) * videoSettings.m_PlaceboFrameMixerRadiusFactor;
+	  qParams.vsync_duration = 1.0 / screenFps; //cl 
+	  qParams.timeout = 0; //UINT64_MAX;
+	  //qParams.interpolation_threshold = 0.01;
+	  //qParams.drift_compensation = true;
+
+      #if LOG_PL_QUEUE
+      //qParams.pts += videoSettings.m_PlaceboTest / 1000.0;
+      // Find min max pts in queue for debug
+	  pl_source_frame out = {};
+	  double minPts = std::numeric_limits<double>::max();
+	  double maxPts = std::numeric_limits<double>::lowest();
+	  for(int i = 0; i < pl_queue_num_frames(*pQueue); ++i)
 	  {
-		// Nothing to present, there will be a timeout on FinalOutput down the road but it will recover. 
-		// We could present something anyway but it will not help much. 
+		pl_queue_peek(*pQueue, i, &out);
+		if(!out.pts && !out.duration) // for interleaved material, libplacebo internally inserts fake frames
+		  continue;
+		if(out.pts < minPts) minPts = out.pts;
+		if(out.pts > maxPts) maxPts = out.pts;
 	  }
-	}
+	  double renderPtsPos = (maxPts == minPts) ? 0.5 : (renderPts / 1000000.0 - minPts) / (maxPts - minPts);
+	  double renderPtsShiftedPos = (maxPts == minPts) ? 0.5 : (qParams.pts - minPts) / (maxPts - minPts);
+      #endif
 
-	// Render
-	m_FrameMixerNumFrames = mix.num_frames;
-	bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
-	if(!res2)
-	{
-	  //CLog::LogF(LOGERROR, "pl_render_image_mix failed");
-	  ++m_FrameMixerRenderErrors;
-	}
+	  // Start timer
+	  LARGE_INTEGER frequency;
+	  QueryPerformanceFrequency(&frequency);
+	  int64_t start = CurrentHostCounter();
 
-	// Stop timer
-	int64_t end = CurrentHostCounter();
-	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
+	  // Queue update
+	  pl_queue_status res = pl_queue_update(*pQueue, &mix, &qParams);
+	  if(res != PL_QUEUE_OK)
+	  {
+		//CLog::LogF(LOGERROR, "pl_queue_update failed with status {}", res);
+		if(res == PL_QUEUE_MORE)
+		  ++m_FrameMixerQueueMore;
+		else if(res == PL_QUEUE_ERR)
+		  ++m_FrameMixerQueueErr;
+		if(mix.num_frames == 0)
+		{
+		  // Nothing to present, there will be a timeout on FinalOutput down the road but it will recover. 
+		  // We could present something anyway but it will not help much. 
+		}
+	  }
 
-#if LOG_PL_QUEUE
-	static double oldRenderPts = 0.0;
-	CLog::LogF(LOGDEBUG, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}, qParamsPts: {:.3f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, QFpsEst: {:f}, QVpsEst: {:f}, minPts: {:.3f}, maxPts: {:.3f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
-	  screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000,
-	  (renderPts - oldRenderPts)/1000.0, qParams.pts, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), pl_queue_estimate_fps(*pQueue), pl_queue_estimate_vps(*pQueue), minPts, maxPts, renderPtsPos, renderPtsShiftedPos);
-	oldRenderPts = renderPts;
-	for(int i = 0; i < mix.num_frames; ++i)
-	{
-	  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) (mix.frames [i]->user_data);
-	  CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	  // Render
+	  m_FrameMixerNumFrames = mix.num_frames;
+	  bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
+	  if(!res2)
+	  {
+		//CLog::LogF(LOGERROR, "pl_render_image_mix failed");
+		++m_FrameMixerRenderErrors;
+	  }
+
+	  // Stop timer
+	  int64_t end = CurrentHostCounter();
+	  buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
+
+      #if LOG_PL_QUEUE
+	  static double oldRenderPts = 0.0;
+	  CLog::LogF(LOGDEBUG, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}, qParamsPts: {:.3f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, QFpsEst: {:f}, QVpsEst: {:f}, minPts: {:.3f}, maxPts: {:.3f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
+		screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000,
+		(renderPts - oldRenderPts) / 1000.0, qParams.pts, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), pl_queue_estimate_fps(*pQueue), pl_queue_estimate_vps(*pQueue), minPts, maxPts, renderPtsPos, renderPtsShiftedPos);
+	  oldRenderPts = renderPts;
+	  for(int i = 0; i < mix.num_frames; ++i)
+	  {
+		CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) (mix.frames [i]->user_data);
+		CLog::LogF(LOGDEBUG, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	  }
+      #endif
 	}
-    #endif
+	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
   }
-  pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
 
   
   //pl_render_error err = pl_renderer_get_errors(PL::PLInstance::Get()->GetRenderer()).errors;
@@ -1233,7 +1282,8 @@ void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
   }
   if(hasDoviMetadata)
   {
-	m_ColorSpace = doviColorSpace;
+	if(disable_residual_flag)
+	  m_ColorSpace = doviColorSpace;
 	//m_ColorSpace.primaries = PL_COLOR_PRIM_BT_2020; //cl ?
 	//m_ColorSpace.transfer = PL_COLOR_TRC_PQ; //cl ?
 	//m_ColorSpace.hdr.min_luma = pl_hdr_rescale(PL_HDR_PQ, PL_HDR_NITS, doviColor.source_min_pq / 4095.0f); //cl ? 
