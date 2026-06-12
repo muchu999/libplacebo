@@ -109,6 +109,7 @@ using namespace XFILE;
 #define SETTING_VIDEO_STREAM              "video.stream"
 
 #define SETTING_LIB_PLACEBO_SKIN_ZOOM             "video.libplacebo.skin_zoom"
+#define SETTING_LIB_PLACEBO_SKIN_ZOOM_POSITION     "video.libplacebo.skin_zoom_position"
 #define SETTING_LIB_PLACEBO_COLOR_ADJUSTMENT_ENABLED "video.libplacebo.color_adjustment.enabled"
 #define SETTING_LIB_PLACEBO_SATURATION            "video.libplacebo.color_adjustment.saturation"
 #define SETTING_LIB_PLACEBO_SDR_SATURATION        "video.libplacebo.color_adjustment.sdr_saturation"
@@ -716,6 +717,13 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   {
 	vs.m_PlaceboSkinZoom = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
 	vs.m_PlaceboSkinZoomHint = vs.m_PlaceboSkinZoom;
+	appPlayer->SetVideoSettings(vs);
+	CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
+	CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_SKIN_ZOOM_POSITION)
+  {
+	vs.m_PlaceboSkinZoomPosition = static_cast<VS_PLACEBO_SZ_POSITION>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
 	CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
 	CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
@@ -1754,7 +1762,18 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
   if (renderMethod == RENDER_METHOD_LIBPLACEBO)
   {
+	entries.clear();
+	entries.emplace_back(55358, VS_SZ_POSITION_UPPER_LEFT);
+	entries.emplace_back(55359, VS_SZ_POSITION_UPPER_MIDDLE);
+	entries.emplace_back(55360, VS_SZ_POSITION_UPPER_RIGHT);
+	entries.emplace_back(55361, VS_SZ_POSITION_MIDDLE_RIGHT);
+	entries.emplace_back(55362, VS_SZ_POSITION_BOTTOM_RIGHT);
+	entries.emplace_back(55363, VS_SZ_POSITION_BOTTOM_MIDDLE);
+	entries.emplace_back(55364, VS_SZ_POSITION_BOTTOM_LEFT);
+	entries.emplace_back(55365, VS_SZ_POSITION_MIDDLE_LEFT);
+
 	AddSlider(groupLpFile, SETTING_LIB_PLACEBO_SKIN_ZOOM, 55333, SettingLevel::Basic, videoSettings.m_PlaceboSkinZoom, -1, -80, 1, 0, 55292, false);
+	AddSpinner(groupLpFile, SETTING_LIB_PLACEBO_SKIN_ZOOM_POSITION, 55357, SettingLevel::Basic, videoSettings.m_PlaceboSkinZoomPosition, entries);
 	AddButton(groupLpFile, SETTING_LIB_PLACEBO_SAVE_TO_FILE, 55323, SettingLevel::Basic);
 	AddButton(groupLpFile, SETTING_LIB_PLACEBO_LOAD_FROM_FILE, 55322, SettingLevel::Basic);
 

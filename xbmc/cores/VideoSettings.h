@@ -312,6 +312,16 @@ public:
 };
 
 
+enum VS_PLACEBO_SZ_POSITION {
+  VS_SZ_POSITION_UPPER_LEFT = 0,
+  VS_SZ_POSITION_UPPER_MIDDLE,
+  VS_SZ_POSITION_UPPER_RIGHT,
+  VS_SZ_POSITION_MIDDLE_RIGHT,
+  VS_SZ_POSITION_BOTTOM_RIGHT,
+  VS_SZ_POSITION_BOTTOM_MIDDLE,
+  VS_SZ_POSITION_BOTTOM_LEFT,
+  VS_SZ_POSITION_MIDDLE_LEFT
+};
 
 class CVideoSettings
 {
@@ -358,7 +368,8 @@ public:
 
   int m_PlaceboSkinZoom;
   int m_PlaceboSkinZoomHint;
-
+  VS_PLACEBO_SZ_POSITION m_PlaceboSkinZoomPosition;
+  
   std::string m_PlaceboLutFilename;
   float m_PlaceboDisplayHdrPeakLuminance;
   float m_PlaceboDisplaySdrPeakLuminance;

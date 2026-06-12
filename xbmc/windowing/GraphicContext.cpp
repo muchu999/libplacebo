@@ -709,14 +709,41 @@ void CGraphicContext::GetGUIScaling(const RESOLUTION_INFO &res, float &scaleX, f
     }
     else
     {
-      float fZoom = (100 + vs.m_PlaceboSkinZoomHint) * 0.01f;
-      fZoom -= 1.0f;
+	  float fZoom = (100 + vs.m_PlaceboSkinZoomHint) * 0.01f;
+	  fZoom -= 1.0f;
 
-      // Left aligned
+	  switch(vs.m_PlaceboSkinZoomPosition)
+	  {
+	  case VS_SZ_POSITION_UPPER_LEFT:
+		break;
+	  case VS_SZ_POSITION_UPPER_MIDDLE:
+		fToPosX -= fToWidth * fZoom * 0.5f;
+		break;
+	  case VS_SZ_POSITION_UPPER_RIGHT:
+		fToPosX -= fToWidth * fZoom * 1.0f;
+		break;
+	  case VS_SZ_POSITION_MIDDLE_RIGHT:
+		fToPosX -= fToWidth * fZoom * 1.0f;
+		fToPosY -= fToHeight * fZoom * 0.5f;
+		break;
+	  case VS_SZ_POSITION_BOTTOM_RIGHT:
+		fToPosX -= fToWidth * fZoom * 1.0f;
+		fToPosY -= fToHeight * fZoom * 1.0f;
+		break;
+	  case VS_SZ_POSITION_BOTTOM_MIDDLE:
+		fToPosX -= fToWidth * fZoom * 0.5f;
+		fToPosY -= fToHeight * fZoom * 1.0f;
+		break;
+	  case VS_SZ_POSITION_BOTTOM_LEFT:
+		fToPosY -= fToHeight * fZoom * 1.0f;
+		break;
+	  case VS_SZ_POSITION_MIDDLE_LEFT:
+		fToPosY -= fToHeight * fZoom * 0.5f;
+		break;
+	  }
+
       fToWidth *= fZoom + 1.0f;
       fZoom = fZoom / info.fPixelRatio;
-
-	  fToPosY -= fToHeight * fZoom * 0.5f;
 	  fToHeight *= fZoom + 1.0f;
 
       scaleX = fFromWidth / fToWidth;

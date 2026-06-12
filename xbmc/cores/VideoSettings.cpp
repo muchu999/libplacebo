@@ -79,6 +79,7 @@ void CVideoSettings::copy(const CVideoSettings& other)
 
   m_PlaceboSkinZoom = other.m_PlaceboSkinZoom;
   m_PlaceboSkinZoomHint = other.m_PlaceboSkinZoomHint;
+  m_PlaceboSkinZoomPosition = other.m_PlaceboSkinZoomPosition;
 
   // LibPLacebo specific CVideoSettings only video settings
   m_PlaceboShaderApply = other.m_PlaceboShaderApply;
@@ -166,6 +167,7 @@ CVideoSettings::CVideoSettings()
 
   m_PlaceboSkinZoom = 0;
   m_PlaceboSkinZoomHint = 0;
+  m_PlaceboSkinZoomPosition = VS_SZ_POSITION_UPPER_LEFT;
 
   // LibPLacebo specific video settings
   m_PlaceboUseHdrForSdr = false;
@@ -283,6 +285,8 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
 
   if (m_PlaceboSkinZoom != right.m_PlaceboSkinZoom) return true;
   //if (m_PlaceboSkinZoomHint != right.m_PlaceboSkinZoomHint) return true; //No!
+  if(m_PlaceboSkinZoomPosition != right.m_PlaceboSkinZoomPosition) return true;
+
   if (m_PlaceboShaderApply != right.m_PlaceboShaderApply) return true;
   if (m_PlaceboUseHdrForSdr != right.m_PlaceboUseHdrForSdr) return true;  
 

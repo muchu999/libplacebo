@@ -25593,6 +25593,50 @@ msgctxt "#55356"
 msgid "Debug OSD type"
 msgstr ""
 
+msgctxt "#55357"
+msgid "Skin zoom position"
+msgstr ""
+
+msgctxt "#55358"
+msgid "Upper left"
+msgstr ""
+
+msgctxt "#55359"
+msgid "Upper middle"
+msgstr ""
+
+msgctxt "#55360"
+msgid "Upper right"
+msgstr ""
+
+msgctxt "#55361"
+msgid "Middle right"
+msgstr ""
+
+msgctxt "#55362"
+msgid "Bottom right"
+msgstr ""
+
+msgctxt "#55363"
+msgid "Bottom middle"
+msgstr ""
+
+msgctxt "#55364"
+msgid "Bottom left"
+msgstr ""
+
+msgctxt "#55365"
+msgid "Middle left"
+msgstr ""
+
+
+
+
+
+
+
+
+
 
 
 
