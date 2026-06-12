@@ -263,9 +263,164 @@ bool CRenderManager::IsConfigured() const
     return false;
 }
 
+class GuidedHybridPLL {
+private:
+  double lastRawTimeUs;
+  double lastPredictedTimeUs;
+  double currentBasePeriodUs; // Anchored directly to the explicit user input
+
+  std::vector<double> slowHistory;
+  const size_t SLOW_WINDOW_SIZE = 21; // Lock deep window for 60Hz loop dampening
+
+  double integratorUs = 0.0;
+  bool isInitialized = false;
+
+  // Fast-Lock state tracker
+  int32_t fastLockCounter = 0;
+  const int32_t FAST_LOCK_FRAMES = 12;
+
+public:
+  GuidedHybridPLL()
+	: lastRawTimeUs(0), lastPredictedTimeUs(0.0), currentBasePeriodUs(0.0) {
+  }
+
+  // Process using the actual expected frequency context
+  // targetFreqHz: The known baseline rate (e.g., 24.0, 30.0, 60.0)
+  // rawTimestampUs: Monotonic microsecond hardware clock timestamp
+  double process(double targetFreqHz, double rawTimestampUs) {
+	double newBasePeriodUs = 1000000.0 / targetFreqHz;
+
+	// 1. Instant Global Adaptation on explicit media change
+	if(std::abs(newBasePeriodUs - currentBasePeriodUs) > 10.0) {
+	  currentBasePeriodUs = newBasePeriodUs;
+	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs); // Seed immediately
+	  integratorUs = 0.0;
+	  lastPredictedTimeUs = rawTimestampUs;
+	  lastRawTimeUs = rawTimestampUs;
+	  fastLockCounter = 0;
+	  isInitialized = true;
+	  return rawTimestampUs;
+	}
+
+	if(!isInitialized) {
+	  currentBasePeriodUs = newBasePeriodUs;
+	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs);
+	  lastRawTimeUs = rawTimestampUs;
+	  lastPredictedTimeUs = rawTimestampUs;
+	  fastLockCounter = 0;
+	  isInitialized = true;
+	  return rawTimestampUs;
+	}
+
+	double rawDelta = rawTimestampUs - lastRawTimeUs;
+	lastRawTimeUs = rawTimestampUs;
+
+	// ====================================================================
+	// EXPLICIT STRATEGY ROUTING (Immutable; Cannot be tricked by jitter)
+	// ====================================================================
+	double kp;
+	double ki;
+	double maxPeriodChangePerFrame;
+	double jitterTolerance;
+	bool useDeepHistory;
+
+	if(targetFreqHz >= 45.0) {
+	  // 1. HIGH-FREQUENCY STRATEGY (50Hz, 60Hz+)
+	  // Focus: Maximum damping to kill feedback loop oscillations.
+	  useDeepHistory = true;
+	  kp = 0.015;
+	  ki = 0.001;
+	  maxPeriodChangePerFrame = 40.0;
+	  jitterTolerance = currentBasePeriodUs * 0.12;
+	}
+	else if(targetFreqHz >= 20.0) {
+	  // 2. STANDARD LOW-FREQUENCY STRATEGY (24Hz, 30Hz Progressive)
+	  // Focus: High mobility, rapid alignment, zero latency lag.
+	  useDeepHistory = false;
+	  kp = 0.06;
+	  ki = 0.006;
+	  maxPeriodChangePerFrame = 400.0;
+	  jitterTolerance = currentBasePeriodUs * 0.25;
+	}
+	else {
+	  // 3. ULTRA-LOW-FREQUENCY STRATEGY (12Hz Interlaced Field Mode)
+	  // Focus: Extra mechanical stiffness to prevent micro-stutter over long cycles.
+	  useDeepHistory = false;
+	  kp = 0.03;                      // Tightened to keep the slow flywheel steady
+	  ki = 0.003;
+	  maxPeriodChangePerFrame = 200.0;// Restricted to prevent CPU bursts from warping the timeline
+	  jitterTolerance = currentBasePeriodUs * 0.15; // Snug phase window
+	}
+	// ====================================================================
+
+	// 2. Maintain History Window (Only used for 60Hz loop dampening)
+	double trackingReferencePeriodUs = currentBasePeriodUs;
+	if(useDeepHistory) {
+	  if(slowHistory.size() >= SLOW_WINDOW_SIZE) {
+		slowHistory.erase(slowHistory.begin());
+	  }
+	  slowHistory.push_back(rawDelta);
+
+	  std::vector<double> sortedSlow = slowHistory;
+	  std::sort(sortedSlow.begin(), sortedSlow.end());
+	  trackingReferencePeriodUs = sortedSlow [SLOW_WINDOW_SIZE / 2];
+	}
+
+	// 3. Compute Phase Error
+	double expectedTimeUs = lastPredictedTimeUs + currentBasePeriodUs;
+	double phaseErrorUs = rawTimestampUs - expectedTimeUs;
+
+	// 4. Universal Safety Hard Reset
+	if(std::abs(phaseErrorUs) > (currentBasePeriodUs * 0.45)) {
+	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs);
+	  integratorUs = 0.0;
+	  lastPredictedTimeUs = rawTimestampUs;
+	  fastLockCounter = 0;
+	  return rawTimestampUs;
+	}
+
+	// 5. Phase Error Soft-Clamping (CPU Scheduling Spike Protection)
+	if(fastLockCounter >= FAST_LOCK_FRAMES) {
+	  if(std::abs(phaseErrorUs) > jitterTolerance) {
+		phaseErrorUs = (phaseErrorUs > 0) ? jitterTolerance : -jitterTolerance;
+	  }
+	}
+
+	// 6. Core Feedback Tracking
+	integratorUs += ki * phaseErrorUs;
+	double maxIntegrator = currentBasePeriodUs * 0.05;
+	integratorUs = std::max(-maxIntegrator, std::min(maxIntegrator, integratorUs));
+
+	double targetPeriodUs = trackingReferencePeriodUs + (kp * phaseErrorUs) + integratorUs;
+
+	// 7. Dynamic Acceleration Execution
+	if(fastLockCounter < FAST_LOCK_FRAMES) {
+	  currentBasePeriodUs = targetPeriodUs;
+	  fastLockCounter++;
+	}
+	else {
+	  double deltaPeriodUs = targetPeriodUs - currentBasePeriodUs;
+	  deltaPeriodUs = std::max(-maxPeriodChangePerFrame, std::min(maxPeriodChangePerFrame, deltaPeriodUs));
+	  currentBasePeriodUs += deltaPeriodUs;
+	}
+
+	// 8. Generate Timeline Output
+	lastPredictedTimeUs = expectedTimeUs;
+	return expectedTimeUs;
+  }
+};
+
+GuidedHybridPLL  synchPLL;
+
+
+
 void CRenderManager::RecordFlipEndTime() 
 {
+  double fps = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS(); //cl Changed GetFPS implementation because it was always returning 60 on my PC, irrespective of the real value.
+  double frametime = DVD_TIME_BASE / fps;
   m_flipEndTime = m_dvdClock.GetClock();
+  m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime);
+  //CLog::Log(LOGDEBUG, "RecordFlipEndTime: {:.0f}, {:.0f}", m_flipEndTime/1000.0, m_filteredFlipEndTime/1000.0);
 }
 
 void CRenderManager::ShowVideo(bool enable)
@@ -1152,155 +1307,6 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
   return m_queued.size() + m_discard.size();
 }
 
-class GuidedHybridPLL {
-private:
-  double lastRawTimeUs;
-  double lastPredictedTimeUs;
-  double currentBasePeriodUs; // Anchored directly to the explicit user input
-
-  std::vector<double> slowHistory;
-  const size_t SLOW_WINDOW_SIZE = 21; // Lock deep window for 60Hz loop dampening
-
-  double integratorUs = 0.0;
-  bool isInitialized = false;
-
-  // Fast-Lock state tracker
-  int32_t fastLockCounter = 0;
-  const int32_t FAST_LOCK_FRAMES = 12;
-
-public:
-  GuidedHybridPLL()
-	: lastRawTimeUs(0), lastPredictedTimeUs(0.0), currentBasePeriodUs(0.0) {
-  }
-
-  // Process using the actual expected frequency context
-  // targetFreqHz: The known baseline rate (e.g., 24.0, 30.0, 60.0)
-  // rawTimestampUs: Monotonic microsecond hardware clock timestamp
-  double process(double targetFreqHz, double rawTimestampUs) {
-	double newBasePeriodUs = 1000000.0 / targetFreqHz;
-
-	// 1. Instant Global Adaptation on explicit media change
-	if(std::abs(newBasePeriodUs - currentBasePeriodUs) > 10.0) {
-	  currentBasePeriodUs = newBasePeriodUs;
-	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs); // Seed immediately
-	  integratorUs = 0.0;
-	  lastPredictedTimeUs = rawTimestampUs;
-	  lastRawTimeUs = rawTimestampUs;
-	  fastLockCounter = 0;
-	  isInitialized = true;
-	  return rawTimestampUs;
-	}
-
-	if(!isInitialized) {
-	  currentBasePeriodUs = newBasePeriodUs;
-	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs);
-	  lastRawTimeUs = rawTimestampUs;
-	  lastPredictedTimeUs = rawTimestampUs;
-	  fastLockCounter = 0;
-	  isInitialized = true;
-	  return rawTimestampUs;
-	}
-
-	double rawDelta = rawTimestampUs - lastRawTimeUs;
-	lastRawTimeUs = rawTimestampUs;
-
-	// ====================================================================
-	// EXPLICIT STRATEGY ROUTING (Immutable; Cannot be tricked by jitter)
-	// ====================================================================
-	double kp;
-	double ki;
-	double maxPeriodChangePerFrame;
-	double jitterTolerance;
-	bool useDeepHistory;
-
-	if(targetFreqHz >= 45.0) {
-	  // 1. HIGH-FREQUENCY STRATEGY (50Hz, 60Hz+)
-	  // Focus: Maximum damping to kill feedback loop oscillations.
-	  useDeepHistory = true;
-	  kp = 0.015;
-	  ki = 0.001;
-	  maxPeriodChangePerFrame = 40.0;
-	  jitterTolerance = currentBasePeriodUs * 0.12;
-	}
-	else if(targetFreqHz >= 20.0) {
-	  // 2. STANDARD LOW-FREQUENCY STRATEGY (24Hz, 30Hz Progressive)
-	  // Focus: High mobility, rapid alignment, zero latency lag.
-	  useDeepHistory = false;
-	  kp = 0.06;
-	  ki = 0.006;
-	  maxPeriodChangePerFrame = 400.0;
-	  jitterTolerance = currentBasePeriodUs * 0.25;
-	}
-	else {
-	  // 3. ULTRA-LOW-FREQUENCY STRATEGY (12Hz Interlaced Field Mode)
-	  // Focus: Extra mechanical stiffness to prevent micro-stutter over long cycles.
-	  useDeepHistory = false;
-	  kp = 0.03;                      // Tightened to keep the slow flywheel steady
-	  ki = 0.003;
-	  maxPeriodChangePerFrame = 200.0;// Restricted to prevent CPU bursts from warping the timeline
-	  jitterTolerance = currentBasePeriodUs * 0.15; // Snug phase window
-	}	
-	// ====================================================================
-
-	// 2. Maintain History Window (Only used for 60Hz loop dampening)
-	double trackingReferencePeriodUs = currentBasePeriodUs;
-	if(useDeepHistory) {
-	  if(slowHistory.size() >= SLOW_WINDOW_SIZE) {
-		slowHistory.erase(slowHistory.begin());
-	  }
-	  slowHistory.push_back(rawDelta);
-
-	  std::vector<double> sortedSlow = slowHistory;
-	  std::sort(sortedSlow.begin(), sortedSlow.end());
-	  trackingReferencePeriodUs = sortedSlow [SLOW_WINDOW_SIZE / 2];
-	}
-
-	// 3. Compute Phase Error
-	double expectedTimeUs = lastPredictedTimeUs + currentBasePeriodUs;
-	double phaseErrorUs = rawTimestampUs - expectedTimeUs;
-
-	// 4. Universal Safety Hard Reset
-	if(std::abs(phaseErrorUs) > (currentBasePeriodUs * 0.45)) {
-	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs);
-	  integratorUs = 0.0;
-	  lastPredictedTimeUs = rawTimestampUs;
-	  fastLockCounter = 0;
-	  return rawTimestampUs;
-	}
-
-	// 5. Phase Error Soft-Clamping (CPU Scheduling Spike Protection)
-	if(fastLockCounter >= FAST_LOCK_FRAMES) {
-	  if(std::abs(phaseErrorUs) > jitterTolerance) {
-		phaseErrorUs = (phaseErrorUs > 0) ? jitterTolerance : -jitterTolerance;
-	  }
-	}
-
-	// 6. Core Feedback Tracking
-	integratorUs += ki * phaseErrorUs;
-	double maxIntegrator = currentBasePeriodUs * 0.05;
-	integratorUs = std::max(-maxIntegrator, std::min(maxIntegrator, integratorUs));
-
-	double targetPeriodUs = trackingReferencePeriodUs + (kp * phaseErrorUs) + integratorUs;
-
-	// 7. Dynamic Acceleration Execution
-	if(fastLockCounter < FAST_LOCK_FRAMES) {
-	  currentBasePeriodUs = targetPeriodUs;
-	  fastLockCounter++;
-	}
-	else {
-	  double deltaPeriodUs = targetPeriodUs - currentBasePeriodUs;
-	  deltaPeriodUs = std::max(-maxPeriodChangePerFrame, std::min(maxPeriodChangePerFrame, deltaPeriodUs));
-	  currentBasePeriodUs += deltaPeriodUs;
-	}
-
-	// 8. Generate Timeline Output
-	lastPredictedTimeUs = expectedTimeUs;
-	return expectedTimeUs;
-  }
-};
-
-GuidedHybridPLL  synchPLL;
-
 void CRenderManager::PrepareNextRender()
 {
   static double lastFramePts = 0;
@@ -1321,16 +1327,14 @@ void CRenderManager::PrepareNextRender()
   static double lastFrameOnScreen = 0;
   static double lastClock = 0;
   double clock = m_dvdClock.GetClock();
-  double clockDiff = clock - m_flipEndTime;
-  //if((abs(m_flipEndTime-clock) < 15000)) //cl sanity check??
-  {
-	clock = m_flipEndTime;
-  }
-  double frameOnScreen = synchPLL.process(fps, clock);
+  double frameOnScreen = m_filteredFlipEndTime;
   double diff = frameOnScreen - lastFrameOnScreen;
+
   double diffClock = clock - lastClock;
+  double clockDiff = clock - m_filteredFlipEndTime;
   lastFrameOnScreen = frameOnScreen;
   lastClock = clock;
+
   m_displayLatency = DVD_MSEC_TO_TIME(
       m_latencyTweak +
       static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetDisplayLatency()) -
@@ -1372,10 +1376,10 @@ void CRenderManager::PrepareNextRender()
   m_renderPts = renderPts;
   m_renderPts2 = renderPts + frametime; // In case of interleaved material, the PrepareNextRender function is only called once.
   CLog::LogFC(LOGDEBUG, LOGAVTIMING,
-              "frameOnScreen: {:.0f} renderPts: {:.0f} pts: {:.0f}, nextFramePts: {:.0f} diff: {:.0f}  render: {} "
-              "forceNext: {} Queued: {} Discard: {} Free: {}, diffClock: {:.0f}, OnscreenDiff: {:.0f}, VsyncAdjust: {:.0f}, err: {:.0f}, clockDiff: {:.0f}",
+              "frameOnScreen: {:.0f}, renderPts: {:.0f}, pts: {:.0f}, nextFramePts: {:.0f}, diff: {:.0f}, render: {}, "
+              "forceNext: {}, Queued: {}, Discard: {}, Free: {}, diffClock: {:.0f}, OnscreenDiff: {:.0f}, VsyncAdjust: {:.0f}, err: {:.0f}, clockDiff: {:.0f}, displayLatency: {:.0f}",
               frameOnScreen, renderPts, pts, nextFramePts, (renderPts - nextFramePts),
-              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff, average, err, clockDiff);
+              renderPts >= nextFramePts, m_forceNext, m_queued.size(), m_discard.size(), m_free.size(), diffClock, diff, average, err, clockDiff, m_displayLatency);
   lastFramePts = nextFramePts;
 
   bool combined = false;

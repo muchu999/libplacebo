@@ -654,7 +654,8 @@ public:
 	  return false;
 	}
 
-	if((renderPts < lastRenderPts) || ((renderPts - lastRenderPts) > 2.0 * 1000000*duration))  //cl 4.0 * 1000000.0/screenFps)) //cl too small will result in constant reset on some files or after pause/resume and no video... might need better algo...
+	const double maxJitter = 2000; //cl 
+	if((renderPts + maxJitter < lastRenderPts) || ((renderPts - lastRenderPts) > 2.0 * 1000000*duration))  //cl 4.0 * 1000000.0/screenFps)) //cl too small will result in constant reset on some files or after pause/resume and no video... might need better algo...
 	{
 	  lastRenderPts = renderPts;
 	  return true;
