@@ -217,7 +217,7 @@
 		    </dependency>
 		  </dependencies>
 		  <level>2</level>
-		  <default>16</default>
+		  <default>32</default>
 		  <constraints>
 			<minimum>10</minimum>
 			<step>2</step>
