@@ -207,7 +207,7 @@ void CVideoSettings::ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type)
 {
   // Overriding SDR default values for SDR to HDR mapping
   m_PlaceboDisplaySdrPeakLuminance = 480;
-  m_PlaceboSdrSaturation = 55.0; //cl best defaults for good image?
+  m_PlaceboSdrSaturation = 53.5; //cl best defaults for good image?
   //m_PlaceboTest = 0.0f;
   m_PlaceboSdrColorMapInverseToneMapping = true;
   m_PlaceboSdrColorMapGamutExpansion = true;

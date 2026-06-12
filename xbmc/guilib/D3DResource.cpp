@@ -209,7 +209,7 @@ bool CD3DTexture::Create(UINT width, UINT height, UINT mipLevels, D3D11_USAGE us
 
   m_bindFlags = 0; // D3D11_BIND_SHADER_RESOURCE;
   if (D3D11_USAGE_DEFAULT == usage && DX::Windowing()->IsFormatSupport(format, D3D11_FORMAT_SUPPORT_RENDER_TARGET))
-    m_bindFlags |= D3D11_BIND_RENDER_TARGET;
+    m_bindFlags |= D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS;  //cl testing, not too sure...Libplacebo needs it for target clearing herem
   if ( D3D11_USAGE_STAGING != m_usage )
   {
     if (DX::Windowing()->IsFormatSupport(format, D3D11_FORMAT_SUPPORT_SHADER_LOAD)
