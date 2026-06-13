@@ -1733,10 +1733,10 @@ void CPLHelper::PlUpscalerOptionFiller(const std::shared_ptr<const CSetting>& se
 	f = pl_filter_configs[i];
 	if (!f->description)
 	  continue;
-	if (!(f->allowed & PL_FILTER_UPSCALING))
+	if (!(f->allowed & (PL_FILTER_UPSCALING | PL_FILTER_SCALING | PL_FILTER_ALL)))
 	  continue;
-	if (!(f->recommended & PL_FILTER_UPSCALING))
-	  continue;
+	//if (!(f->recommended & PL_FILTER_UPSCALING))
+	//  continue;
 	list.emplace_back(f->description, i);
   }
 }
@@ -1754,8 +1754,8 @@ void CPLHelper::PlDownscalerOptionFiller(const std::shared_ptr<const CSetting>& 
 	  continue;
 	if (!(f->allowed & PL_FILTER_DOWNSCALING))
 	  continue;
-	if (!(f->recommended & PL_FILTER_DOWNSCALING))
-	  continue;
+	//if (!(f->recommended & (PL_FILTER_DOWNSCALING | PL_FILTER_SCALING | PL_FILTER_ALL)))
+	//  continue;
 	list.emplace_back(f->description, i);
   }
 }
@@ -1771,10 +1771,10 @@ void CPLHelper::PlFrameMixerOptionFiller(const std::shared_ptr<const CSetting>& 
 	f = pl_filter_configs[i];
 	if (!f->description)
 	  continue;
-	if (!(f->allowed & PL_FILTER_FRAME_MIXING))
+	if (!(f->allowed & PL_FILTER_FRAME_MIXING | PL_FILTER_ALL))
 	  continue;
-	if (!(f->recommended & PL_FILTER_FRAME_MIXING))
-	  continue;
+	//if (!(f->recommended & PL_FILTER_FRAME_MIXING))
+	//  continue;
 	list.emplace_back(f->description, i);
   }
 }
