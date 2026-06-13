@@ -1771,7 +1771,7 @@ void CPLHelper::PlFrameMixerOptionFiller(const std::shared_ptr<const CSetting>& 
 	f = pl_filter_configs[i];
 	if (!f->description)
 	  continue;
-	if (!(f->allowed & PL_FILTER_FRAME_MIXING | PL_FILTER_ALL))
+	if (!(f->allowed & (PL_FILTER_FRAME_MIXING | PL_FILTER_ALL)))
 	  continue;
 	//if (!(f->recommended & PL_FILTER_FRAME_MIXING))
 	//  continue;
