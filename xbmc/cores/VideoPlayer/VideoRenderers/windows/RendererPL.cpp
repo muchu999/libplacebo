@@ -974,6 +974,13 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
 
+  // For AMD shave a pixel because of bleeding in last line/column
+  const DXGI_ADAPTER_DESC ad = DX::DeviceResources::Get()->GetAdapterDesc(); //cl do it only once if it works..
+  if(ad.VendorId == PCIV_AMD)
+  {
+	frameIn.crop.x1 -= 1.0f;
+	frameIn.crop.y1 -= 1.0f;
+  }
 
   // Data used for the video debug renderer
   m_displayTransfer = frameOut.color.transfer;
@@ -1126,14 +1133,22 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  }
 
 	  // Adjust crop parameters
+	  const DXGI_ADAPTER_DESC ad = DX::DeviceResources::Get()->GetAdapterDesc(); //cl do it only once, if it works..
 	  for(int j=0; j< mix.num_frames; ++j)
 	  {
-		pl_frame *frame = const_cast<pl_frame*>(mix.frames [j]); //cl maybe instead store crop values and assign them during mapping?
+		pl_frame *frame = const_cast<pl_frame*>(mix.frames [j]); //cl do it in mapping but value is passed here...
 
 		frame->crop.x0 = sourceRect.x1;
 		frame->crop.x1 = sourceRect.x2;
 		frame->crop.y0 = sourceRect.y1;
 		frame->crop.y1 = sourceRect.y2;
+
+		// For AMD shave a pixel because of bleeding in last line/column
+		if(ad.VendorId == PCIV_AMD)
+		{
+		  frameIn.crop.x1 -= 1.0f;
+		  frameIn.crop.y1 -= 1.0f;
+		}
 	  }
 	  // Render
 	  m_FrameMixerNumFrames = mix.num_frames;
