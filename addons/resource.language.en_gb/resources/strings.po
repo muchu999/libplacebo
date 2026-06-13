@@ -25629,6 +25629,11 @@ msgctxt "#55365"
 msgid "Middle left"
 msgstr ""
 
+msgctxt "#55366"
+msgid "Bypass queuing when frame mixer is disabled"
+msgstr ""
+
+
 
 
 

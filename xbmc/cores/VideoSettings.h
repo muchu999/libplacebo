@@ -379,6 +379,7 @@ public:
   bool m_PlaceboShaderApply;
   bool m_PlaceboUseHdrForSdr;
   float m_PlaceboFrameMixerRadiusFactor;
+  bool m_PlaceboFrameMixerBypassQueue;  
 
   bool m_PlaceboColorAdjustmentEnabled;
   float m_PlaceboSaturation;

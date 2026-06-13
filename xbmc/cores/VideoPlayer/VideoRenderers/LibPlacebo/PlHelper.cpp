@@ -472,7 +472,7 @@ void CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings& vs)
   vs.m_PlaceboPreserveMixingCache = m_placeboOptions->params.preserve_mixing_cache;
   vs.m_PlaceboSkipAntiAliasing = m_placeboOptions->params.skip_anti_aliasing;
   vs.m_PlaceboSkipCachingSingleFrame = m_placeboOptions->params.skip_caching_single_frame;
-
+  
   // Update overriden default values for placebo specific settings that are not directly stored in m_placeboOptions, but only in CVideoSettings
   /* //cl no! we assume the param settings are always meant for HDR and overriden in the renderer function if needed, never need to update them
   vs.m_PlaceboSdrSaturation = vs.m_PlaceboSaturation;
@@ -624,6 +624,7 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetBoolean(pNode, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::SetBoolean(pNode, "placeboshaderapply", vs.m_PlaceboShaderApply);
   XMLUtils::SetFloat(pNode, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
+  XMLUtils::SetBoolean(pNode, "placebomixerbypassqueue", vs.m_PlaceboFrameMixerBypassQueue);
 
   XMLUtils::SetFloat(pNode, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::SetBoolean(pNode, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
@@ -796,6 +797,8 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetBoolean(pElement, "placebousehdrforsdr", vs.m_PlaceboUseHdrForSdr);
   XMLUtils::GetBoolean(pElement, "placeboshaderapply", vs.m_PlaceboShaderApply);
   XMLUtils::GetFloat(pElement, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
+  XMLUtils::GetBoolean(pElement, "placebomixerbypassqueue", vs.m_PlaceboFrameMixerBypassQueue);
+
   XMLUtils::GetFloat(pElement, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapgamutexpansion", vs.m_PlaceboSdrColorMapGamutExpansion);

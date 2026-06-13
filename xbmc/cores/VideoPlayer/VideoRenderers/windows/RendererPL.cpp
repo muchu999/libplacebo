@@ -104,7 +104,7 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
 	m_renderBuffers[index]->frameIdx = index;
 	//m_frameIdx += 2;
   }
-  if(m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer != NULL)
+  if(!((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue))
   {
 	CRenderBuffer* rb = m_renderBuffers [index];
 	struct pl_source_frame sframe {};
@@ -685,7 +685,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   CRenderBufferImpl* buffer = static_cast<CRenderBufferImpl*>(buf);
 
   InitializeFrameInFields(&frameIn, buffer); //cl wastefull, need cleanup
-  if(m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL)
+  if((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue)
   {
 	if(buffer->m_bIsInterlaced)
 	{
@@ -1044,7 +1044,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   // Render Image
   //----------------
   double screenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
-  if(m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL)
+  if((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue)
   {
 	LARGE_INTEGER frequency;
 	static double oldRenderPts = 0.0;

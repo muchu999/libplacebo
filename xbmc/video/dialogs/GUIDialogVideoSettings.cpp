@@ -243,6 +243,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_SHADER_INVALID                      "video.libplacebo.shader_invalid"
 #define SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD                     "video.libplacebo.video_debug_osd"
 #define SETTING_LIB_PLACEBO_DEBUG_OSD                           "video.libplacebo.debug_osd"
+#define SETTING_LIB_PLACEBO_FRAME_MIXER_BYPASS_QUEUE            "video.libplacebo.mixer_bypass_queue"
 
 #define CreateGroup(thegroup,thecategory) std::shared_ptr<CSettingGroup> thegroup = AddGroup(thecategory); if (thegroup == NULL) {CLog::Log(LOGERROR, "CGUIDialogLibplacebo: unable to setup settings");  return; }
 
@@ -768,6 +769,11 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboFrameMixerRadiusFactor = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
+  else if(settingId == SETTING_LIB_PLACEBO_FRAME_MIXER_BYPASS_QUEUE)
+  {
+	vs.m_PlaceboFrameMixerBypassQueue = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
+	}
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED)
   {
 	vs.m_PlaceboDeinterlaceEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
@@ -1824,6 +1830,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	
 	// Mixer
 	AddList(groupMixer, SETTING_LIB_PLACEBO_FRAME_MIXER, 55227, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixer, CPLHelper::PlFrameMixerOptionFiller, 55227);
+	AddToggle(groupMixer, SETTING_LIB_PLACEBO_FRAME_MIXER_BYPASS_QUEUE, 55366, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixerBypassQueue);
 	//AddSlider(groupMixer, SETTING_LIB_PLACEBO_FRAME_MIXER_RADIUS_FACTOR, 55354, SettingLevel::Basic, videoSettings.m_PlaceboFrameMixerRadiusFactor, "{0:3.1f}", (float) 0.1, (float) 0.1, (float) 2.0, 55354, usePopup);
 	//AddSlider(groupMixer, SETTING_LIB_PLACEBO_TEST, 55354, SettingLevel::Basic, videoSettings.m_PlaceboTest, "{0:4.0f}", (float) -100, (float) 5, (float) 100, 55354, usePopup);
 
