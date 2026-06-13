@@ -1125,6 +1125,16 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 		}
 	  }
 
+	  // Adjust crop parameters
+	  for(int j=0; j< mix.num_frames; ++j)
+	  {
+		pl_frame *frame = const_cast<pl_frame*>(mix.frames [j]); //cl maybe instead store crop values and assign them during mapping?
+
+		frame->crop.x0 = sourceRect.x1;
+		frame->crop.x1 = sourceRect.x2;
+		frame->crop.y0 = sourceRect.y1;
+		frame->crop.y1 = sourceRect.y2;
+	  }
 	  // Render
 	  m_FrameMixerNumFrames = mix.num_frames;
 	  bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
