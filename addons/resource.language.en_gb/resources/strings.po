@@ -25633,6 +25633,14 @@ msgctxt "#55366"
 msgid "Bypass queuing when frame mixer is disabled"
 msgstr ""
 
+msgctxt "#55367"
+msgid "Crop bottom"
+msgstr ""
+
+msgctxt "#55368"
+msgid "Skip target clearing"
+msgstr ""
+
 
 
 

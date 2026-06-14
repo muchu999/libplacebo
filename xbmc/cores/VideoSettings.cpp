@@ -121,6 +121,7 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboShadersHooks = other.m_PlaceboShadersHooks;
   m_PlaceboFrameMixerRadiusFactor = other.m_PlaceboFrameMixerRadiusFactor;
   m_PlaceboFrameMixerBypassQueue = other.m_PlaceboFrameMixerBypassQueue;
+  m_PlaceboCropBottom = other.m_PlaceboCropBottom;
 
   // Shallow copy and deep copy of m_placeboOptions content
   if (m_placeboOptions && other.m_placeboOptions)
@@ -180,6 +181,7 @@ CVideoSettings::CVideoSettings()
   m_PlaceboLut = nullptr;
   m_PlaceboFrameMixerRadiusFactor = 1.0;
   m_PlaceboFrameMixerBypassQueue = true;
+  m_PlaceboCropBottom = 0;                    //cl reset these settings along with libplacebo reset to defaults ????
   
   m_PlaceboShadersEnabled = {};
   m_PlaceboShadersFilename = {};
@@ -324,6 +326,7 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if (m_PlaceboLutFilename != right.m_PlaceboLutFilename) return true;
   if (m_PlaceboFrameMixerRadiusFactor != right.m_PlaceboFrameMixerRadiusFactor) return true;
   if(m_PlaceboFrameMixerBypassQueue != right.m_PlaceboFrameMixerBypassQueue) return true;
+  if(m_PlaceboCropBottom != right.m_PlaceboCropBottom) return true;
 
   if (m_PlaceboShadersEnabled != right.m_PlaceboShadersEnabled) return true;
   if (m_PlaceboShadersFilename != right.m_PlaceboShadersFilename) return true;
@@ -431,6 +434,7 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if (m_PlaceboPreserveMixingCache != right.m_PlaceboPreserveMixingCache) return true;
   if (m_PlaceboSkipAntiAliasing != right.m_PlaceboSkipAntiAliasing) return true;
   if (m_PlaceboSkipCachingSingleFrame != right.m_PlaceboSkipCachingSingleFrame) return true;
+  if(m_PlaceboSkipTargetClearing != right.m_PlaceboSkipTargetClearing) return true;
 
   return false;
 }

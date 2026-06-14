@@ -227,6 +227,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_PRESERVE_MIXING_CACHE               "video.libplacebo.preserve_mixing_cache"
 #define SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING                  "video.libplacebo.skip_anti_aliasing"
 #define SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME           "video.libplacebo.skip_caching_single_frame"
+#define SETTING_LIB_PLACEBO_SKIP_TARGET_CLEARING                "video.libplacebo.skip_target_clearing"
 #define SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE          "video.libplacebo.display_hdr_peak_luminance"
 #define SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE          "video.libplacebo.display_sdr_peak_luminance"
 #define SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT              "video.libplacebo.target_colorspace_hint"
@@ -244,6 +245,7 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD                     "video.libplacebo.video_debug_osd"
 #define SETTING_LIB_PLACEBO_DEBUG_OSD                           "video.libplacebo.debug_osd"
 #define SETTING_LIB_PLACEBO_FRAME_MIXER_BYPASS_QUEUE            "video.libplacebo.mixer_bypass_queue"
+#define SETTING_LIB_PLACEBO_CROP_BOTTOM                         "video.libplacebo.crop_bottom"
 
 #define CreateGroup(thegroup,thecategory) std::shared_ptr<CSettingGroup> thegroup = AddGroup(thecategory); if (thegroup == NULL) {CLog::Log(LOGERROR, "CGUIDialogLibplacebo: unable to setup settings");  return; }
 
@@ -774,6 +776,11 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboFrameMixerBypassQueue = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
 	appPlayer->SetVideoSettings(vs);
 	}
+  else if(settingId == SETTING_LIB_PLACEBO_CROP_BOTTOM)
+  {
+	vs.m_PlaceboCropBottom = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED)
   {
 	vs.m_PlaceboDeinterlaceEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
@@ -1173,7 +1180,12 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	m_placeboOptions->params.skip_caching_single_frame = vs.m_PlaceboSkipCachingSingleFrame;
 	appPlayer->SetVideoSettings(vs);
   }
-  
+  else if(settingId == SETTING_LIB_PLACEBO_SKIP_TARGET_CLEARING)
+  {
+	vs.m_PlaceboSkipTargetClearing = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	m_placeboOptions->params.skip_target_clearing = vs.m_PlaceboSkipTargetClearing;
+	appPlayer->SetVideoSettings(vs);
+  }
   else if(settingId == SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD)
   {
 	vs.m_PlaceboVideoDebugOsd = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
@@ -1720,7 +1732,9 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	  videoSettings.m_CustomVerticalShift, "{:2.2f}", -2.0f, 0.01f, 2.0f, 225, usePopup);
   if (appPlayer->Supports(RENDERFEATURE_PIXEL_RATIO))
 	AddSlider(groupVideo, SETTING_VIDEO_PIXEL_RATIO, 217, SettingLevel::Basic,
-	  videoSettings.m_CustomPixelRatio, "{:2.2f}", 0.5f, 0.01f, 2.0f, 217, usePopup);
+	  videoSettings.m_CustomPixelRatio, "{:2.3f}", 0.5f, 0.002f, 2.0f, 217, usePopup);
+  if(renderMethod == RENDER_METHOD_LIBPLACEBO)
+	AddSlider(groupVideo, SETTING_LIB_PLACEBO_CROP_BOTTOM, 55367, SettingLevel::Basic, videoSettings.m_PlaceboCropBottom, -1, 0, 1, 50, 55367);
 
   AddList(groupVideo, SETTING_VIDEO_ORIENTATION, 21843, SettingLevel::Basic, videoSettings.m_Orientation, CGUIDialogVideoSettings::VideoOrientationFiller, 21843);
 
@@ -1971,6 +1985,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_PRESERVE_MIXING_CACHE, 55310, SettingLevel::Basic, videoSettings.m_PlaceboPreserveMixingCache);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_ANTI_ALIASING, 55311, SettingLevel::Basic, videoSettings.m_PlaceboSkipAntiAliasing);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME, 55312, SettingLevel::Basic, videoSettings.m_PlaceboSkipCachingSingleFrame);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_TARGET_CLEARING, 55368, SettingLevel::Basic, videoSettings.m_PlaceboSkipTargetClearing);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DEBUG_OSD, 55355, SettingLevel::Basic, videoSettings.m_PlaceboDebugOsd);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD, 55356, SettingLevel::Basic, videoSettings.m_PlaceboVideoDebugOsd);
 

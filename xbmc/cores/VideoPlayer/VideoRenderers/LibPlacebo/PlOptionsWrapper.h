@@ -122,6 +122,8 @@ public:
     // Change some default options for Kodi
     m_placeboOptions->params.deinterlace_params = &m_placeboOptions->deinterlace_params; // enable deinterlacing by default
 	m_placeboOptions->params.frame_mixer = NULL;                                         // disable frame mixing by default
+	m_placeboOptions->params.skip_target_clearing = true;                                
+
 	//m_placeboOptions->color_map_params.visualize_rect.x0 = 0.5;
 	//m_placeboOptions->color_map_params.visualize_rect.y0 = 0.5;
 	//m_placeboOptions->color_map_params.visualize_rect.x1 = 1.0;

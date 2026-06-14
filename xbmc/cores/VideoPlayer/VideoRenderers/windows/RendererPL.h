@@ -87,6 +87,7 @@ protected:
 
   void CheckVideoParameters() override;
   void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts = 0.0) override;
+  void ApplyGeometry(CVideoSettings& vs, CRect& sourceRect, CRect& dst, pl_frame& frameIn, pl_frame& frameOut);
   static void InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer);
   void ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* target, float min_luma, bool hint);
   CRenderBuffer* CreateBuffer() override;

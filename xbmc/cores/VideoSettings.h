@@ -380,6 +380,7 @@ public:
   bool m_PlaceboUseHdrForSdr;
   float m_PlaceboFrameMixerRadiusFactor;
   bool m_PlaceboFrameMixerBypassQueue;  
+  int m_PlaceboCropBottom;
 
   bool m_PlaceboColorAdjustmentEnabled;
   float m_PlaceboSaturation;
@@ -485,6 +486,7 @@ public:
   bool m_PlaceboPreserveMixingCache;
   bool m_PlaceboSkipAntiAliasing;
   bool m_PlaceboSkipCachingSingleFrame;
+  bool m_PlaceboSkipTargetClearing;
 
   //static constexpr std::size_t MAX_NUMBER_OF_SHADERS = 16;
   std::vector<bool> m_PlaceboShadersEnabled;

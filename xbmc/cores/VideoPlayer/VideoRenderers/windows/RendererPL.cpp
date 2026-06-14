@@ -122,7 +122,7 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
 	else
 	  sframe.first_field = PL_FIELD_NONE;
 
-	//CLog::LogF(LOGDEBUG, "pl_queue_push idx: {} pts: {}", index, rb->pts/1000000.0);
+	CLog::LogF(LOGDEBUG, "pl_queue_push idx: {} pts: {}", index, rb->pts/1000000.0);
 	pl_queue_push(*PL::PLInstance::Get()->GetQueue(), &sframe);
   }
 }
@@ -143,6 +143,7 @@ bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame
   InitializeFrameInFields(frameIn, static_cast<CRendererPL::CRenderBufferImpl*>(rb));
   frameIn->user_data = plbuffer;
   plbuffer->m_NeedFrame = true;
+  CLog::LogF(LOGDEBUG, "MapFrame idx: {} pts: {}", plbuffer->frameIdx, plbuffer->pts);
   return true;
 }
 
@@ -152,6 +153,7 @@ void CRendererPL::UnmapFrame(pl_gpu gpu, struct pl_frame* frame, const struct pl
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
 
   plbuffer->m_NeedFrame = false; 
+  CLog::LogF(LOGDEBUG, "UnmapFrame idx: {} pts: {:.0f}", plbuffer->frameIdx, plbuffer->pts);
 }
 
 CRendererBase* CRendererPL::Create(CVideoSettings& videoSettings)
@@ -666,18 +668,33 @@ public:
 };
 PlQueueCheck queueCheck;
 
+void CRendererPL::ApplyGeometry(CVideoSettings& vs, CRect& sourceRect, CRect& dst, pl_frame& frameIn, pl_frame& frameOut)
+{
+frameIn.crop.x0 = sourceRect.x1;
+frameIn.crop.x1 = sourceRect.x2;
+frameIn.crop.y0 = sourceRect.y1;
+frameIn.crop.y1 = sourceRect.y2 - vs.m_PlaceboCropBottom; //cl crop should really be calculated when sourceRect and destPoints are calculated in order to keep aspect ratio and window fill
+
+frameOut.crop.x0 = dst.x1;
+frameOut.crop.x1 = dst.x2;
+frameOut.crop.y0 = dst.y1;
+frameOut.crop.y1 = dst.y2;
+
+frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
+}
+
 //---------------------------------------------------
 //
 //
 //---------------------------------------------------
 void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts)
 {
-  CPLHelper::InitializeShaders(PL::PLInstance::Get()->GetGpu());  //cl here for now, race condition with the loading of videoSettings...
- 
+  CRect dst = ApplyTransforms(CRect(destPoints [0], destPoints [2])); //uses m_renderOrientation
   pl_frame frameOut{};
   pl_frame frameIn{};
   CVideoSettings videoSettings = m_videoSettings;  //cl take a copy, we might change a few settings and don't want to have to revert
   pl_render_params* params = &videoSettings.m_placeboOptions->getPlOptions()->params;
+  CPLHelper::InitializeShaders(PL::PLInstance::Get()->GetGpu());  //cl here for now, race condition with the loading of videoSettings...
 
   CRenderBuffer* buf = m_renderBuffers[m_iBufferIndex];
   if (!buf || !buf->IsLoaded())
@@ -946,11 +963,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   .h = (int)target.GetHeight()
   };
 
-  D3D11_TEXTURE2D_DESC desc;
-  target.Get()->GetDesc(&desc);
-  if(!(desc.BindFlags & D3D11_BIND_UNORDERED_ACCESS))
-    params->skip_target_clearing = true; // target clearing need D3D11_BIND_UNORDERED_ACCESS for D3D11+
-
   frameOut.num_planes = 1;
   frameOut.planes[0].texture = pl_d3d11_wrap(PL::PLInstance::Get()->GetGpu(), &d3dparams);
   frameOut.planes[0].components = 4;
@@ -959,28 +971,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   frameOut.planes[0].component_mapping[2] = PL_CHANNEL_B;
   frameOut.planes[0].component_mapping[3] = PL_CHANNEL_A;
   
-  // Transforms
-  CRect dst = ApplyTransforms(CRect(destPoints[0],destPoints[2])); //uses m_renderOrientation
-
-  frameIn.crop.x0 = sourceRect.x1;
-  frameIn.crop.x1 = sourceRect.x2;
-  frameIn.crop.y0 = sourceRect.y1;
-  frameIn.crop.y1 = sourceRect.y2;
-
-  frameOut.crop.x0 = dst.x1;
-  frameOut.crop.x1 = dst.x2;
-  frameOut.crop.y0 = dst.y1;
-  frameOut.crop.y1 = dst.y2;
-
-  frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
-
-  // For AMD shave a pixel because of bleeding in last line/column
-  const DXGI_ADAPTER_DESC ad = DX::DeviceResources::Get()->GetAdapterDesc(); //cl do it only once if it works..
-  if(ad.VendorId == PCIV_AMD)
-  {
-	frameIn.crop.x1 -= 1.0f;
-	frameIn.crop.y1 -= 1.0f;
-  }
+  // Geometry
+  ApplyGeometry(videoSettings, sourceRect, dst, frameIn, frameOut);
 
   // Data used for the video debug renderer
   m_displayTransfer = frameOut.color.transfer;
@@ -1069,9 +1061,13 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   }
   else
   {
+	static double oldRenderPts = 0.0;
+	CLog::LogF(LOGDEBUG, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f}, renderPtsDiff: {:.3f}",
+	  screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000,
+	  (renderPts - oldRenderPts) / 1000.0);
 	if(queueCheck.needReset(buffer->duration, renderPts))
 	{
-	  //CLog::LogF(LOGDEBUG, "pl_queue_reset");
+	  CLog::LogF(LOGDEBUG, "pl_queue_reset");
 	  pl_queue_reset(*PL::PLInstance::Get()->GetQueue());
 	  m_FrameMixerQueueResets++;
 	}
@@ -1133,23 +1129,13 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  }
 
 	  // Adjust crop parameters
-	  const DXGI_ADAPTER_DESC ad = DX::DeviceResources::Get()->GetAdapterDesc(); //cl do it only once, if it works..
 	  for(int j=0; j< mix.num_frames; ++j)
 	  {
-		pl_frame *frame = const_cast<pl_frame*>(mix.frames [j]); //cl do it in mapping but value is passed here...
-
-		frame->crop.x0 = sourceRect.x1;
-		frame->crop.x1 = sourceRect.x2;
-		frame->crop.y0 = sourceRect.y1;
-		frame->crop.y1 = sourceRect.y2;
-
-		// For AMD shave a pixel because of bleeding in last line/column
-		if(ad.VendorId == PCIV_AMD)
-		{
-		  frameIn.crop.x1 -= 1.0f;
-		  frameIn.crop.y1 -= 1.0f;
-		}
+		pl_frame *frameIn = const_cast<pl_frame*>(mix.frames [j]); //cl do it in mapping but value is passed here...
+		pl_frame frameOut; //dummy
+		ApplyGeometry(videoSettings, sourceRect, dst, *frameIn, frameOut);
 	  }
+
 	  // Render
 	  m_FrameMixerNumFrames = mix.num_frames;
 	  bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
@@ -1164,7 +1150,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
 
       #if LOG_PL_QUEUE
-	  static double oldRenderPts = 0.0;
 	  CLog::LogF(LOGDEBUG, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}, qParamsPts: {:.3f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, QFpsEst: {:f}, QVpsEst: {:f}, minPts: {:.3f}, maxPts: {:.3f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
 		screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000,
 		(renderPts - oldRenderPts) / 1000.0, qParams.pts, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), pl_queue_estimate_fps(*pQueue), pl_queue_estimate_vps(*pQueue), minPts, maxPts, renderPtsPos, renderPtsShiftedPos);
@@ -1266,6 +1251,7 @@ CRendererPL::CRenderBufferImpl::~CRenderBufferImpl()
 
 void CRendererPL::CRenderBufferImpl::ReleasePicture()
 {
+  CLog::LogF(LOGDEBUG, "ReleasePicture: index:{}, pts:{:.0f}", this->frameIdx, this->pts);
   for (int i = 0; i < plFormat.num_planes; i++)
   {
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &pltex[i]);
@@ -1420,7 +1406,7 @@ bool CRendererPL::CRenderBufferImpl::UploadWrapPlanes()
 	//number of components per plane example uv is 2 in d3d the alpha is always a component but not with libplacebo
 	plplanes[i].components = plFormat.components[i];
 	//mapping yuv planes to rgba channels
-	for (int j = 0; j < 4; j++)
+  	for (int j = 0; j < 4; j++)
 	  plplanes[i].component_mapping[j] = plFormat.component_mapping[i][j];
 
   }
