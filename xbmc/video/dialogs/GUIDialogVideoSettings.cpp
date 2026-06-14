@@ -1732,7 +1732,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	  videoSettings.m_CustomVerticalShift, "{:2.2f}", -2.0f, 0.01f, 2.0f, 225, usePopup);
   if (appPlayer->Supports(RENDERFEATURE_PIXEL_RATIO))
 	AddSlider(groupVideo, SETTING_VIDEO_PIXEL_RATIO, 217, SettingLevel::Basic,
-	  videoSettings.m_CustomPixelRatio, "{:2.3f}", 0.5f, 0.002f, 2.0f, 217, usePopup);
+	  videoSettings.m_CustomPixelRatio, "{:2.3f}", 0.5f, 0.01f, 2.0f, 217, usePopup);
   if(renderMethod == RENDER_METHOD_LIBPLACEBO)
 	AddSlider(groupVideo, SETTING_LIB_PLACEBO_CROP_BOTTOM, 55367, SettingLevel::Basic, videoSettings.m_PlaceboCropBottom, -1, 0, 1, 50, 55367);
 
