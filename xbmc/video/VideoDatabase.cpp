@@ -5901,7 +5901,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
         strSQL = PrepareSQL(
           "update settings set "
           "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboSkinZoomPosition=%i,PlaceboLutFilename='%s',PlaceboDisplayHdrPeakLuminance=%f,PlaceboDisplaySdrPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
-		  "PlaceboFrameMixerRadiusFactor=%f,PlaceboFrameMixerBypassQueue=%i,PlaceboCropBottom=%i"
+		  "PlaceboFrameMixerRadiusFactor=%f,PlaceboFrameMixerBypassQueue=%i,PlaceboCropBottom=%i,"
           "PlaceboDitherDepth=%i,PlaceboShaderApply=%i,PlaceboUseHdrForSdr=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboSdrSaturation=%f,PlaceboSdrColorMapInverseToneMapping=%i,PlaceboSdrColorMapGamutExpansion=%i,"
 		  "PlaceboSdrColorMapIntent='%s',PlaceboSdrColorMapGamutMapping='%s',PlaceboSdrColorMapToneMapping='%s',PlaceboSdrToneConstantExposure=%f,PlaceboSdrToneConstantKneeAdaptation=%f,PlaceboSdrToneConstantKneeDefault=%f,PlaceboSdrToneConstantKneeMaximum=%f,"
 		  "PlaceboSdrToneConstantKneeMinimum=%f,PlaceboSdrToneConstantKneeOffset=%f,PlaceboSdrToneConstantLinearKnee=%f,PlaceboSdrToneConstantReinhardContrast=%f,PlaceboSdrToneConstantSlopeOffset=%f,"
@@ -5930,7 +5930,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
           "PlaceboCorrectSubpixelOffset=%i,PlaceboDisableBuiltinScalers=%i,PlaceboDisableDitherGammaCorrection=%i,"
           "PlaceboDisableLinearScaling=%i,PlaceboDynamicConstant=%i,PlaceboErrorDiffusion='%s',PlaceboForceDither=%i,"
           "PlaceboForceLowBitDepthFbos=%i,PlaceboIgnoreIccProfiles=%i,PlaceboPreserveMixingCache=%i,PlaceboSkipAntiAliasing=%i,"
-          "PlaceboSkipCachingSingleFrame=%i PlaceboSkipTargetClearing=%i where idFile=%i\n",
+          "PlaceboSkipCachingSingleFrame=%i, PlaceboSkipTargetClearing=%i where idFile=%i\n",
 		  settings.m_subtitleVerticalPosition,
           settings.m_PlaceboSkinZoom,
 		  settings.m_PlaceboSkinZoomPosition,
@@ -6102,7 +6102,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
         strSQL = PrepareSQL(
 		  "update settings set "
 		  "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboSkinZoomPosition=%i,PlaceboLutFilename='%s',PlaceboDisplayHdrPeakLuminance=%f,PlaceboDisplaySdrPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
-		  "PlaceboFrameMixerRadiusFactor=%f,PlaceboFrameMixerBypassQueue=%i,PlaceboCropBottom=%i"
+		  "PlaceboFrameMixerRadiusFactor=%f,PlaceboFrameMixerBypassQueue=%i,PlaceboCropBottom=%i,"
 		  "PlaceboDitherDepth=%i,PlaceboShaderApply=%i,PlaceboUseHdrForSdr=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboSdrSaturation=%f,PlaceboSdrColorMapInverseToneMapping=%i,PlaceboSdrColorMapGamutExpansion=%i,"
 		  "PlaceboSdrColorMapIntent='%s',PlaceboSdrColorMapGamutMapping='%s',PlaceboSdrColorMapToneMapping='%s',PlaceboSdrToneConstantExposure=%f,PlaceboSdrToneConstantKneeAdaptation=%f,PlaceboSdrToneConstantKneeDefault=%f,PlaceboSdrToneConstantKneeMaximum=%f,"
 		  "PlaceboSdrToneConstantKneeMinimum=%f,PlaceboSdrToneConstantKneeOffset=%f,PlaceboSdrToneConstantLinearKnee=%f,PlaceboSdrToneConstantReinhardContrast=%f,PlaceboSdrToneConstantSlopeOffset=%f,"
@@ -6131,7 +6131,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
 		  "PlaceboCorrectSubpixelOffset=%i,PlaceboDisableBuiltinScalers=%i,PlaceboDisableDitherGammaCorrection=%i,"
 		  "PlaceboDisableLinearScaling=%i,PlaceboDynamicConstant=%i,PlaceboErrorDiffusion='%s',PlaceboForceDither=%i,"
 		  "PlaceboForceLowBitDepthFbos=%i,PlaceboIgnoreIccProfiles=%i,PlaceboPreserveMixingCache=%i,PlaceboSkipAntiAliasing=%i,"
-		  "PlaceboSkipCachingSingleFrame=%i PlaceboSkipTargetClearing=%i where idFile=%i\n",
+		  "PlaceboSkipCachingSingleFrame=%i, PlaceboSkipTargetClearing=%i where idFile=%i\n",
 		  settings.m_subtitleVerticalPosition,
 		  settings.m_PlaceboSkinZoom,
 		  settings.m_PlaceboSkinZoomPosition,

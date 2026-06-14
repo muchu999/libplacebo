@@ -673,7 +673,7 @@ void CRendererPL::ApplyGeometry(CVideoSettings& vs, CRect& sourceRect, CRect& ds
 frameIn.crop.x0 = sourceRect.x1;
 frameIn.crop.x1 = sourceRect.x2;
 frameIn.crop.y0 = sourceRect.y1;
-frameIn.crop.y1 = sourceRect.y2 - vs.m_PlaceboCropBottom; //cl crop should really be calculated when sourceRect and destPoints are calculated in order to keep aspect ratio and window fill
+frameIn.crop.y1 = sourceRect.y2; - vs.m_PlaceboCropBottom;
 
 frameOut.crop.x0 = dst.x1;
 frameOut.crop.x1 = dst.x2;

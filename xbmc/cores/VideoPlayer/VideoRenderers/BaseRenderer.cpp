@@ -320,7 +320,7 @@ void CBaseRenderer::ManageRenderArea()
   m_sourceRect.x1 = 0.0f;
   m_sourceRect.y1 = 0.0f;
   m_sourceRect.x2 = (float)m_sourceWidth;
-  m_sourceRect.y2 = (float)m_sourceHeight;
+  m_sourceRect.y2 = (float)m_sourceHeight - m_videoSettings.m_PlaceboCropBottom;
 
   unsigned int stereo_mode  = CONF_FLAGS_STEREO_MODE_MASK(m_iFlags);
   auto stereo_view = CServiceBroker::GetWinSystem()->GetGfxContext().GetStereoView();
@@ -353,8 +353,11 @@ void CBaseRenderer::ManageRenderArea()
       break;
   }
 
+  double ratio = GetAspectRatio();
+  ratio = ratio * m_viewRect.Height() / (m_viewRect.Height() - m_videoSettings.m_PlaceboCropBottom);
+
   CalcNormalRenderRect(m_viewRect.x1, m_viewRect.y1, m_viewRect.Width(), m_viewRect.Height(),
-                       GetAspectRatio() * CDisplaySettings::GetInstance().GetPixelRatio(),
+	                   ratio * CDisplaySettings::GetInstance().GetPixelRatio(),
                        CDisplaySettings::GetInstance().GetZoomAmount(),
                        CDisplaySettings::GetInstance().GetVerticalShift());
 }
