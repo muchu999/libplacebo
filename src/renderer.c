@@ -3266,7 +3266,10 @@ static void icc_fallback(struct pass_state *pass, struct pl_frame *frame,
 
 #ifdef PL_HAVE_LCMS
     pl_renderer rr = pass->rr;
-    if (pl_icc_update(rr->log, &fallback->icc, &frame->profile, NULL)) {
+    struct pl_icc_params *params = pl_icc_params(
+        .max_luma = frame->color.hdr.max_luma,
+    );
+    if (pl_icc_update(rr->log, &fallback->icc, &frame->profile, params)) {
         frame->icc = fallback->icc;
     } else {
         PL_WARN(rr, "Failed opening ICC profile... ignoring");
