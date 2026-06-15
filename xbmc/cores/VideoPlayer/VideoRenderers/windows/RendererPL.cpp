@@ -300,7 +300,7 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	info.render1 += StringUtils::Format(", max CLL: {}, max FALL: {}", hdr.max_cll, hdr.max_fall);
   }
   pl_queue q = *PL::PLInstance::Get()->GetQueue();
-  info.render2 = StringUtils::Format("Queue fps: {:.1f}, vps:{:.1f}", pl_queue_estimate_fps(q), pl_queue_estimate_vps(q));
+  info.render2 = StringUtils::Format("ScreenFps: {:.3f}, LPvps:{:.3f}, SourceFps: {:.3f}, LPfps: {:.3f}, ", m_ScreenFps, pl_queue_estimate_fps(q), m_fps, pl_queue_estimate_vps(q));
   info.render2 += StringUtils::Format(", Mixer numFrames: {:1}, renderErr: {}, queueMore: {}, queueErr: {}, queueResets: {}",
 	m_FrameMixerNumFrames,
 	m_FrameMixerRenderErrors,
@@ -984,6 +984,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   m_videoMatrix = frameIn.repr.sys;
   buffer->m_FrameInColor = frameIn.color;
   buffer->m_FrameOutColor = frameOut.color;
+  m_ScreenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
 
   // Shaders
   if((videoSettings.m_PlaceboShadersHooks.size() > 0) && (videoSettings.m_PlaceboShaderApply))
@@ -1046,7 +1047,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //----------------
   // Render Image
   //----------------
-  double screenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
   if((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue)
   {
 	LARGE_INTEGER frequency;
@@ -1058,15 +1058,15 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
 	buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
-	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}",
-	  screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
+	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}",
+	  m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
 	oldRenderPts = renderPts;
   }
   else
   {
 	static double oldRenderPts = 0.0;
-	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "screenFps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f}, renderPtsDiff: {:.3f}",
-	  screenFps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
+	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f}, renderPtsDiff: {:.3f}",
+	  m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
 	if(queueCheck.needReset(buffer->duration, renderPts))
 	{
 	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_queue_reset");
@@ -1086,7 +1086,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  pl_queue_params qParams {};
 	  qParams.pts = renderPts / 1000000; // + videoSettings.m_PlaceboTest / 1000.0; // - 0.021; // + 3*buffer->duration / 1000000 ;   
 	  qParams.radius = pl_frame_mix_radius(params) * videoSettings.m_PlaceboFrameMixerRadiusFactor;
-	  qParams.vsync_duration = 1.0 / screenFps; //cl 
+	  qParams.vsync_duration = 1.0 / m_ScreenFps; //cl 
 	  qParams.timeout = 0; //UINT64_MAX;
 	  //qParams.interpolation_threshold = 0.01;
 	  //qParams.drift_compensation = true;
@@ -1152,8 +1152,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
 
       #if LOG_PL_QUEUE
-	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, LPfps: {:.3f}, LPvps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}, qParamsPts: {:.3f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, minPts: {:.3f}, maxPts: {:.3f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
-		screenFps, pl_queue_estimate_fps(*pQueue), pl_queue_estimate_vps(*pQueue), buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000,
+	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, SourceFps: {:.3f}, LPfps: {:.3f}, LPvps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}, qParamsPts: {:.3f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, minPts: {:.3f}, maxPts: {:.3f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
+		m_ScreenFps, m_fps, pl_queue_estimate_fps(*pQueue), pl_queue_estimate_vps(*pQueue), buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000,
 		(renderPts - oldRenderPts) / 1000.0, qParams.pts, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), minPts, maxPts, renderPtsPos, renderPtsShiftedPos);
 	  oldRenderPts = renderPts;
 	  for(int i = 0; i < mix.num_frames; ++i)

@@ -113,6 +113,7 @@ private:
   int m_FrameMixerRenderErrors = 0;
   int m_FrameMixerQueueMore = 0;
   int m_FrameMixerQueueErr = 0;
+  double m_ScreenFps = 0.0;
 
   int m_FrameMixerQueueResets = 0;
 
