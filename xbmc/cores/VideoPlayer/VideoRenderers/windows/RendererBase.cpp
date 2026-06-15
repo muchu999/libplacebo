@@ -766,7 +766,7 @@ DEBUG_INFO_VIDEO CRendererBase::GetDebugInfo(int idx)
   if (m_outputShader)
     info.shader = m_outputShader->GetDebugInfo();
 
-  info.render =
+  info.render1 =
       StringUtils::Format("Render method: {}, IT: {}x{} {}", m_renderMethodName,
                           m_IntermediateTarget.GetWidth(), m_IntermediateTarget.GetHeight(),
                           DX::DXGIFormatToShortString(m_IntermediateTarget.GetFormat()));
@@ -774,8 +774,8 @@ DEBUG_INFO_VIDEO CRendererBase::GetDebugInfo(int idx)
   std::string rmInfo = GetRenderMethodDebugInfo();
   if (!rmInfo.empty())
   {
-    info.render.append(", ");
-    info.render.append(rmInfo);
+    info.render1.append(", ");
+    info.render1.append(rmInfo);
   }
 
   return info;

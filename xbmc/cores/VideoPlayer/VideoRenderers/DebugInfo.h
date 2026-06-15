@@ -24,7 +24,8 @@ struct DEBUG_INFO_VIDEO
   std::string metaPrim;
   std::string metaLight;
   std::string shader;
-  std::string render;
+  std::string render1;
+  std::string render2;
 };
 
 struct DEBUG_INFO_RENDER

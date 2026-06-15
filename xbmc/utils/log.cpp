@@ -79,7 +79,8 @@ constexpr auto componentMap = make_map<int, ComponentInfo>({
 #ifdef HAVE_LIBBLURAY
   {LOGBLURAY,       {"bluray",      39126}},
 #endif
-});
+  {LOGPLACEBO,      {"libplacebo",  55369}},
+  });
 // clang-format on
 
 } // unnamed namespace

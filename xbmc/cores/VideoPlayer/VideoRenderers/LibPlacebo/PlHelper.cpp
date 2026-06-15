@@ -762,14 +762,14 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, std::string path)
 
   if (!xmlDoc.LoadFile(path))
   {
-	CLog::Log(LOGERROR, "CPLHelper: Error loading LipPlacebo settings {}, Line {}\n{}", path, xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
+	CLog::LogF(LOGERROR, "CPLHelper: Error loading LipPlacebo settings {}, Line {}\n{}", path, xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
 	return false;
   }
-  CLog::Log(LOGDEBUG, "CPLHelper: loading LipPlacebo settings from {}", path);
+  CLog::LogF(LOGDEBUG, "CPLHelper: loading LipPlacebo settings from {}", path);
   const TiXmlElement* pElement = xmlDoc.FirstChildElement("libPlaceboSettings");
   if (!pElement)
   {
-	CLog::Log(LOGERROR, "CPLHelper: Error loading LipPlacebo settings, missing <libPlaceboSettings> element");
+	CLog::LogF(LOGERROR, "CPLHelper: Error loading LipPlacebo settings, missing <libPlaceboSettings> element");
 	return false;
   }
 
@@ -936,7 +936,7 @@ void CPLHelper::LoadLutFile(CVideoSettings& vs, const std::string& path)
 {
   //cl test vs.m_PlaceboIccProfile = CRendererPL::ReadIcc("C:/Users/Pooky/source/repos/kodi/kodi-build.x64/Debug/portable_data/userdata/small.icc");
   vs.m_PlaceboLut = ReadLut(path);
-  CLog::Log(LOGDEBUG, "CPLHelper: loading LUT file from {}", path);
+  CLog::LogF(LOGDEBUG, "CPLHelper: loading LUT file from {}", path);
   vs.m_placeboOptions->getPlOptions()->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut.get();
 }
 /*
@@ -1070,7 +1070,7 @@ std::shared_ptr<const pl_custom_lut> CPLHelper::ReadLut(const std::string& fileN
   CFile lutFile;
   if (!lutFile.Open(fileName))
   {
-	CLog::Log(LOGERROR, "{}: Could not open 3DLUT file: {}", __FUNCTION__, fileName);
+	CLog::LogF(LOGERROR, "{}: Could not open 3DLUT file: {}", __FUNCTION__, fileName);
 	return nullptr;
   }
 
@@ -1098,13 +1098,13 @@ void CPLHelper::LoadShaderSettings(CVideoSettings& vs, const std::string& data)
 
   if (!xmlDoc.LoadString(data))
   {
-	CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo Shadings from database, Line {}\n{}", xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
+	CLog::LogF(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo Shadings from database, Line {}\n{}", xmlDoc.ErrorRow(), xmlDoc.ErrorDesc());
 	return;
   }
   const TiXmlElement* pElement = xmlDoc.FirstChildElement("libPlaceboShaders");
   if (!pElement)
   {
-	CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo settings, missing <libPlaceboShaders> element");
+	CLog::LogF(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo settings, missing <libPlaceboShaders> element");
 	return;
   }
 
@@ -1156,7 +1156,7 @@ void CPLHelper::LoadShaderSettings(CVideoSettings& vs, const TiXmlElement* pElem
 	  else
 	  {
 		//cl make it invalid, reload from scratch?
-		CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo shader parameter, unknown type: {}", valueStr);
+		CLog::LogF(LOGERROR, "CGUIDialogVideoSettings: Error loading LipPlacebo shader parameter, unknown type: {}", valueStr);
 	  }
 
 	  vs.m_PlaceboShadersParams[i].emplace_back(name, type, value);
@@ -1210,7 +1210,7 @@ void CPLHelper::SerializeShaders(const CVideoSettings& vs, TiXmlNode* pNode)
 	  else
 	  {
 		//cl 
-		CLog::Log(LOGERROR, "CGUIDialogVideoSettings: Error serializing LipPlacebo shader parameter, unknown type: {}", vs.m_PlaceboShadersParams[i][j].m_Type);
+		CLog::LogF(LOGERROR, "CGUIDialogVideoSettings: Error serializing LipPlacebo shader parameter, unknown type: {}", vs.m_PlaceboShadersParams[i][j].m_Type);
 	  }
 	}
   }
@@ -1226,7 +1226,7 @@ void CPLHelper::AddShaderFile(pl_gpu gpu, CVideoSettings& vs, const std::string&
   CFile shaderFile;
   if (!shaderFile.Open(fileName))
   {
-	CLog::Log(LOGERROR, "{}: Could not open shader file: {}", __FUNCTION__, fileName);
+	CLog::LogF(LOGERROR, "Could not open shader file: {}", fileName);
 	return;
   }
 
@@ -1263,7 +1263,7 @@ void CPLHelper::AddShaderFile(pl_gpu gpu, CVideoSettings& vs, const std::string&
 	}
 	else
 	{
-	  CLog::Log(LOGERROR, "{}: Error parsing shader file: {}", __FUNCTION__, fileName);
+	  CLog::LogF(LOGERROR, "Error parsing shader file: {}", fileName);
 	  std::string shortFileName = URIUtils::GetFileName(fileName);
 	  vs.m_PlaceboShadersFilename.push_back(fileName);
 	  vs.m_PlaceboShadersEnabled.push_back(false);
@@ -1306,7 +1306,7 @@ void CPLHelper::InitializeShaders(pl_gpu gpu, CVideoSettings& vs)
   if (vs.m_PlaceboShadersHooks.m_bInit == false)
   {
 	vs.m_PlaceboShadersHooks.m_bInit = true;
-	CLog::Log(LOGDEBUG,"InitializeShaders number of shaders ={}",vs.m_PlaceboShadersFilename.size());
+	CLog::LogF(LOGDEBUG,"InitializeShaders number of shaders ={}",vs.m_PlaceboShadersFilename.size());
 
 	for (int i = 0; i < vs.m_PlaceboShadersFilename.size(); ++i)
 	{
@@ -1323,7 +1323,7 @@ void CPLHelper::InitializeShaders(pl_gpu gpu, CVideoSettings& vs)
 	  CFile shaderFile;
 	  if (!shaderFile.Open(vs.m_PlaceboShadersFilename[i]))
 	  {
-		CLog::Log(LOGERROR, "{}: Could not open shader file: {}", __FUNCTION__, vs.m_PlaceboShadersFilename[i]);
+		CLog::LogF(LOGERROR, "Could not open shader file: {}", vs.m_PlaceboShadersFilename[i]);
 		return;
 	  }
 
@@ -1331,7 +1331,7 @@ void CPLHelper::InitializeShaders(pl_gpu gpu, CVideoSettings& vs)
 	  ULONGLONG fileSize = shaderFile.GetLength();
 	  if (fileSize == 0)
 	  {
-		CLog::Log(LOGERROR, "{}: Error parsing shader file: {}", __FUNCTION__, vs.m_PlaceboShadersFilename[i]);
+		CLog::LogF(LOGERROR, "Error parsing shader file: {}", vs.m_PlaceboShadersFilename[i]);
 		return;
 	  }
 
@@ -1343,7 +1343,7 @@ void CPLHelper::InitializeShaders(pl_gpu gpu, CVideoSettings& vs)
 	  delete[] pBuffer;
 	  if (!pHook)
 	  {
-		CLog::Log(LOGERROR, "{}: Error parsing shader file: {}", __FUNCTION__, vs.m_PlaceboShadersFilename[i]);
+		CLog::LogF(LOGERROR, "Error parsing shader file: {}", vs.m_PlaceboShadersFilename[i]);
 		return;
 	  }
 

@@ -25641,19 +25641,6 @@ msgctxt "#55368"
 msgid "Skip target clearing"
 msgstr ""
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+msgctxt "#55369"
+msgid "Verbose logging for the [B]libplacebo[/B] component"
+msgstr ""
