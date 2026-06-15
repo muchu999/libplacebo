@@ -609,76 +609,49 @@ void CVideoPlayerVideo::Process()
   }
 }
 
-class ErrorCorrectingUpsampler2 {
+class PllTimestampEstimator {
 private:
-  double lastRawPtsUs;
-  double smoothPtsUs;
-  double nominalPeriodUs;
+  double est_pts = -1.0;       // Our current smooth timeline position
+  double est_duration = 0.0;   // Our current estimated frame duration (velocity)
+  double last_raw_pts = -1.0;
 
-  // Low-pass correction factor (Adjusts how fast it follows true file drift)
-  // 0.01 means it takes about 100 frames to fully adapt to a file speed change,
-  // which perfectly smooths out the local 1ms stairs while preventing lag.
-  const double alpha = 0.01;
-
-  bool isInitialized;
+  // Tuning parameters
+  const double alpha = 0.1;    // Controls how fast we adjust to frame duration changes
+  const double beta = 0.1;     // Controls how aggressively we correct position errors
 
 public:
-  ErrorCorrectingUpsampler2()
-	: lastRawPtsUs(0), smoothPtsUs(0.0), nominalPeriodUs(0.0), isInitialized(false) {
+  double EstimateNextTimestamp(double raw_mkv_pts_seconds) {
+	// 1. Auto Seek & Startup Detection
+	if(est_pts < 0.0 || std::abs(raw_mkv_pts_seconds - last_raw_pts) > 0.5) {
+	  est_pts = raw_mkv_pts_seconds;
+	  last_raw_pts = raw_mkv_pts_seconds;
+	  // Seed an initial guess for frame duration (e.g., ~33ms for 30fps)
+	  est_duration = 0.033;
+	  return raw_mkv_pts_seconds;
+	}
+	last_raw_pts = raw_mkv_pts_seconds;
+
+	// 2. Predict step: where do we *think* the timeline should be?
+	double predicted_pts = est_pts + est_duration;
+
+	// 3. Error measurement: how far off is the 1ms-rounded container?
+	double error = raw_mkv_pts_seconds - predicted_pts;
+
+	// 4. Update step: Subtly nudge both our timeline position and our velocity
+	est_pts = predicted_pts + (beta * error);
+	est_duration = est_duration + (alpha * error);
+
+	return est_pts;
   }
 
-  // Convert a jagged 1ms PTS into a smooth, drift-adaptive 1µs timeline
-  double upsample(double targetFreqHz, double rawPtsUs) {
-	if(!isInitialized) {
-	  nominalPeriodUs = 1000000.0 / targetFreqHz;
-	  smoothPtsUs = rawPtsUs;
-	  lastRawPtsUs = rawPtsUs;
-	  isInitialized = true;
-	  return rawPtsUs;
-	}
-
-	// 1. Check if the PTS actually stepped to a new frame
-	if(rawPtsUs != lastRawPtsUs) {
-	  double rawDelta = rawPtsUs - lastRawPtsUs;
-	  lastRawPtsUs = rawPtsUs;
-
-	  // Calculate how many discrete frame intervals occurred in this step
-	  double frameSteps = std::round(rawDelta / nominalPeriodUs);
-	  if(frameSteps < 1.0) frameSteps = 1.0;
-
-	  // 2. Step our internal clock forward by the perfect mathematical step
-	  smoothPtsUs += (nominalPeriodUs * frameSteps);
-	}
-
-	// 3. PHASE ERROR CORRECTION CORNERSTONE
-	// Calculate the drift distance between our smooth line and the real file PTS
-	double trackingErrorUs = rawPtsUs - smoothPtsUs;
-
-	// CRITICAL HANDLE: Look for an intentional discontinuity (like a user Seek)
-	if(std::abs(trackingErrorUs) > (nominalPeriodUs * 0.45)) {
-	  // The file jumped completely. Hard-snap immediately to prevent breaking.
-	  smoothPtsUs = rawPtsUs;
-	  lastRawPtsUs = rawPtsUs;
-	  return rawPtsUs;
-	}
-
-	// 4. Low-pass nudge: Gently pull the smooth timeline toward the real data trend.
-	// This acts as a dampening spring. It completely ignores the 1ms rapid jagged steps 
-	// but smoothly bends the timeline if the source files permanently drift over minutes.
-	smoothPtsUs += (alpha * trackingErrorUs);
-
-	return smoothPtsUs;
-  }
-
-  void reset() {
-	isInitialized = false;
-	lastRawPtsUs = 0;
-	smoothPtsUs = 0.0;
-	nominalPeriodUs = 0.0;
+  void HardReset() {
+	est_pts = -1.0;
+	est_duration = 0.0;
+	last_raw_pts = -1.0;
   }
 };
 
-ErrorCorrectingUpsampler2 upSampler;
+PllTimestampEstimator upSampler;
 
 
 bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
@@ -764,7 +737,7 @@ bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
       m_picture.pts = m_picture.dts;
 	//cl upsample pts, many containers have very bad pts precision, e.g 1ms
 	//double pts1 = m_picture.pts;
-	m_picture.pts = upSampler.upsample(1000000.0/frametime, m_picture.pts);
+	m_picture.pts = 1000000.0 * upSampler.EstimateNextTimestamp(m_picture.pts/1000000.0);  //cl don't use frametime here, it is sometime hardcoded to 1/(25fps)
 	//static double oldPts = 0;
 	//CLog::Log(LOGDEBUG, "pts1: {:f}ms, pts: {:f}ms, diff: {:f}ms, upsampler diff:{:f}ms", pts1/1000.0, m_picture.pts / 1000.0, (m_picture.pts - pts1) / 1000.0, (m_picture.pts - oldPts) / 1000.0);
 	//oldPts = m_picture.pts; 
