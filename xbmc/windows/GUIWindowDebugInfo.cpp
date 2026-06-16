@@ -105,7 +105,7 @@ void CGUIWindowDebugInfo::Process(unsigned int currentTime, CDirtyRegionList &di
     return;
 
   std::string info;
-  if (LOG_LEVEL_DEBUG_FREEMEM <= CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_logLevel)
+  if(!m_HideOnScreenDebug && (LOG_LEVEL_DEBUG_FREEMEM <= CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_logLevel))
   {
     KODI::MEMORY::MemoryStatus stat;
     KODI::MEMORY::GetMemoryStatus(&stat);
