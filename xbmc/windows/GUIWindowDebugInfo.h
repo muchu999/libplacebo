@@ -28,6 +28,7 @@ protected:
   void UpdateVisibility() override;
 private:
   CGUITextLayout *m_layout;
+  bool m_HideOnScreenDebug = false;
 #ifdef TARGET_POSIX
   CPosixResourceCounter m_resourceCounter;
 #endif

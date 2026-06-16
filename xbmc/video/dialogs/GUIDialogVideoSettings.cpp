@@ -40,6 +40,7 @@
 #include <guilib/GUIWindow.h>
 #include <utils/URIUtils.h>
 #include <utils/XBMCtinyxml.h>
+#include <GUIUserMessages.h>
 
 #include <GUIPassword.cpp>
 #include <Interface/StreamInfo.h>
@@ -244,6 +245,8 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_SHADER_INVALID                      "video.libplacebo.shader_invalid"
 #define SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD                     "video.libplacebo.video_debug_osd"
 #define SETTING_LIB_PLACEBO_DEBUG_OSD                           "video.libplacebo.debug_osd"
+#define SETTING_LIB_PLACEBO_DEBUG_OSD                           "video.libplacebo.debug_osd"
+#define SETTING_LIB_PLACEBO_DEBUG_HIDE                          "video.libplacebo.debug_hide"
 #define SETTING_LIB_PLACEBO_FRAME_MIXER_BYPASS_QUEUE            "video.libplacebo.mixer_bypass_queue"
 #define SETTING_LIB_PLACEBO_CROP_BOTTOM                         "video.libplacebo.crop_bottom"
 
@@ -1190,12 +1193,22 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   {
 	vs.m_PlaceboVideoDebugOsd = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
 	appPlayer->SetVideoDebug(vs.m_PlaceboVideoDebugOsd);
-  }
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_LIB_PLACEBO_DEBUG_HIDE)
+  {
+	vs.m_PlaceboDebugHide = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+
+	CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_HIDE_ONSCREEN_DEBUG, vs.m_PlaceboDebugHide);  //cl more specific routing?
+	CServiceBroker::GetGUI()->GetWindowManager().SendThreadMessage(msg);
+	appPlayer->SetVideoSettings(vs);
+	}
   else if(settingId == SETTING_LIB_PLACEBO_DEBUG_OSD)
   {
 	vs.m_PlaceboDebugOsd = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
 	appPlayer->SetDebug(vs.m_PlaceboDebugOsd);
-  }
+	appPlayer->SetVideoSettings(vs);
+	}
 
   else if (settingId.starts_with(SETTING_LIB_PLACEBO_SHADER_ENABLED))
   {
@@ -1988,6 +2001,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_TARGET_CLEARING, 55368, SettingLevel::Basic, videoSettings.m_PlaceboSkipTargetClearing);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DEBUG_OSD, 55355, SettingLevel::Basic, videoSettings.m_PlaceboDebugOsd);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD, 55356, SettingLevel::Basic, videoSettings.m_PlaceboVideoDebugOsd);
+	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DEBUG_HIDE, 55370, SettingLevel::Basic, videoSettings.m_PlaceboDebugHide);
 
 	InitializeShaderMenu(videoSettings, category);
 	CreateGroup(groupShaderLoad, category);

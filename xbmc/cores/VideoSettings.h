@@ -527,7 +527,8 @@ public:
 
   // Unsaved values
   bool m_PlaceboDebugOsd = false;
-  bool m_PlaceboVideoDebugOsd = true;  //cl need sync between setting and actual OSD display...
+  bool m_PlaceboVideoDebugOsd = false;  
+  bool m_PlaceboDebugHide = false;  
 
   std::optional<bool>
       m_isDefaultVideoSettings; //!< true: default video settings, false: video specific

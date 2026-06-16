@@ -300,7 +300,7 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	info.render1 += StringUtils::Format(", max CLL: {}, max FALL: {}", hdr.max_cll, hdr.max_fall);
   }
   pl_queue q = *PL::PLInstance::Get()->GetQueue();
-  info.render2 = StringUtils::Format("ScreenFps: {:.3f}, LPvps:{:.3f}, SourceFps: {:.3f}, LPfps: {:.3f}, ", m_ScreenFps, pl_queue_estimate_fps(q), m_fps, pl_queue_estimate_vps(q));
+  info.render2 = StringUtils::Format("ScreenFps: {:.3f}, LPvps:{:.3f}, SourceFps: {:.3f}({:1}), LPfps: {:.3f}, ", m_ScreenFps, pl_queue_estimate_fps(q), m_fps, plbuffer->m_bIsInterlaced ? "i":"p", pl_queue_estimate_vps(q));
   info.render2 += StringUtils::Format(", Mixer numFrames: {:1}, renderErr: {}, queueMore: {}, queueErr: {}, queueResets: {}",
 	m_FrameMixerNumFrames,
 	m_FrameMixerRenderErrors,

@@ -25644,3 +25644,7 @@ msgstr ""
 msgctxt "#55369"
 msgid "Verbose logging for the [B]libplacebo[/B] component"
 msgstr ""
+
+msgctxt "#55370"
+msgid "Disable on screen basic debug info"
+msgstr ""

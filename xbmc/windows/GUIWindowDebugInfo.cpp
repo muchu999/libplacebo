@@ -10,6 +10,7 @@
 
 #include "CompileInfo.h"
 #include "GUIInfoManager.h"
+#include "GUIUserMessages.h"
 #include "ServiceBroker.h"
 #include "addons/Skin.h"
 #include "commons/ilog.h"
@@ -60,7 +61,16 @@ bool CGUIWindowDebugInfo::OnMessage(CGUIMessage &message)
     m_layout = nullptr;
   }
   else if (message.GetMessage() == GUI_MSG_REFRESH_TIMER)
+  {
     MarkDirtyRegion();
+  }
+  else if(message.GetMessage() == GUI_MSG_NOTIFY_ALL)
+  {
+	if(message.GetParam1() == GUI_MSG_HIDE_ONSCREEN_DEBUG)
+	{
+	  m_HideOnScreenDebug = message.GetParam2();
+	}
+  }
 
   return CGUIDialog::OnMessage(message);
 }
@@ -71,7 +81,7 @@ void CGUIWindowDebugInfo::Process(unsigned int currentTime, CDirtyRegionList &di
 
   CServiceBroker::GetCPUInfo()->GetUsedPercentage(); // must call it to recalculate pct values
 
-  static int yShift = 20;
+  static int yShift = 20; 
   static int xShift = 40;
   static unsigned int lastShift = time(nullptr);
   time_t now = time(nullptr);
@@ -178,7 +188,7 @@ void CGUIWindowDebugInfo::Process(unsigned int currentTime, CDirtyRegionList &di
   m_layout->GetTextExtent(w, h);
 
   float x = xShift + 0.04f * CServiceBroker::GetWinSystem()->GetGfxContext().GetWidth();
-  float y = yShift + 0.04f * CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight();
+  float y = yShift + 140 + 0.04f * CServiceBroker::GetWinSystem()->GetGfxContext().GetHeight();
   m_renderRegion.SetRect(x, y, x+w, y+h);
 }
 
