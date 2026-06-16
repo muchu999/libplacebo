@@ -1365,13 +1365,14 @@ void CRenderManager::PrepareNextRender()
 		m_clockSync.m_errCount = 0;
 		m_dvdClock.SetVsyncAdjust(-average); //cl for audio sync, the actual value is not used, just a test if it's different from 0 which allows correction to take place with error calculated somewhere else
 	  }
-	  renderPts += frametime / 2; // - m_clockSync.m_syncOffset; //cl 
 	}
   }
   else
   {
     m_dvdClock.SetVsyncAdjust(0);
   }
+
+  renderPts += frametime / 2;  
 
   m_renderPts = renderPts;
   m_renderPts2 = renderPts + frametime; // In case of interleaved material, the PrepareNextRender function is only called once.
