@@ -181,8 +181,25 @@ bool PL::PLInstance::CreateSwapchain(void)
   if(!m_plD3d11)
 	return false;
 
+  bool bIs8Bits = false;
+  DXGI_SWAP_CHAIN_DESC1 desc;
+  HRESULT hr = DX::DeviceResources::Get()->GetSwapChain()->GetDesc1(&desc);
+
+  if(SUCCEEDED(hr)) {
+	switch(desc.Format) {
+	case DXGI_FORMAT_R8G8B8A8_UNORM:
+	case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+	case DXGI_FORMAT_B8G8R8A8_UNORM:
+	case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+	case DXGI_FORMAT_B8G8R8X8_UNORM:
+	case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+	  bIs8Bits = true;
+	  break;
+	}}
+
   pl_d3d11_swapchain_params swapchain_param {};
   swapchain_param.swapchain = DX::DeviceResources::Get()->GetSwapChain();
+  swapchain_param.disable_10bit_sdr = bIs8Bits;
   //everything else is not used
   m_plSwapchain = pl_d3d11_create_swapchain(m_plD3d11, &swapchain_param);
   if(!m_plSwapchain)
@@ -256,24 +273,73 @@ void PL::PLInstance::LogCurrent()
 
 void PL::PLInstance::fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format)
 {
-
   memset(info, 0, sizeof(pl_d3d_format));
-  switch (format) {
+
+  switch(format)
+  {
+  case DXGI_FORMAT_R10G10B10A2_UNORM:
+	info->bits.color_depth = 10;
+	info->bits.sample_depth = 10;
+	info->bits.bit_shift = 0;
+	info->planes [0] = DXGI_FORMAT_R10G10B10A2_UNORM;
+	info->component_mapping [0][0] = PL_CHANNEL_R;
+	info->component_mapping [0][1] = PL_CHANNEL_G;
+	info->component_mapping [0][2] = PL_CHANNEL_B;
+	info->component_mapping [0][3] = PL_CHANNEL_A;
+	info->components [0] = 4;
+	info->width_div [0] = 1;
+	info->height_div [0] = 1;
+	info->num_planes = 1;
+	strcpy(info->description, "rgba10");
+	break;
+
+  case DXGI_FORMAT_R8G8B8A8_UNORM:
+	info->bits.color_depth = 8;
+	info->bits.sample_depth = 8;
+	info->bits.bit_shift = 0;
+	info->planes [0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	info->component_mapping [0][0] = PL_CHANNEL_R;
+	info->component_mapping [0][1] = PL_CHANNEL_G;
+	info->component_mapping [0][2] = PL_CHANNEL_B;
+	info->component_mapping [0][3] = PL_CHANNEL_A;
+	info->components [0] = 4;
+	info->width_div [0] = 1;
+	info->height_div [0] = 1;
+	info->num_planes = 1;
+	strcpy(info->description, "rgba");
+	break;
+
+  case DXGI_FORMAT_B8G8R8A8_UNORM:
+	info->bits.color_depth = 8;
+	info->bits.sample_depth = 8;
+	info->bits.bit_shift = 0;
+	info->planes [0] = DXGI_FORMAT_B8G8R8A8_UNORM;
+	info->component_mapping [0][0] = PL_CHANNEL_R;
+	info->component_mapping [0][1] = PL_CHANNEL_G;
+	info->component_mapping [0][2] = PL_CHANNEL_B;
+	info->component_mapping [0][3] = PL_CHANNEL_A;
+	info->components [0] = 4;
+	info->width_div [0] = 1;
+	info->height_div [0] = 1;
+	info->num_planes = 1;
+	strcpy(info->description, "bgra");
+	break;
+
   case DXGI_FORMAT_NV12:
 	info->bits.color_depth = 8;
 	info->bits.sample_depth = 8;
 	info->bits.bit_shift = 0;
-	info->planes[0] = DXGI_FORMAT_R8_UNORM;      // Y plane
-	info->planes[1] = DXGI_FORMAT_R8G8_UNORM;    // UV plane
-	info->component_mapping[0][0] = PL_CHANNEL_Y;
-	info->component_mapping[1][0] = PL_CHANNEL_U;
-	info->component_mapping[1][1] = PL_CHANNEL_V;
-	info->components[0] = 1;
-	info->components[1] = 2;
-	info->width_div[0] = 1;   // full width
-	info->height_div[0] = 1;  // full height
-	info->width_div[1] = 2;   // half width
-	info->height_div[1] = 2;  // half height
+	info->planes [0] = DXGI_FORMAT_R8_UNORM; // Y plane
+	info->planes [1] = DXGI_FORMAT_R8G8_UNORM; // UV plane
+	info->component_mapping [0][0] = PL_CHANNEL_Y;
+	info->component_mapping [1][0] = PL_CHANNEL_U;
+	info->component_mapping [1][1] = PL_CHANNEL_V;
+	info->components [0] = 1;
+	info->components [1] = 2;
+	info->width_div [0] = 1; // full width
+	info->height_div [0] = 1; // full height
+	info->width_div [1] = 2; // half width
+	info->height_div [1] = 2; // half height
 	info->num_planes = 2;
 	strcpy(info->description, "nv12");
 	break;
@@ -282,17 +348,17 @@ void PL::PLInstance::fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format)
 	info->bits.color_depth = 10;
 	info->bits.sample_depth = 16;
 	info->bits.bit_shift = 6;
-	info->planes[0] = DXGI_FORMAT_R16_UNORM;     // Y plane
-	info->planes[1] = DXGI_FORMAT_R16G16_UNORM;  // UV plane
-	info->component_mapping[0][0] = PL_CHANNEL_Y;
-	info->component_mapping[1][0] = PL_CHANNEL_U;
-	info->component_mapping[1][1] = PL_CHANNEL_V;
-	info->components[0] = 1;
-	info->components[1] = 2;
-	info->width_div[0] = 1;
-	info->height_div[0] = 1;
-	info->width_div[1] = 2;
-	info->height_div[1] = 2;
+	info->planes [0] = DXGI_FORMAT_R16_UNORM; // Y plane
+	info->planes [1] = DXGI_FORMAT_R16G16_UNORM; // UV plane
+	info->component_mapping [0][0] = PL_CHANNEL_Y;
+	info->component_mapping [1][0] = PL_CHANNEL_U;
+	info->component_mapping [1][1] = PL_CHANNEL_V;
+	info->components [0] = 1;
+	info->components [1] = 2;
+	info->width_div [0] = 1;
+	info->height_div [0] = 1;
+	info->width_div [1] = 2;
+	info->height_div [1] = 2;
 	info->num_planes = 2;
 	strcpy(info->description, "p010");
 	break;
@@ -301,17 +367,17 @@ void PL::PLInstance::fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format)
 	info->bits.color_depth = 16;
 	info->bits.sample_depth = 16;
 	info->bits.bit_shift = 0;
-	info->planes[0] = DXGI_FORMAT_R16_UNORM;
-	info->planes[1] = DXGI_FORMAT_R16G16_UNORM;
-	info->component_mapping[0][0] = PL_CHANNEL_Y;
-	info->component_mapping[1][0] = PL_CHANNEL_U;
-	info->component_mapping[1][1] = PL_CHANNEL_V;
-	info->components[0] = 1;
-	info->components[1] = 2;
-	info->width_div[0] = 1;
-	info->height_div[0] = 1;
-	info->width_div[1] = 2;
-	info->height_div[1] = 2;
+	info->planes [0] = DXGI_FORMAT_R16_UNORM;
+	info->planes [1] = DXGI_FORMAT_R16G16_UNORM;
+	info->component_mapping [0][0] = PL_CHANNEL_Y;
+	info->component_mapping [1][0] = PL_CHANNEL_U;
+	info->component_mapping [1][1] = PL_CHANNEL_V;
+	info->components [0] = 1;
+	info->components [1] = 2;
+	info->width_div [0] = 1;
+	info->height_div [0] = 1;
+	info->width_div [1] = 2;
+	info->height_div [1] = 2;
 	info->num_planes = 2;
 	strcpy(info->description, "p016");
 	break;
@@ -320,13 +386,13 @@ void PL::PLInstance::fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format)
 	info->bits.color_depth = 8;
 	info->bits.sample_depth = 16; // packed 2 bytes per component pair
 	info->bits.bit_shift = 0;
-	info->planes[0] = DXGI_FORMAT_R8G8B8A8_UNORM; // pseudo-plane
-	info->component_mapping[0][0] = PL_CHANNEL_R;
-	info->component_mapping[0][1] = PL_CHANNEL_G;
-	info->component_mapping[0][2] = PL_CHANNEL_B;
-	info->component_mapping[0][3] = PL_CHANNEL_A;
-	info->width_div[0] = 1;
-	info->height_div[0] = 1;
+	info->planes [0] = DXGI_FORMAT_R8G8B8A8_UNORM; // pseudo-plane
+	info->component_mapping [0][0] = PL_CHANNEL_R;
+	info->component_mapping [0][1] = PL_CHANNEL_G;
+	info->component_mapping [0][2] = PL_CHANNEL_B;
+	info->component_mapping [0][3] = PL_CHANNEL_A;
+	info->width_div [0] = 1;
+	info->height_div [0] = 1;
 	info->num_planes = 1;
 	strcpy(info->description, "yuy2");
 	break;
@@ -336,7 +402,6 @@ void PL::PLInstance::fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format)
 	strcpy(info->description, "unknown");
 	break;
   }
-
 }
 
 //cl this can be called from other threads which could cause a race condition
