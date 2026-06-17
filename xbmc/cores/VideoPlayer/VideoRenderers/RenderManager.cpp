@@ -389,7 +389,7 @@ void CRenderManager::RecordFlipEndTime()
   double diff = m_flipEndTime - oldFlipEndTime;
   m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime);
 
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "RecordFlipEndTime: {:.0f}, {:.0f}, {:.0f}", m_flipEndTime, diff - oldDiff, m_filteredFlipEndTime);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "RecordFlipEndTime: raw: {:.0f}, raw jitter: {:.0f}, filtered: {:.0f}", m_flipEndTime, diff - oldDiff, m_filteredFlipEndTime);
   oldFlipEndTime = m_flipEndTime;
   oldDiff = diff;
 }
