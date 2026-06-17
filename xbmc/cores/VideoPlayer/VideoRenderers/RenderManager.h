@@ -229,6 +229,7 @@ protected:
   IRenderMsg *m_playerPort;
   double m_flipEndTime = 0.0;
   double m_filteredFlipEndTime = 0.0;
+  double m_rawJitter = 0.0;
 
   struct CClockSync
   {

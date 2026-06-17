@@ -262,6 +262,76 @@ bool CRenderManager::IsConfigured() const
   else
     return false;
 }
+class DeferredJitterMonitor {
+private:
+  std::vector<double> history;
+  size_t writeIndex = 0;
+  size_t maxFrames = 0;
+  bool bufferFull = false;
+  size_t skipCount = 0;
+
+  // Helper to get active frame count in the buffer
+  size_t getActiveCount() const {
+	return bufferFull ? maxFrames : writeIndex;
+  }
+
+public:
+  DeferredJitterMonitor(size_t frameWindowSize) : maxFrames(frameWindowSize) {
+	history.resize(maxFrames, 0.0);
+  }
+
+  void update(double jitterUs) {
+	if(skipCount < 20)
+	{
+	  skipCount++;
+	  return;
+	}
+	history [writeIndex] = jitterUs;
+
+	writeIndex++;
+	if(writeIndex >= maxFrames) {
+	  writeIndex = 0;
+	  bufferFull = true;
+	}
+  }
+
+  double calculateVariance() const {
+	size_t count = getActiveCount();
+	if(count < 2) return 0.0;
+
+	double sum = 0.0;
+	for(size_t i = 0; i < count; ++i) {
+	  sum += history [i];
+	}
+	double mean = sum / count;
+
+	double varianceSum = 0.0;
+	for(size_t i = 0; i < count; ++i) {
+	  varianceSum += std::pow(history [i] - mean, 2);
+	}
+
+	return varianceSum / (count - 1);
+  }
+
+  double calculatePeak() const {
+	size_t count = getActiveCount();
+	if(count == 0) return 0.0;
+
+	double maxVal = history [0];
+	for(size_t i = 1; i < count; ++i) {
+	  if(history [i] > maxVal) {
+		maxVal = history [i];
+	  }
+	}
+	return maxVal;
+  }
+
+  void reset(void){
+	writeIndex = 0;
+	skipCount = 0;
+	bufferFull = false;
+  }
+};
 
 class FramePLL {
 private:
@@ -372,6 +442,8 @@ public:
 };
 
 FramePLL synchPLL;
+DeferredJitterMonitor jitterMonitor(120);
+
 
 void CRenderManager::RecordFlipEndTime() 
 {
@@ -383,8 +455,12 @@ void CRenderManager::RecordFlipEndTime()
   m_flipEndTime = m_dvdClock.GetClock();
   double diff = m_flipEndTime - oldFlipEndTime;
   m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime);
+  m_rawJitter = diff - oldDiff;
+  jitterMonitor.update(m_rawJitter);
+  if(std::abs(diff) > 200000)
+	jitterMonitor.reset();
 
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "RecordFlipEndTime: raw: {:.0f}, raw jitter: {:.0f}, filtered: {:.0f}", m_flipEndTime, diff - oldDiff, m_filteredFlipEndTime);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "raw: {:.0f}, raw jitter: {:.0f}, filtered: {:.0f}", m_flipEndTime, m_rawJitter, m_filteredFlipEndTime);
   oldFlipEndTime = m_flipEndTime;
   oldDiff = diff;
 }
@@ -834,6 +910,7 @@ RESOLUTION CRenderManager::GetResolution()
   return res;
 }
 
+
 void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
 {
   CSingleExit exitLock(CServiceBroker::GetWinSystem()->GetGfxContext());
@@ -887,9 +964,10 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
 
         double refreshrate, clockspeed;
         int missedvblanks;
-        info.vsync = StringUtils::Format("VSyncOff: {:.1f} latency: {:.3f}  ",
+	
+        info.vsync = StringUtils::Format("VSyncOff: {:5.1f}, latency: {:6.3f}, JitterMax: {:4.1f}, JitterStdDev: {:4.1f}, Jitter: {:6.2f}",
                                          m_clockSync.m_syncOffset / 1000,
-                                         DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f);
+                                         DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f, jitterMonitor.calculatePeak()/1000.0, std::sqrt(jitterMonitor.calculateVariance())/1000.0, m_rawJitter / 1000.0);
         if (m_dvdClock.GetClockInfo(missedvblanks, clockspeed, refreshrate))
         {
           info.vsync += StringUtils::Format("VSync: refresh:{:.3f} missed:{} speed:{:.3f}%",
