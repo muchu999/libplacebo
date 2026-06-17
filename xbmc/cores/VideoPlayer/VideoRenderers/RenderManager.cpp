@@ -265,50 +265,44 @@ bool CRenderManager::IsConfigured() const
 
 class FramePLL {
 private:
-  double current_fps;    // Tracks the active frequency
-  double target_period;   // Frame duration in microseconds
-  double current_phase;   // Filtered output timeline (microseconds)
-  double current_freq;    // Frequency tracking accumulator (microseconds)
+  double current_fps;
+  double target_period;
+  double current_phase;
+  double current_freq;    // Frequency tracking accumulator
   bool is_initialized;
 
-  // Core loop states that change dynamically based on lock progression
   double K_p;
   double K_i;
   double max_drift;
 
-  // Adaptive Tracking State
-  int lock_progress;      // Counter tracking frames since last reset
-  const int FRAMES_TO_FULL_LOCK = 60; // Smoothly ramp down over ~60 frames (2.5s at 24fps)
+  int lock_progress;
+  const int FRAMES_TO_FULL_LOCK = 60;
 
-  // Recalculates loop gains dynamically based on how well locked we are
   void updateGains() {
-	// Linearly interpolate between fast lock (0.3s) and steady-state smooth (1.5s)
 	double progress_ratio = std::min(1.0, static_cast<double>(lock_progress) / FRAMES_TO_FULL_LOCK);
 
 	double fast_settle = 0.3;
 	double slow_settle = 1.5;
 	double current_settle_time = fast_settle + (slow_settle - fast_settle) * progress_ratio;
 
-	// Control loop tuning math
 	double omega_n = 4.0 / (0.707 * current_settle_time);
 	double T_s = target_period / 1000000.0;
 
 	K_p = 2.0 * 0.707 * omega_n * T_s;
 	K_i = std::pow(omega_n * T_s, 2.0);
 
-	// Perceptual Jitter budget (4% of frame duration)
+	// Perceptual Jitter budget
 	double jitter_budget_percent = 0.04;
 	max_drift = target_period * jitter_budget_percent;
   }
 
-  // Triggered on initialization, seeks, or frame-rate swaps
   void reconfigure(double new_fps, double initial_pts) {
 	current_fps = new_fps;
 	target_period = 1000000.0 / current_fps;
 	current_freq = 0.0;
 	current_phase = initial_pts;
 	is_initialized = true;
-	lock_progress = 0; // Reset tracking history to trigger aggressive mode
+	lock_progress = 0;
 
 	updateGains();
   }
@@ -333,7 +327,6 @@ public:
   double process(double target_fps, double input_pts) {
 	if(target_fps <= 0.0) return input_pts;
 
-	// Handle cold starts or stream profile changes
 	if(!is_initialized || target_fps != current_fps) {
 	  reconfigure(target_fps, input_pts);
 	  return current_phase;
@@ -344,27 +337,30 @@ public:
 	double discontinuity_threshold = target_period * 3.0;
 
 	if(raw_deviation > discontinuity_threshold) {
-	  reconfigure(target_fps, input_pts); // Instantly drops back to fast tracking mode
+	  reconfigure(target_fps, input_pts);
 	  return current_phase;
 	}
 
-	// 2. PHASE UNWRAPPING
-	double error = input_pts - current_phase;
-	while(error > (target_period / 2.0)) {
-	  error -= target_period;
-	  current_phase += target_period;
-	}
-	while(error < -(target_period / 2.0)) {
-	  error += target_period;
-	  current_phase -= target_period;
-	}
+	// 2. FIXED PHASE UNWRAPPING
+	// Calculate the error relative to the next expected timeline step
+	double expected_next_pts = current_phase + target_period;
+	double error = input_pts - expected_next_pts;
 
-	// Advance lock progress and update our loop filter aggressiveness
+	// Use modern remainder mapping instead of structural destructive loops
+	// This calculates how far the frame is from the closest multi-frame boundary step
+	error = error - target_period * std::round(error / target_period);
+
+	// 3. LOOP FILTER WITH INTEGRAL ANTI-WINDUP PROTECTION
+	// Increment frequency only by the current proportional error
+	current_freq += K_i * error;
+
+	// ANTI-WINDUP: Prevent the frequency memory from outgrowing our clamp limits
+	current_freq = std::clamp(current_freq, -max_drift, max_drift);
+
+	// Calculate raw adjustment step
 	lock_progress++;
 	updateGains();
 
-	// 3. LOOP FILTER
-	current_freq += K_i * error;
 	double delta_t = target_period + current_freq + (K_p * error);
 
 	// 4. JITTER CLAMP
@@ -376,7 +372,6 @@ public:
 };
 
 FramePLL synchPLL;
-
 
 void CRenderManager::RecordFlipEndTime() 
 {
