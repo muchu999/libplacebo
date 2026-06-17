@@ -15,7 +15,6 @@
 #include "guilib/GUIWindowManager.h"
 #include "messaging/ApplicationMessenger.h"
 #include "settings/Settings.h"
-#include "settings/SettingsComponent.h"
 #include "utils/SystemInfo.h"
 #include "utils/log.h"
 #include "windowing/GraphicContext.h"
@@ -842,13 +841,10 @@ void DX::DeviceResources::ResizeBuffers()
     else if (use10bitSetting == 2)
       use10bit = true;
 
-	int renderMethod = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_RENDERMETHOD);
-	DXGI_FORMAT format8bit = renderMethod == RENDER_METHOD_LIBPLACEBO ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_B8G8R8A8_UNORM ; //cl temp fix
-
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
     swapChainDesc.Width = lround(m_outputSize.Width);
     swapChainDesc.Height = lround(m_outputSize.Height);
-    swapChainDesc.Format = format8bit;
+    swapChainDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     swapChainDesc.Stereo = bHWStereoEnabled;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 #ifdef TARGET_WINDOWS_DESKTOP
@@ -879,7 +875,7 @@ void DX::DeviceResources::ResizeBuffers()
       if (FAILED(hr))
       {
         CLog::LogF(LOGWARNING, "creating 10bit swapchain failed, fallback to 8bit.");
-        swapChainDesc.Format = format8bit;
+        swapChainDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
       }
 #if 0 //cl 
 	  IDXGISwapChain2* swapChain2 = nullptr;
