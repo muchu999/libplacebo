@@ -263,164 +263,135 @@ bool CRenderManager::IsConfigured() const
     return false;
 }
 
-class GuidedHybridPLL {
+class FramePLL {
 private:
-  double lastRawTimeUs;
-  double lastPredictedTimeUs;
-  double currentBasePeriodUs; // Anchored directly to the explicit user input
+  double current_fps;    // Tracks the active frequency
+  double target_period;   // Frame duration in microseconds
+  double current_phase;   // Filtered output timeline (microseconds)
+  double current_freq;    // Frequency tracking accumulator (microseconds)
+  bool is_initialized;
 
-  std::vector<double> slowHistory;
-  const size_t SLOW_WINDOW_SIZE = 21; // Lock deep window for 60Hz loop dampening
+  // Core loop states that change dynamically based on lock progression
+  double K_p;
+  double K_i;
+  double max_drift;
 
-  double integratorUs = 0.0;
-  bool isInitialized = false;
+  // Adaptive Tracking State
+  int lock_progress;      // Counter tracking frames since last reset
+  const int FRAMES_TO_FULL_LOCK = 60; // Smoothly ramp down over ~60 frames (2.5s at 24fps)
 
-  // Fast-Lock state tracker
-  int32_t fastLockCounter = 0;
-  const int32_t FAST_LOCK_FRAMES = 12;
+  // Recalculates loop gains dynamically based on how well locked we are
+  void updateGains() {
+	// Linearly interpolate between fast lock (0.3s) and steady-state smooth (1.5s)
+	double progress_ratio = std::min(1.0, static_cast<double>(lock_progress) / FRAMES_TO_FULL_LOCK);
 
-public:
-  GuidedHybridPLL()
-	: lastRawTimeUs(0), lastPredictedTimeUs(0.0), currentBasePeriodUs(0.0) {
+	double fast_settle = 0.3;
+	double slow_settle = 1.5;
+	double current_settle_time = fast_settle + (slow_settle - fast_settle) * progress_ratio;
+
+	// Control loop tuning math
+	double omega_n = 4.0 / (0.707 * current_settle_time);
+	double T_s = target_period / 1000000.0;
+
+	K_p = 2.0 * 0.707 * omega_n * T_s;
+	K_i = std::pow(omega_n * T_s, 2.0);
+
+	// Perceptual Jitter budget (4% of frame duration)
+	double jitter_budget_percent = 0.04;
+	max_drift = target_period * jitter_budget_percent;
   }
 
-  // Process using the actual expected frequency context
-  // targetFreqHz: The known baseline rate (e.g., 24.0, 30.0, 60.0)
-  // rawTimestampUs: Monotonic microsecond hardware clock timestamp
-  double process(double targetFreqHz, double rawTimestampUs) {
-	double newBasePeriodUs = 1000000.0 / targetFreqHz;
+  // Triggered on initialization, seeks, or frame-rate swaps
+  void reconfigure(double new_fps, double initial_pts) {
+	current_fps = new_fps;
+	target_period = 1000000.0 / current_fps;
+	current_freq = 0.0;
+	current_phase = initial_pts;
+	is_initialized = true;
+	lock_progress = 0; // Reset tracking history to trigger aggressive mode
 
-	// 1. Instant Global Adaptation on explicit media change
-	if(std::abs(newBasePeriodUs - currentBasePeriodUs) > 10.0) {
-	  currentBasePeriodUs = newBasePeriodUs;
-	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs); // Seed immediately
-	  integratorUs = 0.0;
-	  lastPredictedTimeUs = rawTimestampUs;
-	  lastRawTimeUs = rawTimestampUs;
-	  fastLockCounter = 0;
-	  isInitialized = true;
-	  return rawTimestampUs;
+	updateGains();
+  }
+
+public:
+  FramePLL()
+	: current_fps(0.0),
+	target_period(0.0),
+	current_phase(0.0),
+	current_freq(0.0),
+	is_initialized(false),
+	K_p(0.0),
+	K_i(0.0),
+	max_drift(0.0),
+	lock_progress(0) {
+  }
+
+  void forceReset() {
+	is_initialized = false;
+  }
+
+  double process(double target_fps, double input_pts) {
+	if(target_fps <= 0.0) return input_pts;
+
+	// Handle cold starts or stream profile changes
+	if(!is_initialized || target_fps != current_fps) {
+	  reconfigure(target_fps, input_pts);
+	  return current_phase;
 	}
 
-	if(!isInitialized) {
-	  currentBasePeriodUs = newBasePeriodUs;
-	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs);
-	  lastRawTimeUs = rawTimestampUs;
-	  lastPredictedTimeUs = rawTimestampUs;
-	  fastLockCounter = 0;
-	  isInitialized = true;
-	  return rawTimestampUs;
+	// 1. DISCONTINUITY DETECTOR
+	double raw_deviation = std::abs(input_pts - (current_phase + target_period));
+	double discontinuity_threshold = target_period * 3.0;
+
+	if(raw_deviation > discontinuity_threshold) {
+	  reconfigure(target_fps, input_pts); // Instantly drops back to fast tracking mode
+	  return current_phase;
 	}
 
-	double rawDelta = rawTimestampUs - lastRawTimeUs;
-	lastRawTimeUs = rawTimestampUs;
-
-	// ====================================================================
-	// EXPLICIT STRATEGY ROUTING (Immutable; Cannot be tricked by jitter)
-	// ====================================================================
-	double kp;
-	double ki;
-	double maxPeriodChangePerFrame;
-	double jitterTolerance;
-	bool useDeepHistory;
-
-	if(targetFreqHz >= 45.0) {
-	  // 1. HIGH-FREQUENCY STRATEGY (50Hz, 60Hz+)
-	  // Focus: Maximum damping to kill feedback loop oscillations.
-	  useDeepHistory = true;
-	  kp = 0.015;
-	  ki = 0.001;
-	  maxPeriodChangePerFrame = 40.0;
-	  jitterTolerance = currentBasePeriodUs * 0.12;
+	// 2. PHASE UNWRAPPING
+	double error = input_pts - current_phase;
+	while(error > (target_period / 2.0)) {
+	  error -= target_period;
+	  current_phase += target_period;
 	}
-	else if(targetFreqHz >= 20.0) {
-	  // 2. STANDARD LOW-FREQUENCY STRATEGY (24Hz, 30Hz Progressive)
-	  // Focus: High mobility, rapid alignment, zero latency lag.
-	  useDeepHistory = false;
-	  kp = 0.06;
-	  ki = 0.006;
-	  maxPeriodChangePerFrame = 400.0;
-	  jitterTolerance = currentBasePeriodUs * 0.25;
-	}
-	else {
-	  // 3. ULTRA-LOW-FREQUENCY STRATEGY (12Hz Interlaced Field Mode)
-	  // Focus: Extra mechanical stiffness to prevent micro-stutter over long cycles.
-	  useDeepHistory = false;
-	  kp = 0.03;                      // Tightened to keep the slow flywheel steady
-	  ki = 0.003;
-	  maxPeriodChangePerFrame = 200.0;// Restricted to prevent CPU bursts from warping the timeline
-	  jitterTolerance = currentBasePeriodUs * 0.15; // Snug phase window
-	}
-	// ====================================================================
-
-	// 2. Maintain History Window (Only used for 60Hz loop dampening)
-	double trackingReferencePeriodUs = currentBasePeriodUs;
-	if(useDeepHistory) {
-	  if(slowHistory.size() >= SLOW_WINDOW_SIZE) {
-		slowHistory.erase(slowHistory.begin());
-	  }
-	  slowHistory.push_back(rawDelta);
-
-	  std::vector<double> sortedSlow = slowHistory;
-	  std::sort(sortedSlow.begin(), sortedSlow.end());
-	  trackingReferencePeriodUs = sortedSlow [SLOW_WINDOW_SIZE / 2];
+	while(error < -(target_period / 2.0)) {
+	  error += target_period;
+	  current_phase -= target_period;
 	}
 
-	// 3. Compute Phase Error
-	double expectedTimeUs = lastPredictedTimeUs + currentBasePeriodUs;
-	double phaseErrorUs = rawTimestampUs - expectedTimeUs;
+	// Advance lock progress and update our loop filter aggressiveness
+	lock_progress++;
+	updateGains();
 
-	// 4. Universal Safety Hard Reset
-	if(std::abs(phaseErrorUs) > (currentBasePeriodUs * 0.45)) {
-	  slowHistory.assign(SLOW_WINDOW_SIZE, currentBasePeriodUs);
-	  integratorUs = 0.0;
-	  lastPredictedTimeUs = rawTimestampUs;
-	  fastLockCounter = 0;
-	  return rawTimestampUs;
-	}
+	// 3. LOOP FILTER
+	current_freq += K_i * error;
+	double delta_t = target_period + current_freq + (K_p * error);
 
-	// 5. Phase Error Soft-Clamping (CPU Scheduling Spike Protection)
-	if(fastLockCounter >= FAST_LOCK_FRAMES) {
-	  if(std::abs(phaseErrorUs) > jitterTolerance) {
-		phaseErrorUs = (phaseErrorUs > 0) ? jitterTolerance : -jitterTolerance;
-	  }
-	}
+	// 4. JITTER CLAMP
+	delta_t = std::clamp(delta_t, target_period - max_drift, target_period + max_drift);
 
-	// 6. Core Feedback Tracking
-	integratorUs += ki * phaseErrorUs;
-	double maxIntegrator = currentBasePeriodUs * 0.05;
-	integratorUs = std::max(-maxIntegrator, std::min(maxIntegrator, integratorUs));
-
-	double targetPeriodUs = trackingReferencePeriodUs + (kp * phaseErrorUs) + integratorUs;
-
-	// 7. Dynamic Acceleration Execution
-	if(fastLockCounter < FAST_LOCK_FRAMES) {
-	  currentBasePeriodUs = targetPeriodUs;
-	  fastLockCounter++;
-	}
-	else {
-	  double deltaPeriodUs = targetPeriodUs - currentBasePeriodUs;
-	  deltaPeriodUs = std::max(-maxPeriodChangePerFrame, std::min(maxPeriodChangePerFrame, deltaPeriodUs));
-	  currentBasePeriodUs += deltaPeriodUs;
-	}
-
-	// 8. Generate Timeline Output
-	lastPredictedTimeUs = expectedTimeUs;
-	return expectedTimeUs;
+	current_phase += delta_t;
+	return current_phase;
   }
 };
 
-GuidedHybridPLL  synchPLL;
-
+FramePLL synchPLL;
 
 
 void CRenderManager::RecordFlipEndTime() 
 {
   double fps = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS(); //cl Changed GetFPS implementation because it was always returning 60 on my PC, irrespective of the real value.
   double frametime = DVD_TIME_BASE / fps;
+  static double oldFlipEndTime = 0;
+  static double oldDiff = 0;
+
   m_flipEndTime = m_dvdClock.GetClock();
+  double diff = m_flipEndTime - oldFlipEndTime;
   m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime);
-  //CLog::Log(LOGDEBUG, "RecordFlipEndTime: {:.0f}, {:.0f}", m_flipEndTime/1000.0, m_filteredFlipEndTime/1000.0);
+
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "RecordFlipEndTime: {:.0f}, {:.0f}, {:.0f}", m_flipEndTime, diff - oldDiff, m_filteredFlipEndTime);
+  oldFlipEndTime = m_flipEndTime;
+  oldDiff = diff;
 }
 
 void CRenderManager::ShowVideo(bool enable)
