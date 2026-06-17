@@ -15,6 +15,7 @@
 #include "guilib/GUIWindowManager.h"
 #include "messaging/ApplicationMessenger.h"
 #include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/SystemInfo.h"
 #include "utils/log.h"
 #include "windowing/GraphicContext.h"
@@ -36,7 +37,6 @@ extern "C"
 #pragma comment(lib, "dxgi.lib")
 #endif // _DEBUG
 #include <utils/TimeUtils.h>
-#include <VideoPlayerVideo.cpp>
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
