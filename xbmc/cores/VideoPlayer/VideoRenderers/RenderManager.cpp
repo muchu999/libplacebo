@@ -333,7 +333,7 @@ public:
   }
 };
 
-class FramePLL {
+class FramePLL1 {
 private:
   double current_fps;
   double target_period;
@@ -354,6 +354,7 @@ private:
 	double fast_settle = 0.3;
 	double slow_settle = 1.5;
 	double current_settle_time = fast_settle + (slow_settle - fast_settle) * progress_ratio;
+	current_settle_time = 1.0; //cl causes oscillation???
 
 	double omega_n = 4.0 / (0.707 * current_settle_time);
 	double T_s = target_period / 1000000.0;
@@ -378,7 +379,7 @@ private:
   }
 
 public:
-  FramePLL()
+  FramePLL1()
 	: current_fps(0.0),
 	target_period(0.0),
 	current_phase(0.0),
@@ -425,7 +426,9 @@ public:
 	current_freq += K_i * error;
 
 	// ANTI-WINDUP: Prevent the frequency memory from outgrowing our clamp limits
-	current_freq = std::clamp(current_freq, -max_drift, max_drift);
+	double max_freq_drift = target_period * 0.04;
+	current_freq = std::clamp(current_freq, -max_freq_drift, max_freq_drift);
+	//current_freq = std::clamp(current_freq, -max_drift, max_drift);
 
 	// Calculate raw adjustment step
 	lock_progress++;
@@ -441,7 +444,94 @@ public:
   }
 };
 
-FramePLL synchPLL;
+
+class FramePLL {
+private:
+  double current_fps;
+  double target_period;
+  double current_phase;
+  double current_freq;
+  bool is_initialized;
+  double K_p;
+  double K_i;
+  double max_drift;
+
+  void updateGains() {
+	// Use a fixed settling time target to maintain loop stability 
+	// dynamically shifting gains mid-stream causes parametric oscillation.
+	double settle_time = 1.0;
+
+	double omega_n = 4.0 / (0.707 * settle_time);
+
+	// Normalise normalized digital frequency (radians/sample)
+	// Since process() runs exactly once per frame, sample period T = 1
+	double theta = omega_n * (target_period / 1000000.0);
+
+	// Standard discrete-time active PI loop filter design
+	K_p = 2.0 * 0.707 * theta;
+	K_i = std::pow(theta, 2.0);
+
+	double jitter_budget_percent = 0.04;
+	max_drift = target_period * jitter_budget_percent;
+  }
+
+  void reconfigure(double new_fps, double initial_pts) {
+	current_fps = new_fps;
+	target_period = 1000000.0 / current_fps;
+	current_freq = 0.0;
+	current_phase = initial_pts;
+	is_initialized = true;
+	updateGains(); // Calculated once per stream configuration
+  }
+
+public:
+  FramePLL() : current_fps(0.0), target_period(0.0), current_phase(0.0),
+	current_freq(0.0), is_initialized(false), K_p(0.0), K_i(0.0), max_drift(0.0) {
+  }
+
+  void forceReset() { is_initialized = false; }
+
+  double process(double target_fps, double input_pts) {
+	if(target_fps <= 0.0) return input_pts;
+
+	if(!is_initialized || target_fps != current_fps) {
+	  reconfigure(target_fps, input_pts);
+	  return current_phase;
+	}
+
+	// 1. DISCONTINUITY DETECTOR
+	double expected_next_pts = current_phase + target_period;
+	double raw_deviation = std::abs(input_pts - expected_next_pts);
+	double discontinuity_threshold = target_period * 3.0;
+
+	if(raw_deviation > discontinuity_threshold) {
+	  reconfigure(target_fps, input_pts);
+	  return current_phase;
+	}
+
+	// 2. PHASE UNWRAPPING (Normalized to target timeline)
+	double error = input_pts - expected_next_pts;
+	error = error - target_period * std::round(error / target_period);
+
+	// 3. LOOP FILTER WITH PROPER SCALING & ANTI-WINDUP
+	current_freq += K_i * error;
+
+	double max_freq_drift = target_period * 0.20;
+	current_freq = std::clamp(current_freq, -max_freq_drift, max_freq_drift);
+	//current_freq = std::clamp(current_freq, -max_drift, max_drift);
+
+	// Compute step delta using unified microsecond scaling
+	double delta_t = target_period + current_freq + (K_p * error);
+
+	// 4. JITTER CLAMP
+	delta_t = std::clamp(delta_t, target_period - max_drift, target_period + max_drift);
+
+	current_phase += delta_t;
+	return current_phase;
+  }
+};
+
+FramePLL1 synchPLL;
 DeferredJitterMonitor jitterMonitor(120);
 
 
