@@ -179,11 +179,12 @@ CD3DTexture::~CD3DTexture()
   delete[] m_data;
 }
 
-bool CD3DTexture::Create(UINT width, UINT height, UINT mipLevels, D3D11_USAGE usage, DXGI_FORMAT format, const void* pixels /* nullptr */, unsigned int srcPitch /* 0 */)
+bool CD3DTexture::Create(UINT width, UINT height, UINT mipLevels, D3D11_USAGE usage, DXGI_FORMAT format, const void* pixels /* nullptr */, unsigned int srcPitch /* 0 */, bool bUseUnordered /* false */)
 {
   m_width = width;
   m_height = height;
   m_mipLevels = mipLevels;
+  m_bUseUnordered = bUseUnordered;
   // create the texture
   Release();
 
@@ -210,8 +211,11 @@ bool CD3DTexture::Create(UINT width, UINT height, UINT mipLevels, D3D11_USAGE us
   m_bindFlags = 0; // D3D11_BIND_SHADER_RESOURCE;
   if (D3D11_USAGE_DEFAULT == usage && DX::Windowing()->IsFormatSupport(format, D3D11_FORMAT_SUPPORT_RENDER_TARGET))
     m_bindFlags |= D3D11_BIND_RENDER_TARGET;
-  if(usage == D3D11_USAGE_DEFAULT && DX::Windowing()->IsFormatSupport(format, D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW))
-	m_bindFlags |= D3D11_BIND_UNORDERED_ACCESS;  //cl Libplacebo needs it for target clearing, other conditions hard coded to count=1, quality=0
+
+  if(bUseUnordered) //cl temp fix
+	if(usage == D3D11_USAGE_DEFAULT && DX::Windowing()->IsFormatSupport(format, D3D11_FORMAT_SUPPORT_TYPED_UNORDERED_ACCESS_VIEW))
+      m_bindFlags |= D3D11_BIND_UNORDERED_ACCESS;  //cl Libplacebo needs it for target clearing, other conditions hard coded to count=1, quality=0
+
   if ( D3D11_USAGE_STAGING != m_usage )
   {
     if (DX::Windowing()->IsFormatSupport(format, D3D11_FORMAT_SUPPORT_SHADER_LOAD)

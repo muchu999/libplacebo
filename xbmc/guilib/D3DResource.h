@@ -98,7 +98,7 @@ public:
   CD3DTexture();
   virtual ~CD3DTexture();
 
-  bool Create(UINT width, UINT height, UINT mipLevels, D3D11_USAGE usage, DXGI_FORMAT format, const void* pInitData = nullptr, unsigned int srcPitch = 0);
+  bool Create(UINT width, UINT height, UINT mipLevels, D3D11_USAGE usage, DXGI_FORMAT format, const void* pInitData = nullptr, unsigned int srcPitch = 0, bool bUseUnordered = false);
 
   void Release();
   bool GetDesc(D3D11_TEXTURE2D_DESC *desc) const;
@@ -113,6 +113,7 @@ public:
   ID3D11RenderTargetView** GetAddressOfRTV();
   UINT GetWidth()  const { return m_width; }
   UINT GetHeight() const { return m_height; }
+  bool GetbUseUnordered() const { return m_bUseUnordered; }
   DXGI_FORMAT GetFormat() const { return m_format; }
   void GenerateMipmaps();
 
@@ -168,6 +169,7 @@ protected:
   UINT m_bindFlags{0};
   UINT m_cpuFlags{0};
   UINT m_viewIdx{0};
+  bool m_bUseUnordered = false;
   D3D11_USAGE m_usage{D3D11_USAGE_DEFAULT};
   DXGI_FORMAT m_format{DXGI_FORMAT_B8G8R8A8_UNORM};
 

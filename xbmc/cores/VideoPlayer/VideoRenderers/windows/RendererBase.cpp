@@ -366,7 +366,8 @@ void CRendererBase::DeleteRenderBuffer(int index)
 bool CRendererBase::CreateIntermediateTarget(unsigned width,
                                              unsigned height,
                                              bool dynamic,
-                                             DXGI_FORMAT format)
+                                             DXGI_FORMAT format,
+                                             bool bUseUnordered)
 {
   // No format specified by renderer
   if (format == DXGI_FORMAT_UNKNOWN)
@@ -374,7 +375,8 @@ bool CRendererBase::CreateIntermediateTarget(unsigned width,
 
   // don't create new one if it exists with requested size and format
   if (m_IntermediateTarget.Get() && m_IntermediateTarget.GetFormat() == format &&
-      m_IntermediateTarget.GetWidth() == width && m_IntermediateTarget.GetHeight() == height)
+      m_IntermediateTarget.GetWidth() == width && m_IntermediateTarget.GetHeight() == height &&
+	  m_IntermediateTarget.GetbUseUnordered() == bUseUnordered)
     return true;
 
   if (m_IntermediateTarget.Get())
@@ -384,7 +386,7 @@ bool CRendererBase::CreateIntermediateTarget(unsigned width,
              DX::DXGIFormatToString(format));
 
   if (!m_IntermediateTarget.Create(width, height, 1,
-                                   dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT, format))
+                                   dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT, format, nullptr, 0, bUseUnordered))
   {
     CLog::LogF(LOGERROR, "intermediate target creation failed.");
     return false;

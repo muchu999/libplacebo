@@ -149,7 +149,8 @@ protected:
   bool CreateIntermediateTarget(unsigned int width,
                                 unsigned int height,
                                 bool dynamic = false,
-                                DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN);
+                                DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN,
+	                            bool bUseUnordered = false);
   void OnCMSConfigChanged(AVColorPrimaries srcPrimaries);
   void ReorderDrawPoints(const CRect& destRect, CPoint(&rotatedPoints)[4]) const;
   bool CreateRenderBuffer(int index);

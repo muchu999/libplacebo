@@ -338,7 +338,12 @@ void CRendererPL::CheckVideoParameters()
 	  };
 	}
   }
-  CreateIntermediateTarget(m_viewWidth, m_viewHeight, false); //cl DXGI_FORMAT_R10G10B10A2_UNORM);
+  bool bUseUnordered = false;
+  if(!m_videoSettings.m_placeboOptions->getPlOptions()->params.skip_target_clearing)
+  {
+	bUseUnordered = true;
+  }
+  CreateIntermediateTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_UNKNOWN, bUseUnordered); //cl DXGI_FORMAT_R10G10B10A2_UNORM);
 }
 
 CRect CRendererPL::ApplyTransforms(const CRect& destRect) const
