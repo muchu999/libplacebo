@@ -426,7 +426,7 @@ public:
 	current_freq += K_i * error;
 
 	// ANTI-WINDUP: Prevent the frequency memory from outgrowing our clamp limits
-	double max_freq_drift = target_period * 0.04;
+	double max_freq_drift = target_period * 0.2;
 	current_freq = std::clamp(current_freq, -max_freq_drift, max_freq_drift);
 	//current_freq = std::clamp(current_freq, -max_drift, max_drift);
 
@@ -552,10 +552,10 @@ void CRenderManager::RecordFlipEndTime()
   m_rawJitter = diff - oldDiff;
   m_rawJitter2 = diff2 - oldDiff2;
 
-  jitterMonitor1.update(m_rawJitter);
+  jitterMonitor1.update(std::abs(m_rawJitter));
   if(std::abs(diff) > 200000)
 	jitterMonitor1.reset();
-  jitterMonitor2.update(m_rawJitter2);
+  jitterMonitor2.update(std::abs(m_rawJitter2));
   if(std::abs(diff) > 200000)
 	jitterMonitor2.reset();
 
@@ -1066,9 +1066,7 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
         double refreshrate, clockspeed;
         int missedvblanks;
 	
-        info.vsync = StringUtils::Format("VSyncOff: {:5.1f}, latency: {:6.3f}, JitterMax: {:4.1f}, JitterMaxF: {:4.1f}, JitterStdDev: {:4.1f}, JitterStdDevF: {:4.1f}, Jitter: {:6.2f}, JitterF: {:6.2f}",
-                                         m_clockSync.m_syncOffset / 1000,
-                                         DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f, jitterMonitor1.calculatePeak()/1000.0, jitterMonitor2.calculatePeak() / 1000.0, std::sqrt(jitterMonitor1.calculateVariance())/1000.0, std::sqrt(jitterMonitor2.calculateVariance()) / 1000.0, m_rawJitter / 1000.0,  m_rawJitter2 / 1000.0);
+        info.vsync = StringUtils::Format("VSyncOff: {:5.1f}, latency: {:6.3f}", m_clockSync.m_syncOffset / 1000, DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f);
         if (m_dvdClock.GetClockInfo(missedvblanks, clockspeed, refreshrate))
         {
           info.vsync += StringUtils::Format("VSync: refresh:{:.3f} missed:{} speed:{:.3f}%",
