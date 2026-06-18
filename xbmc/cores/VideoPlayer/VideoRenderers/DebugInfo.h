@@ -16,6 +16,8 @@ struct DEBUG_INFO_PLAYER
   std::string video;
   std::string player;
   std::string vsync;
+  std::string jitter1;
+  std::string jitter2;
 };
 
 struct DEBUG_INFO_VIDEO

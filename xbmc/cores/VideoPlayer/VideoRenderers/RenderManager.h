@@ -230,6 +230,7 @@ protected:
   double m_flipEndTime = 0.0;
   double m_filteredFlipEndTime = 0.0;
   double m_rawJitter = 0.0;
+  double m_rawJitter2 = 0.0;
 
   struct CClockSync
   {
