@@ -618,7 +618,6 @@ private:
   // Tuning parameters
   const double alpha = 0.1;    // Controls how fast we adjust to frame duration changes
   const double beta = 0.1;     // Controls how aggressively we correct position errors
-
 public:
   double EstimateNextTimestamp(double raw_mkv_pts_seconds) {
 	// 1. Auto Seek & Startup Detection
@@ -650,8 +649,441 @@ public:
 	last_raw_pts = -1.0;
   }
 };
+class UniversalPTSUpsampler {
+public:
+  UniversalPTSUpsampler() {
+	reset();
+  }
 
-PllTimestampEstimator upSampler;
+  void reset() {
+	is_initialized_ = false;
+	frame_count_ = 0;
+	last_raw_pts_ = 0;
+	est_pts_ = 0.0;
+	est_duration_us_ = 0.0;
+	P_pts_ = 1000.0;
+	P_dur_ = 1000.0;
+	startup_durations_.clear();
+	last_returned_pts_ = 0;
+  }
+
+  // Input: Raw PTS in microseconds (truncated to 1ms boundaries)
+  // Output: Smooth, upsampled double precision PTS in microseconds
+  double update(int64_t raw_pts_us) {
+	frame_count_++;
+
+	// --- ADAPTIVE SEEK DETECTION ---
+	if(is_initialized_) {
+	  // Use the learned frame duration to set a strict seek boundary.
+	  // If the incoming frame deviates by more than 2.5 frame periods, it's a seek.
+	  // (At 60fps, this triggers if the gap deviates by > ~41ms).
+	  double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts_ + est_duration_us_));
+
+	  if(deviation > (est_duration_us_ * 2.5)) {
+		reset();
+		frame_count_ = 1;
+	  }
+	}
+
+	// --- PHASE 1: RAPID BOOTSTRAPPING (Works for any frame rate) ---
+	if(!is_initialized_) {
+	  if(frame_count_ == 1) {
+		est_pts_ = static_cast<double>(raw_pts_us);
+		last_raw_pts_ = raw_pts_us;
+		return est_pts_;
+	  }
+
+	  double instant_dur = static_cast<double>(raw_pts_us - last_raw_pts_);
+	  startup_durations_.push_back(instant_dur);
+	  last_raw_pts_ = raw_pts_us;
+
+	  if(frame_count_ == 6) {
+		std::sort(startup_durations_.begin(), startup_durations_.end());
+
+		// Extract median step size (Bypasses the 1ms truncation edge cases)
+		est_duration_us_ = startup_durations_ [startup_durations_.size() / 2];
+
+		// Refine median toward the mathematical fractional average
+		double sum = 0;
+		for(double d : startup_durations_) sum += d;
+		double avg = sum / startup_durations_.size();
+		if(std::abs(est_duration_us_ - avg) < 1000.0) {
+		  est_duration_us_ = avg; // Smoothly locks onto ~16666.67us or ~41666.67us
+		}
+
+		est_pts_ = static_cast<double>(raw_pts_us);
+		is_initialized_ = true;
+	  }
+
+	  return static_cast<double>(raw_pts_us);
+	}
+
+	// --- PHASE 2: HIGH-INERTIA KALMAN TRACKING ---
+	const double Q_pts = 5.0;
+	const double Q_dur = 0.05;
+	const double R_pts = 500000.0; // Heavily penalizes the 1ms (1000us) quantization error
+
+	// 1. Predict
+	double pred_pts = est_pts_ + est_duration_us_;
+	double pred_duration = est_duration_us_;
+
+	P_pts_ += P_dur_ + Q_pts;
+	P_dur_ += Q_dur;
+
+	// 2. Kalman Gain
+	double K = P_pts_ / (P_pts_ + R_pts);
+
+	// 3. Update
+	double measurement = static_cast<double>(raw_pts_us);
+	est_pts_ = pred_pts + K * (measurement - pred_pts);
+	est_duration_us_ = pred_duration + (K * 0.05) * (measurement - pred_pts);
+
+	P_pts_ = (1.0 - K) * P_pts_;
+
+	// --- PHASE 3: ZERO-OVERRUN & MONOTONICITY GUARD ---
+	// 1. Never let the smoothed value drift ahead of the raw measurement 
+	//    by more than the maximum possible 1ms truncation window (500us radius).
+	double max_allowed_pts = static_cast<double>(raw_pts_us) + 500.0;
+	if(est_pts_ > max_allowed_pts) {
+	  est_pts_ = max_allowed_pts;
+	}
+
+	// 2. Strict Monotonicity: Never let the timeline go backward or freeze.
+	//    Ensure it always moves forward by at least a tiny fraction (e.g., 1 microsecond).
+	if(est_pts_ <= last_returned_pts_) {
+	  est_pts_ = last_returned_pts_ + 1.0;
+	}
+
+	last_returned_pts_ = est_pts_;
+	return est_pts_;
+  }
+
+private:
+  bool is_initialized_;
+  int64_t frame_count_;
+  int64_t last_raw_pts_;
+  std::vector<double> startup_durations_;
+
+  double est_pts_;
+  double est_duration_us_;
+  double P_pts_;
+  double P_dur_;
+  double last_returned_pts_;
+};
+
+class RuntimeFlagPTSUpsampler {
+public:
+  RuntimeFlagPTSUpsampler() {
+	// Initialize to progressive defaults
+	reset(false);
+  }
+
+  void reset(bool is_interlaced) {
+	is_initialized_ = false;
+	frame_count_ = 0;
+	est_pts_ = 0.0;
+	last_returned_pts_ = -1.0;
+
+	// Kalman States
+	est_duration_us_ = 0.0;
+	P_pts_ = 1000.0;
+	P_dur_ = 1000.0;
+
+	is_interlaced_cadence_ = is_interlaced;
+	update_cadence_bounds();
+  }
+
+  // Input: Raw microsecond PTS, and the current structural state flag
+  // Output: Smooth upsampled double precision microsecond PTS
+  double update(int64_t raw_pts_us, bool is_interlaced) {
+	frame_count_++;
+
+	// --- MID-STREAM MODE SWITCH DETECTION ---
+	// If the pipeline changes the flag on the fly, adaptively shift tracking modes
+	if(is_initialized_ && (is_interlaced != is_interlaced_cadence_)) {
+	  is_interlaced_cadence_ = is_interlaced;
+
+	  if(is_interlaced_cadence_) {
+		// Progressive -> Interlaced: Seed fields using the last known stable velocity
+		update_cadence_bounds();
+	  }
+	  else {
+		// Interlaced -> Progressive: Re-estimate baseline velocity from the last step
+		est_duration_us_ = (cadence_short_us_ + cadence_long_us_) / 2.0;
+	  }
+	}
+
+	// --- ADAPTIVE SEEK DETECTION ---
+	if(is_initialized_) {
+	  double max_expected = is_interlaced_cadence_ ? cadence_long_us_ : est_duration_us_;
+	  double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts_ + max_expected));
+
+	  if(deviation > (max_expected * 2.5)) {
+		reset(is_interlaced); // Flush timeline, maintain current flag mode
+		frame_count_ = 1;
+	  }
+	}
+
+	// --- PHASE 1: INITIALIZATION ---
+	if(!is_initialized_) {
+	  est_pts_ = static_cast<double>(raw_pts_us);
+	  is_interlaced_cadence_ = is_interlaced;
+	  update_cadence_bounds();
+	  is_initialized_ = true;
+	  return est_pts_;
+	}
+
+	// --- PHASE 2: CADENCE-AWARE PREDICTION ---
+	double current_step_prediction = est_duration_us_;
+
+	if(is_interlaced_cadence_) {
+	  // Predict both field step branches and select the mathematical closest node
+	  double pred_short = est_pts_ + cadence_short_us_;
+	  double pred_long = est_pts_ + cadence_long_us_;
+
+	  if(std::abs(static_cast<double>(raw_pts_us) - pred_short) <
+		std::abs(static_cast<double>(raw_pts_us) - pred_long)) {
+		current_step_prediction = cadence_short_us_;
+	  }
+	  else {
+		current_step_prediction = cadence_long_us_;
+	  }
+	}
+	else if(frame_count_ == 2) {
+	  // Progressive instant baseline lock between frame 1 and frame 2
+	  est_duration_us_ = static_cast<double>(raw_pts_us) - est_pts_;
+	  current_step_prediction = est_duration_us_;
+	}
+
+	// High-inertia Kalman filtering execution
+	const double Q_pts = 5.0;
+	const double Q_dur = 0.05;
+	const double R_pts = 500000.0;
+
+	double pred_pts = est_pts_ + current_step_prediction;
+	P_pts_ += P_dur_ + Q_pts;
+	P_dur_ += Q_dur;
+
+	double K = P_pts_ / (P_pts_ + R_pts);
+	double measurement = static_cast<double>(raw_pts_us);
+
+	est_pts_ = pred_pts + K * (measurement - pred_pts);
+
+	// Dynamically adjust internal clock references to follow target drift
+	if(!is_interlaced_cadence_) {
+	  est_duration_us_ += (K * 0.05) * (measurement - pred_pts);
+	}
+	else {
+	  double error = (measurement - pred_pts) * K * 0.02;
+	  cadence_short_us_ += error;
+	  cadence_long_us_ += error;
+	}
+
+	P_pts_ = (1.0 - K) * P_pts_;
+
+	// --- PHASE 3: BOUNDARY & MONOTONICITY GUARD ---
+	double max_allowed_pts = static_cast<double>(raw_pts_us) + 500.0;
+	if(est_pts_ > max_allowed_pts) {
+	  est_pts_ = max_allowed_pts;
+	}
+
+	if(last_returned_pts_ >= 0.0 && est_pts_ <= last_returned_pts_) {
+	  est_pts_ = last_returned_pts_ + 1.0;
+	}
+
+	last_returned_pts_ = est_pts_;
+	return est_pts_;
+  }
+
+private:
+  void update_cadence_bounds() {
+	if(is_interlaced_cadence_) {
+	  // Default 3:2 pulldown boundaries if initialized fresh
+	  cadence_short_us_ = 33333.33;
+	  cadence_long_us_ = 50000.00;
+	}
+	else {
+	  cadence_short_us_ = 0.0;
+	  cadence_long_us_ = 0.0;
+	}
+  }
+
+  bool is_initialized_;
+  int64_t frame_count_;
+  double est_pts_;
+  double est_duration_us_;
+  double P_pts_;
+  double P_dur_;
+  double last_returned_pts_;
+
+  bool is_interlaced_cadence_;
+  double cadence_short_us_;
+  double cadence_long_us_;
+}; 
+
+class UniversalFlagPTSUpsampler {
+public:
+  UniversalFlagPTSUpsampler() {
+	reset(false);
+  }
+
+  void reset(bool is_interlaced) {
+	is_initialized_ = false;
+	frame_count_ = 0;
+	est_pts_ = 0.0;
+	last_returned_pts_ = -1.0;
+	last_raw_pts_ = 0;
+
+	// Kalman States
+	est_duration_us_ = 33333.33; // Sensible 30fps baseline default
+	P_pts_ = 1000.0;
+	P_dur_ = 1000.0;
+
+	is_interlaced_cadence_ = is_interlaced;
+	cadence_short_us_ = 0.0;
+	cadence_long_us_ = 0.0;
+  }
+
+  double update(int64_t raw_pts_us, bool is_interlaced) {
+	frame_count_++;
+
+	// --- MID-STREAM MODE SWITCH DETECTION ---
+	if(is_initialized_ && (is_interlaced != is_interlaced_cadence_)) {
+	  is_interlaced_cadence_ = is_interlaced;
+	  if(!is_interlaced_cadence_) {
+		// Interlaced -> Progressive: Collapse back to a single average velocity
+		est_duration_us_ = (cadence_short_us_ + cadence_long_us_) / 2.0;
+	  }
+	  else {
+		// Progressive -> Interlaced: Initialize cadence limits around current baseline
+		cadence_short_us_ = est_duration_us_;
+		cadence_long_us_ = est_duration_us_;
+	  }
+	}
+
+	// --- ADAPTIVE SEEK DETECTION ---
+	if(is_initialized_) {
+	  double max_expected = is_interlaced_cadence_ ? cadence_long_us_ : est_duration_us_;
+	  double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts_ + max_expected));
+
+	  if(deviation > (max_expected * 2.5)) {
+		reset(is_interlaced);
+		frame_count_ = 1;
+	  }
+	}
+
+	// --- PHASE 1: INITIALIZATION ---
+	if(!is_initialized_) {
+	  est_pts_ = static_cast<double>(raw_pts_us);
+	  last_raw_pts_ = raw_pts_us;
+	  is_interlaced_cadence_ = is_interlaced;
+
+	  // Seed base guesses
+	  cadence_short_us_ = 33333.33;
+	  cadence_long_us_ = 33333.33;
+
+	  is_initialized_ = true;
+	  return est_pts_;
+	}
+
+	// On the second frame, catch the very first delta to instantly set up our tracking velocities
+	if(frame_count_ == 2) {
+	  double initial_delta = static_cast<double>(raw_pts_us - last_raw_pts_);
+	  if(initial_delta > 0.0) {
+		est_duration_us_ = initial_delta;
+		cadence_short_us_ = initial_delta;
+		cadence_long_us_ = initial_delta;
+	  }
+	}
+	last_raw_pts_ = raw_pts_us;
+
+	// --- PHASE 2: CADENCE-AWARE PREDICTION ---
+	double current_step_prediction = est_duration_us_;
+
+	if(is_interlaced_cadence_) {
+	  // Check if the current frame aligns better with the short-step or long-step timeline
+	  double pred_short = est_pts_ + cadence_short_us_;
+	  double pred_long = est_pts_ + cadence_long_us_;
+
+	  if(std::abs(static_cast<double>(raw_pts_us) - pred_short) <
+		std::abs(static_cast<double>(raw_pts_us) - pred_long)) {
+		current_step_prediction = cadence_short_us_;
+	  }
+	  else {
+		current_step_prediction = cadence_long_us_;
+	  }
+	}
+
+	// Precision Auto-Detection: check if data is 1ms truncated or high precision
+	bool is_truncated = (raw_pts_us % 1000 == 0);
+	const double R_pts = is_truncated ? 500000.0 : 10.0;
+	const double Q_pts = 5.0;
+	const double Q_dur = 0.05;
+
+	double pred_pts = est_pts_ + current_step_prediction;
+	P_pts_ += P_dur_ + Q_pts;
+	P_dur_ += Q_dur;
+
+	double K = P_pts_ / (P_pts_ + R_pts);
+	double measurement = static_cast<double>(raw_pts_us);
+
+	est_pts_ = pred_pts + K * (measurement - pred_pts);
+
+	// --- PHASE 3: DYNAMIC VELOCITY FEEDBACK LEARNING ---
+	double error = (measurement - pred_pts) * K;
+	if(!is_interlaced_cadence_) {
+	  est_duration_us_ += error * 0.05;
+	}
+	else {
+	  // Adaptive Cadence Multi-Threading:
+	  // Only update the specific cadence lane that matched this frame's reality.
+	  // This prevents a uniform stream from shifting, while allowing 3:2 pulldown
+	  // to expand into separate 33ms and 50ms branches smoothly.
+	  if(current_step_prediction == cadence_short_us_) {
+		cadence_short_us_ += error * 0.04;
+	  }
+	  else {
+		cadence_long_us_ += error * 0.04;
+	  }
+
+	  // If the values ever cross over structurally, sort them to maintain order
+	  if(cadence_short_us_ > cadence_long_us_) {
+		std::swap(cadence_short_us_, cadence_long_us_);
+	  }
+	}
+
+	P_pts_ = (1.0 - K) * P_pts_;
+
+	// --- PHASE 4: BOUNDARY & MONOTONICITY GUARD ---
+	double max_allowed_pts = static_cast<double>(raw_pts_us) + 500.0;
+	if(est_pts_ > max_allowed_pts) {
+	  est_pts_ = max_allowed_pts;
+	}
+
+	if(last_returned_pts_ >= 0.0 && est_pts_ <= last_returned_pts_) {
+	  est_pts_ = last_returned_pts_ + 1.0;
+	}
+
+	last_returned_pts_ = est_pts_;
+	return est_pts_;
+  }
+
+private:
+  bool is_initialized_;
+  int64_t frame_count_;
+  int64_t last_raw_pts_;
+  double est_pts_;
+  double est_duration_us_;
+  double P_pts_;
+  double P_dur_;
+  double last_returned_pts_;
+
+  bool is_interlaced_cadence_;
+  double cadence_short_us_;
+  double cadence_long_us_;
+};
+
+UniversalFlagPTSUpsampler upSampler;
 
 
 bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
@@ -736,11 +1168,11 @@ bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
     else if (m_picture.pts == DVD_NOPTS_VALUE)
       m_picture.pts = m_picture.dts;
 	//cl upsample pts, many containers have very bad pts precision, e.g 1ms
-	//double pts1 = m_picture.pts;
-	m_picture.pts = 1000000.0 * upSampler.EstimateNextTimestamp(m_picture.pts/1000000.0);  //cl don't use frametime here, it is sometime hardcoded to 1/(25fps)
-	//static double oldPts = 0;
-	//CLog::Log(LOGDEBUG, "pts1: {:f}ms, pts: {:f}ms, diff: {:f}ms, upsampler diff:{:f}ms", pts1/1000.0, m_picture.pts / 1000.0, (m_picture.pts - pts1) / 1000.0, (m_picture.pts - oldPts) / 1000.0);
-	//oldPts = m_picture.pts; 
+	double pts1 = m_picture.pts;
+	m_picture.pts = upSampler.update(m_picture.pts, m_picture.iFlags & DVP_FLAG_INTERLACED);  //cl don't use frametime here, it is sometime hardcoded to 1/(25fps)
+	static double oldPts = 0;
+	CLog::Log(LOGDEBUG, "pts1: {:f}ms, pts: {:f}ms, diff: {:f}ms, upsampler diff:{:f}ms", pts1/1000.0, m_picture.pts / 1000.0, (m_picture.pts - pts1) / 1000.0, (m_picture.pts - oldPts) / 1000.0);
+	oldPts = m_picture.pts; 
 		
     // use forced aspect if any
     if (m_fForcedAspectRatio != 0.0f)
@@ -899,6 +1331,7 @@ void CVideoPlayerVideo::ProcessOverlays(const VideoPicture* pSource, double pts)
 
 CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPicture* pPicture)
 {
+  CLog::Log(LOGDEBUG, "Start");
   m_bAbortOutput = false;
 
   if (m_processInfo.GetVideoStereoMode() != pPicture->stereoMode)
@@ -944,6 +1377,7 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
 
   iPlayingClock = m_pClock->GetClock(iCurrentClock, false); // snapshot current clock
 
+  CLog::Log(LOGDEBUG, "config_framerate: {}, m_fStableFrameRate: {}, m_fFrameRate: {}, iPlayingClock: {} ", config_framerate, m_fStableFrameRate, m_fFrameRate, iPlayingClock);
   if (m_speed < 0)
   {
     double renderPts;
@@ -957,6 +1391,7 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
       {
         m_rewindStalled = true;
         CThread::Sleep(50ms);
+		CLog::Log(LOGDEBUG, "sleep 50ms");
       }
       return OUTPUT_DROPPED;
     }
@@ -980,6 +1415,7 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
   // don't wait when going ff
   if (m_speed > DVD_PLAYSPEED_NORMAL)
     maxWaitTime = std::max(timeToDisplay, 0ms);
+  CLog::Log(LOGDEBUG, "maxWaitTime: {}", maxWaitTime);
   int buffer = m_renderManager.WaitForBuffer(m_bAbortOutput, maxWaitTime);
   if (buffer < 0)
   {
@@ -1001,6 +1437,7 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
     return OUTPUT_DROPPED;
   }
 
+  CLog::Log(LOGDEBUG, "Done");
   return OUTPUT_NORMAL;
 }
 

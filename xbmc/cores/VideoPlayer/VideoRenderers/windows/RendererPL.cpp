@@ -64,6 +64,79 @@ CRendererPL::~CRendererPL()
 	DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
 }
 
+class CRenderTimeMonitor {
+private:
+  std::vector<double> history;
+  size_t writeIndex = 0;
+  size_t maxFrames = 0;
+  bool bufferFull = false;
+  size_t skipCount = 0;
+
+  // Helper to get active frame count in the buffer
+  size_t getActiveCount() const {
+	return bufferFull ? maxFrames : writeIndex;
+  }
+
+public:
+  CRenderTimeMonitor(size_t frameWindowSize) : maxFrames(frameWindowSize) {
+	history.resize(maxFrames, 0.0);
+  }
+
+  void update(double jitterUs) {
+	if(skipCount < 20)
+	{
+	  skipCount++;
+	  return;
+	}
+	history [writeIndex] = jitterUs;
+
+	writeIndex++;
+	if(writeIndex >= maxFrames) {
+	  writeIndex = 0;
+	  bufferFull = true;
+	}
+  }
+
+  double calculateVariance() const {
+	size_t count = getActiveCount();
+	if(count < 2) return 0.0;
+
+	double sum = 0.0;
+	for(size_t i = 0; i < count; ++i) {
+	  sum += history [i];
+	}
+	double mean = sum / count;
+
+	double varianceSum = 0.0;
+	for(size_t i = 0; i < count; ++i) {
+	  varianceSum += std::pow(history [i] - mean, 2);
+	}
+
+	return varianceSum / (count - 1);
+  }
+
+  double calculatePeak() const {
+	size_t count = getActiveCount();
+	if(count == 0) return 0.0;
+
+	double maxVal = history [0];
+	for(size_t i = 1; i < count; ++i) {
+	  if(history [i] > maxVal) {
+		maxVal = history [i];
+	  }
+	}
+	return maxVal;
+  }
+
+  void reset(void) {
+	writeIndex = 0;
+	skipCount = 0;
+	bufferFull = false;
+  }
+};
+
+CRenderTimeMonitor renderTimeMonitor(120);
+
 void CRendererPL::UpdateVideoFilters()
 {
   if (!m_outputShader)
@@ -113,7 +186,7 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
 	sframe.map = CRendererPL::MapFrame;
 	sframe.unmap = CRendererPL::UnmapFrame;
 	sframe.frame_data = rb;
-	sframe.discard = NULL;
+	sframe.discard = CRendererPL::DiscardFrame;
 	if(picture.iFlags & DVP_FLAG_INTERLACED)
 	  if(picture.iFlags & DVP_FLAG_TOP_FIELD_FIRST)
 		sframe.first_field = PL_FIELD_TOP;
@@ -125,6 +198,15 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
 	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_queue_push idx: {} pts: {}", index, rb->pts/1000000.0);
 	pl_queue_push(*PL::PLInstance::Get()->GetQueue(), &sframe);
   }
+}
+
+void CRendererPL::DiscardFrame(const struct pl_source_frame* src)
+{
+  CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
+  CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
+
+  plbuffer->m_NeedFrame = false; //cl Shouldn't be needed but it works better, maybe just the presense of the function itself
+  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "DiscardFrame idx: {} pts: {:.0f}", plbuffer->frameIdx, plbuffer->pts);
 }
 
 bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame* src, struct pl_frame* frameIn)
@@ -278,10 +360,10 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	, pl_color_transfer_name(m_colorSpace.transfer)
 	, pl_color_system_name(m_videoMatrix));
   
-  info.render1 = StringUtils::Format("Display maxLuma: {}, maxFALL: {}, Render: {:0>4.1f}ms",plbuffer->m_OutputDesc1.MaxLuminance, plbuffer->m_OutputDesc1.MaxFullFrameLuminance, plbuffer->m_RenderDuration *1000.0);
+  info.render1 = StringUtils::Format("Display maxLuma: {}, maxFALL: {}",plbuffer->m_OutputDesc1.MaxLuminance, plbuffer->m_OutputDesc1.MaxFullFrameLuminance);
   if(plbuffer->m_bHasPeakDetectMetadata)
-    info.render1 += StringUtils::Format(", PeakDetect maxPqy: {:5.0f}, avgPqy: {:5.0f}",Pq2nit(plbuffer->m_PeakDetectMetadata.max_pq_y), Pq2nit(plbuffer->m_PeakDetectMetadata.avg_pq_y));
-  info.render1 += StringUtils::Format(", In maxLuma: {:5.0f}, maxPqy: {:5.0f}, avgPqy: {:5.0f} Out maxLuma: {:5.0f}, maxPqy: {:5.0f}, avgPqy: {:5.0f}", 
+    info.render1 += StringUtils::Format(", PeakDetect maxPqy: {:5.0f}, avgPqy: {:5.0f}", Pq2nit(plbuffer->m_PeakDetectMetadata.max_pq_y), Pq2nit(plbuffer->m_PeakDetectMetadata.avg_pq_y));
+  info.render1 += StringUtils::Format(", In maxLuma: {:5.0f}, maxPqy: {:5.0f}, avgPqy: {:5.0f}, Out maxLuma: {:5.0f}, maxPqy: {:5.0f}, avgPqy: {:5.0f}", 
 	plbuffer->m_FrameInColor.hdr.max_luma,
 	Pq2nit(plbuffer->m_FrameInColor.hdr.max_pq_y),
 	Pq2nit(plbuffer->m_FrameInColor.hdr.avg_pq_y), 
@@ -300,20 +382,16 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	info.render1 += StringUtils::Format(", max CLL: {}, max FALL: {}", hdr.max_cll, hdr.max_fall);
   }
   pl_queue q = *PL::PLInstance::Get()->GetQueue();
-  info.render2 = StringUtils::Format("ScreenFps: {:.3f}, LPvps:{:.3f}, SourceFps: {:.3f}({:1}), LPfps: {:.3f}, ", m_ScreenFps, pl_queue_estimate_fps(q), m_fps, plbuffer->m_bIsInterlaced ? "i":"p", pl_queue_estimate_vps(q));
-  info.render2 += StringUtils::Format(", Mixer numFrames: {:1}, renderErr: {}, queueMore: {}, queueErr: {}, queueResets: {}",
+  info.render2 = StringUtils::Format("ScreenFps: {:.3f}, LPvps:{:.3f}, SourceFps: {:.3f}({:1}), LPfps: {:.3f}, ", m_ScreenFps, pl_queue_estimate_vps(q), m_fps, plbuffer->m_bIsInterlaced ? "i":"p", pl_queue_estimate_fps(q));
+  info.render2 += StringUtils::Format("Mixer numFrames: {:1}, renderErr: {}, queueMore: {}, queueErr: {}, queueResets: {}",
 	m_FrameMixerNumFrames,
 	m_FrameMixerRenderErrors,
 	m_FrameMixerQueueMore,
 	m_FrameMixerQueueErr,
 	m_FrameMixerQueueResets);
+ 
+  info.render3 = StringUtils::Format("Render time: {:0>4.1f}ms, max:{:0>4.1f}, stdDev:{:0>4.1f}", plbuffer->m_RenderDuration * 1000.0, renderTimeMonitor.calculatePeak() * 1000.0, std::sqrt(renderTimeMonitor.calculateVariance()) * 1000.0);
 
-  //line 1 std::string videoSource;
-  //2 std::string metaPrim;
-  //3 std::string metaLight;
-  //4 std::string shader;
-  //5 std::string render1;
-  //6 std::string render2;
   return info;
 }
 
@@ -1062,6 +1140,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	int64_t end = CurrentHostCounter();
 	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
 	buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
+	renderTimeMonitor.update(buffer->m_RenderDuration);
+
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
 	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}",
 	  m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
@@ -1155,9 +1235,11 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  // Stop timer
 	  int64_t end = CurrentHostCounter();
 	  buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
+	  buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
+	  renderTimeMonitor.update(buffer->m_RenderDuration);
 
       #if LOG_PL_QUEUE
-	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenVps: {:.3f}, LPvps: {:.3f}, SourceFps: {:.3f}, LPfps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.0f}, renderPts: {:.0f}, renderPtsDiff: {:.0f}, qParamsPts: {:.0f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, minPts: {:.0f}, maxPts: {:.0f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
+	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, LPvps: {:.3f}, SourceFps: {:.3f}, LPfps: {:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.0f}, renderPts: {:.0f}, renderPtsDiff: {:.0f}, qParamsPts: {:.0f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, minPts: {:.0f}, maxPts: {:.0f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
 		m_ScreenFps, pl_queue_estimate_vps(*pQueue), m_fps, pl_queue_estimate_fps(*pQueue), buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts, renderPts,
 		(renderPts - oldRenderPts), qParams.pts*1000000, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), minPts*1000000, maxPts*1000000, renderPtsPos, renderPtsShiftedPos);
 	  oldRenderPts = renderPts;

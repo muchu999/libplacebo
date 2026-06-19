@@ -73,6 +73,7 @@ public:
   void AddVideoPicture(const VideoPicture& picture, int index) override; 
   static bool MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame* src, struct pl_frame* out_frame);
   static void UnmapFrame(pl_gpu gpu, struct pl_frame* frame, const struct pl_source_frame* src);
+  static void DiscardFrame(const struct pl_source_frame* src);
 
 
   DEBUG_INFO_VIDEO GetDebugInfo(int idx) override;
@@ -159,7 +160,7 @@ public:
   // For debugInfo
   DXGI_OUTPUT_DESC1 m_OutputDesc1 = {};
   pl_hdr_metadata m_PeakDetectMetadata = {};
-  bool m_bHasPeakDetectMetadata = false;
+  bool m_bHasPeakDetectMetadata = false;     //cl debug info move to CRendererPL?
   float m_RenderDuration = 0.0;
   pl_color_space m_FrameInColor = {};
   pl_color_space m_FrameOutColor = {};

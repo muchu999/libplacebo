@@ -531,6 +531,109 @@ public:
   }
 };
 
+class FramePLL2 {
+private:
+  double current_fps;
+  double target_period;
+  double current_phase;
+  double current_freq;
+  bool is_initialized;
+  double K_p;
+  double K_i;
+  double max_drift;
+  int lock_progress;
+  const int FRAMES_TO_FULL_LOCK = 60;
+
+  void updateGains() {
+	double progress_ratio = std::min(1.0, static_cast<double>(lock_progress) / FRAMES_TO_FULL_LOCK);
+	double fast_settle = 0.3;
+	double slow_settle = 1.5;
+
+	// Scale settle time based on fps so 60Hz isn't overly aggressive
+	double current_settle_time = fast_settle + (slow_settle - fast_settle) * progress_ratio;
+
+	// Relax the response slightly specifically for higher framerates
+	if(current_fps > 55.0) {
+	  current_settle_time *= 1.5;
+	}
+
+	double omega_n = 4.0 / (0.707 * current_settle_time);
+	double T_s = target_period / 1000000.0;
+
+	K_p = 2.0 * 0.707 * omega_n * T_s;
+	K_i = std::pow(omega_n * T_s, 2.0);
+
+	// Perceptual Jitter budget
+	double jitter_budget_percent = 0.04;
+	max_drift = target_period * jitter_budget_percent;
+  }
+  void reconfigure(double new_fps, double initial_pts) {
+	current_fps = new_fps;
+	target_period = 1000000.0 / current_fps;
+	current_freq = 0.0;
+	current_phase = initial_pts;
+	is_initialized = true;
+	lock_progress = 0;
+	updateGains();
+  }
+
+public:
+  FramePLL2() : current_fps(0.0), target_period(0.0), current_phase(0.0), current_freq(0.0),
+	is_initialized(false), K_p(0.0), K_i(0.0), max_drift(0.0), lock_progress(0) {
+  }
+
+  void forceReset() { is_initialized = false; }
+
+  double process(double target_fps, double input_pts) {
+	if(target_fps <= 0.0) return input_pts;
+
+	if(!is_initialized || target_fps != current_fps) {
+	  reconfigure(target_fps, input_pts);
+	  return current_phase;
+	}
+
+	// 1. DISCONTINUITY DETECTOR
+	double raw_deviation = std::abs(input_pts - (current_phase + target_period));
+	double discontinuity_threshold = target_period * 3.0;
+
+	if(raw_deviation > discontinuity_threshold) {
+	  reconfigure(target_fps, input_pts);
+	  return current_phase;
+	}
+
+	// 2. FIXED PHASE UNWRAPPING
+	// Calculate the error relative to the next expected timeline step
+	double expected_next_pts = current_phase + target_period;
+	double error = input_pts - expected_next_pts;
+
+	// Use modern remainder mapping instead of structural destructive loops
+	// This calculates how far the frame is from the closest multi-frame boundary step
+	error = error - target_period * std::round(error / target_period);
+
+	// 3. LOOP FILTER WITH INTEGRAL ANTI-WINDUP PROTECTION
+	// Only increment frequency if the error is outside the strict perceptual jitter budget 
+	// (Eliminates micro-oscillations near 60Hz)
+	if(std::abs(error) > max_drift * 0.5) {
+	  current_freq += K_i * error;
+	}
+
+	// ANTI-WINDUP: Prevent the frequency memory from outgrowing our clamp limits
+	double max_freq_drift = target_period * 0.2;
+	current_freq = std::clamp(current_freq, -max_freq_drift, max_freq_drift);
+
+	// Calculate raw adjustment step
+	lock_progress++;
+	updateGains();
+
+	double delta_t = target_period + current_freq + (K_p * error);
+
+	// 4. JITTER CLAMP
+	delta_t = std::clamp(delta_t, target_period - max_drift, target_period + max_drift);
+	current_phase += delta_t;
+	return current_phase;
+  }
+};
+
 FramePLL1 synchPLL;
 DeferredJitterMonitor jitterMonitor1(120);
 DeferredJitterMonitor jitterMonitor2(120);
@@ -539,16 +642,17 @@ DeferredJitterMonitor jitterMonitor2(120);
 void CRenderManager::RecordFlipEndTime() 
 {
   double fps = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS(); //cl Changed GetFPS implementation because it was always returning 60 on my PC, irrespective of the real value.
-  double frametime = DVD_TIME_BASE / fps;
   static double oldFlipEndTime = 0;
   static double oldDiff = 0;
   static double oldFlipEndTime2 = 0;
   static double oldDiff2 = 0;
 
   m_flipEndTime = m_dvdClock.GetClock();
-  double diff = m_flipEndTime - oldFlipEndTime;
   m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime);
+  
+  double diff = m_flipEndTime - oldFlipEndTime;
   double diff2 = m_filteredFlipEndTime - oldFlipEndTime2;
+
   m_rawJitter = diff - oldDiff;
   m_rawJitter2 = diff2 - oldDiff2;
 
@@ -556,10 +660,10 @@ void CRenderManager::RecordFlipEndTime()
   if(std::abs(diff) > 200000)
 	jitterMonitor1.reset();
   jitterMonitor2.update(std::abs(m_rawJitter2));
-  if(std::abs(diff) > 200000)
+  if(std::abs(diff2) > 200000)
 	jitterMonitor2.reset();
 
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "raw: {:.0f}, raw jitter: {:.0f}, filtered: {:.0f}", m_flipEndTime, m_rawJitter, m_filteredFlipEndTime);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "raw: {:.0f}, filtered: {:.0f}, raw jitter: {:.0f}, filtered jitter {:.0f}", m_flipEndTime, m_filteredFlipEndTime, m_rawJitter, m_rawJitter2);
   oldFlipEndTime = m_flipEndTime;
   oldDiff = diff;
   oldFlipEndTime2 = m_filteredFlipEndTime;
@@ -640,7 +744,7 @@ void CRenderManager::FrameMove()
     for (std::deque<int>::iterator it = m_discard.begin(); it != m_discard.end(); )
     {
       // renderer may want to keep the frame for postprocessing
-      if (!m_pRenderer->NeedBuffer(*it) || !m_bRenderGUI)
+      if (!m_pRenderer->NeedBuffer(*it) || !m_bRenderGUI)   //cl ?m_bRenderGUI
       {
         m_pRenderer->ReleaseBuffer(*it);
         m_overlays.Release(*it);
@@ -1430,7 +1534,7 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
     if (sleeptime < 0ms)
       sleeptime = 0ms;
     sleeptime = std::min(sleeptime, 20ms);
-    m_presentevent.wait(lock, sleeptime);
+	m_presentevent.wait(lock, sleeptime);
     DiscardBuffer();
     return 0;
   }
