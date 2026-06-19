@@ -307,3 +307,6 @@ exclude_dll.txt
 /DLLs/FreePsdVn.com_2010558_PRESET_3d_luts_duotone_5027770/Installing_and_Using_LUTs.pdf
 
 !*.dll.a
+/out/build/x64-Debug/.cmake/api/v1/query/client-MicrosoftVS/query.json
+/out/build/x64-Debug/.cmake/api/v1/reply/error-2026-06-19T12-27-30-0673.json
+/out/build/x64-Debug/VSInheritEnvironments.txt
