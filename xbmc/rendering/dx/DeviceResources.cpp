@@ -1238,6 +1238,7 @@ void DX::DeviceResources::Present()
   static bool bInit = false;
   static LARGE_INTEGER frequency;
   static double countsPerSecond;
+  static LONGLONG baseCountsPerFrame;
   static double targetFrameDuration;
   static LONGLONG targetCountsPerFrame;
   static LONGLONG resetThresholdCounts;
@@ -1247,6 +1248,7 @@ void DX::DeviceResources::Present()
   static UINT64 lastPresentCount;
   static UINT64 lastRefreshCount;
   static bool forceHistoryReset; // Forces baseline capture on the very first frame
+  static LONGLONG adaptiveStepCounts;
 
   if(!bInit)
   {
@@ -1255,13 +1257,17 @@ void DX::DeviceResources::Present()
 
 	// Establish standard 60Hz timing intervals
 	targetFrameDuration = 1.0 / CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
-	targetCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
+	baseCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
+	targetCountsPerFrame = baseCountsPerFrame;
 
-	// Calculate a threshold: anything longer than 1.5 frames means an intentional drop or hitch
-	resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * countsPerSecond);
+	// ADAPTIVE PACING STEP: Set the adjustment step to exactly 0.5% of a single frame window.
+    // At 60Hz, this is ~83 microseconds. At 24Hz, this automatically scales up to 208 microseconds!
+	adaptiveStepCounts = static_cast<LONGLONG>(targetFrameDuration * 0.005 * countsPerSecond);
 
-	minCountsClamp = static_cast<LONGLONG>((1.0 / 200.0) * countsPerSecond);
-	maxCountsClamp = static_cast<LONGLONG>((1.0 / 30.0) * countsPerSecond);
+	// Allow the pacing loop to breathe up to 10% faster or slower to absorb drift
+	LONGLONG minCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 0.90) * countsPerSecond);
+	LONGLONG maxCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 1.10) * countsPerSecond);
+	LONGLONG resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * countsPerSecond);
 
 	QueryPerformanceCounter(&nextFrameTime);
 
@@ -1271,12 +1277,10 @@ void DX::DeviceResources::Present()
 	bInit = true;
   }
 
-  // Self-Contained Pacing Engine
+  // Adaptive Delta Tracking
   DXGI_FRAME_STATISTICS stats;
   if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
-
 	if(forceHistoryReset) {
-	  // Re-anchor instantly without adjusting the timer math
 	  lastPresentCount = stats.PresentCount;
 	  lastRefreshCount = stats.PresentRefreshCount;
 	  forceHistoryReset = false;
@@ -1286,16 +1290,22 @@ void DX::DeviceResources::Present()
 	  UINT64 deltaRefresh = stats.PresentRefreshCount - lastRefreshCount;
 
 	  if(deltaPresent > 0) {
-		// If deltaRefresh matches deltaPresent, we are perfectly synced.
-		// If they diverge, we adjust our speed by 20 microseconds.
 		if(deltaRefresh > deltaPresent) {
-		  targetCountsPerFrame -= static_cast<LONGLONG>(0.00002 * countsPerSecond);
+		  // Monitor outpaced the CPU. Adjust using our dynamically calculated frame step.
+		  targetCountsPerFrame -= adaptiveStepCounts;
 		}
 		else if(deltaRefresh < deltaPresent) {
-		  targetCountsPerFrame += static_cast<LONGLONG>(0.00002 * countsPerSecond);
+		  // CPU outpaced the monitor.
+		  targetCountsPerFrame += adaptiveStepCounts;
+		}
+		else {
+		  // PERFECT LOCK (deltaRefresh == deltaPresent == 1)
+		  // Gently decay back toward the absolute baseline to prevent oscillation
+		  if(targetCountsPerFrame > baseCountsPerFrame) targetCountsPerFrame--;
+		  if(targetCountsPerFrame < baseCountsPerFrame) targetCountsPerFrame++;
 		}
 
-		// Hard safety boundaries for the oscillator math
+		// Keep the tuning boundaries proportional to the current target refresh rate
 		if(targetCountsPerFrame < minCountsClamp) targetCountsPerFrame = minCountsClamp;
 		if(targetCountsPerFrame > maxCountsClamp) targetCountsPerFrame = maxCountsClamp;
 
@@ -1305,18 +1315,14 @@ void DX::DeviceResources::Present()
 	}
   }
 
-  // Roll timeline forward by the calibrated step size
-  nextFrameTime.QuadPart += targetCountsPerFrame;
-
+  nextFrameTime.QuadPart += targetCountsPerFrame;  
   LARGE_INTEGER currentTime;
   QueryPerformanceCounter(&currentTime);
 
-  // AUTOMATIC DROP DETECTION: 
-  // If the actual CPU time has slipped past our expected next frame target 
-  // by more than 1.5 frames, we have intentionally dropped frames or hitched.
+  // Self-Contained Reset Gate for major hitches or minimized states
   if((currentTime.QuadPart - nextFrameTime.QuadPart) > resetThresholdCounts) {
 	forceHistoryReset = true;
-	nextFrameTime.QuadPart = currentTime.QuadPart; // Snap the timeline forward
+	nextFrameTime.QuadPart = currentTime.QuadPart;
   }
 
   // Precise CPU Wait Gate
