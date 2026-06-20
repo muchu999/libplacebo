@@ -1277,7 +1277,7 @@ void DX::DeviceResources::Present()
 	bInit = true;
   }
 
-  // Adaptive Delta Tracking
+  // 4. ADAPTIVE TUNING (Only adjusts when the hardware actually ticks)
   DXGI_FRAME_STATISTICS stats;
   if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
 	if(forceHistoryReset) {
@@ -1291,21 +1291,17 @@ void DX::DeviceResources::Present()
 
 	  if(deltaPresent > 0) {
 		if(deltaRefresh > deltaPresent) {
-		  // Monitor outpaced the CPU. Adjust using our dynamically calculated frame step.
-		  targetCountsPerFrame -= adaptiveStepCounts;
+		  targetCountsPerFrame -= adaptiveStepCounts; // Monitor is faster, speed up CPU
 		}
 		else if(deltaRefresh < deltaPresent) {
-		  // CPU outpaced the monitor.
-		  targetCountsPerFrame += adaptiveStepCounts;
+		  targetCountsPerFrame += adaptiveStepCounts; // CPU is faster, slow down CPU
 		}
 		else {
-		  // PERFECT LOCK (deltaRefresh == deltaPresent == 1)
-		  // Gently decay back toward the absolute baseline to prevent oscillation
+		  // Perfect sync lock. Gently decay back to baseline.
 		  if(targetCountsPerFrame > baseCountsPerFrame) targetCountsPerFrame--;
 		  if(targetCountsPerFrame < baseCountsPerFrame) targetCountsPerFrame++;
 		}
 
-		// Keep the tuning boundaries proportional to the current target refresh rate
 		if(targetCountsPerFrame < minCountsClamp) targetCountsPerFrame = minCountsClamp;
 		if(targetCountsPerFrame > maxCountsClamp) targetCountsPerFrame = maxCountsClamp;
 
@@ -1315,22 +1311,31 @@ void DX::DeviceResources::Present()
 	}
   }
 
-  nextFrameTime.QuadPart += targetCountsPerFrame;  
+  // 5. THE IMMUTABLE TARGET STEP (The Core Fix)
+  // Never add to nextFrameTime sequentially. Instead, calculate the next gate 
+  // strictly relative to when THIS current frame officially woke up.
+  static LARGE_INTEGER frameStartTime = {0};
+  nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
+
+
   LARGE_INTEGER currentTime;
   QueryPerformanceCounter(&currentTime);
 
-  // Self-Contained Reset Gate for major hitches or minimized states
-  if((currentTime.QuadPart - nextFrameTime.QuadPart) > resetThresholdCounts) {
-	forceHistoryReset = true;
+  // 1. THE RECOUPER: If we somehow fall behind, snap the timeline straight 
+  // to the current clock to guarantee the gate can always wait.
+  if(currentTime.QuadPart > nextFrameTime.QuadPart) {
 	nextFrameTime.QuadPart = currentTime.QuadPart;
   }
 
-  // Precise CPU Wait Gate
+  // 2. THE ABSOLUTE GATE: Safely forces your 0.5ms fast frames to sleep
   CLog::LogF(LOGDEBUG, "Wait start for nextFrameTime current time: {}, nextFrameTime: {}, diff: {}", currentTime.QuadPart, nextFrameTime.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
   while(currentTime.QuadPart < nextFrameTime.QuadPart) {
 	Sleep(0);
 	QueryPerformanceCounter(&currentTime);
   }
+
+  // Capture the EXACT timestamp of when this frame actually started executing
+  frameStartTime = currentTime;
 
   CLog::LogF(LOGDEBUG, "Wait end for nextFrameTime");
 
