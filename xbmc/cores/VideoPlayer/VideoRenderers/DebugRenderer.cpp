@@ -58,7 +58,7 @@ void CDebugRenderer::Dispose()
   }
 }
 
-void CDebugRenderer::SetInfo(DEBUG_INFO_PLAYER& info)
+void CDebugRenderer::SetInfo(DEBUG_INFO_PLAYER& info, bool bFlush)
 {
   if (!m_isInitialized)
     return;
@@ -68,7 +68,8 @@ void CDebugRenderer::SetInfo(DEBUG_INFO_PLAYER& info)
   // display of on-screen text. It would be appropriate for Libass
   // provide a way to allow fixed on-screen text display
   // without use all these fixed values.
-  m_adapter->FlushSubtitles();
+  if(bFlush)
+	m_adapter->FlushSubtitles();
   m_adapter->AddSubtitle(info.audio, 0., 5000000.);
   m_adapter->AddSubtitle(info.video, 0., 5000000.);
   m_adapter->AddSubtitle(info.player, 0., 5000000.);
@@ -77,7 +78,7 @@ void CDebugRenderer::SetInfo(DEBUG_INFO_PLAYER& info)
   m_adapter->AddSubtitle(info.jitter2, 0., 5000000.);
 }
 
-void CDebugRenderer::SetInfo(DEBUG_INFO_VIDEO& video, DEBUG_INFO_RENDER& render)
+void CDebugRenderer::SetInfo(DEBUG_INFO_VIDEO& video, DEBUG_INFO_RENDER& render, bool bFlush)
 {
   if (!m_isInitialized)
     return;
@@ -87,7 +88,8 @@ void CDebugRenderer::SetInfo(DEBUG_INFO_VIDEO& video, DEBUG_INFO_RENDER& render)
   // display of on-screen text. It would be appropriate for Libass
   // provide a way to allow fixed on-screen text display
   // without use all these fixed values.
-  m_adapter->FlushSubtitles();
+  if(bFlush)
+	m_adapter->FlushSubtitles();
   m_adapter->AddSubtitle(video.videoSource, 0., 5000000.);
   m_adapter->AddSubtitle(video.metaPrim, 0., 5000000.);
   m_adapter->AddSubtitle(video.metaLight, 0., 5000000.);

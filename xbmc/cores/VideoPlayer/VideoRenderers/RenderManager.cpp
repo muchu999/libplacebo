@@ -1154,14 +1154,7 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
 
     if (m_renderDebug)
     {
-      if (m_renderDebugVideo)
-      {
-        DEBUG_INFO_VIDEO video = m_pRenderer->GetDebugInfo(m_presentsource);
-        DEBUG_INFO_RENDER render = CServiceBroker::GetWinSystem()->GetDebugInfo();
-
-        m_debugRenderer.SetInfo(video, render);
-      }
-      else
+	  //if (!m_renderDebugVideo)
       {
         DEBUG_INFO_PLAYER info;
 
@@ -1179,8 +1172,15 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
 		info.jitter1 = StringUtils::Format("R jitterMax: {:4.1f}, JitterStdDev: {:4.1f}, Jitter: {:6.2f}", jitterMonitor1.calculatePeak() / 1000.0, std::sqrt(jitterMonitor1.calculateVariance()) / 1000.0, m_rawJitter / 1000.0);
 		info.jitter2 = StringUtils::Format("F JitterMax: {:4.1f}, JitterStdDev: {:4.1f}, Jitter: {:6.2f}", jitterMonitor2.calculatePeak() / 1000.0, std::sqrt(jitterMonitor2.calculateVariance()) / 1000.0, m_rawJitter2 / 1000.0);
 
-        m_debugRenderer.SetInfo(info);
+        m_debugRenderer.SetInfo(info, true);
       }
+	  //else
+	  {
+		DEBUG_INFO_VIDEO video = m_pRenderer->GetDebugInfo(m_presentsource);
+		DEBUG_INFO_RENDER render = CServiceBroker::GetWinSystem()->GetDebugInfo();
+
+		m_debugRenderer.SetInfo(video, render, false);
+	  }
 
       m_debugRenderer.Render(src, dst, view);
 

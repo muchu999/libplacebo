@@ -24,8 +24,8 @@ public:
   virtual ~CDebugRenderer();
   void Initialize();
   void Dispose();
-  void SetInfo(DEBUG_INFO_PLAYER& info);
-  void SetInfo(DEBUG_INFO_VIDEO& video, DEBUG_INFO_RENDER& render);
+  void SetInfo(DEBUG_INFO_PLAYER& info, bool bFlush);
+  void SetInfo(DEBUG_INFO_VIDEO& video, DEBUG_INFO_RENDER& render, bool bFlush);
   void Render(CRect& src, CRect& dst, CRect& view);
   void Flush();
 

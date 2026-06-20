@@ -97,7 +97,7 @@ public:
 	}
   }
 
-  double calculateVariance() const {
+  double calculateVariance(double& mean) const {
 	size_t count = getActiveCount();
 	if(count < 2) return 0.0;
 
@@ -105,7 +105,7 @@ public:
 	for(size_t i = 0; i < count; ++i) {
 	  sum += history [i];
 	}
-	double mean = sum / count;
+	mean = sum / count;
 
 	double varianceSum = 0.0;
 	for(size_t i = 0; i < count; ++i) {
@@ -390,7 +390,9 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	m_FrameMixerQueueErr,
 	m_FrameMixerQueueResets);
  
-  info.render3 = StringUtils::Format("Render time: {:0>4.1f}ms, max:{:0>4.1f}, stdDev:{:0>4.1f}", plbuffer->m_RenderDuration * 1000.0, renderTimeMonitor.calculatePeak() * 1000.0, std::sqrt(renderTimeMonitor.calculateVariance()) * 1000.0);
+  double mean;
+  double var = renderTimeMonitor.calculateVariance(mean);
+  info.render3 = StringUtils::Format("Render time: {:0>4.1f}ms, mean: {:0>4.1f}, max:{:0>4.1f}, stdDev:{:0>4.1f}", plbuffer->m_RenderDuration * 1000.0, mean*1000.0, renderTimeMonitor.calculatePeak() * 1000.0, std::sqrt(var) * 1000.0);
 
   return info;
 }
