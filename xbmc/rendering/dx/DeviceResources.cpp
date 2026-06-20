@@ -797,8 +797,8 @@ void DX::DeviceResources::ResizeBuffers()
     m_swapChain->GetDesc1(&scDesc);
     hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
                                     lround(m_outputSize.Height), scDesc.Format,
-	                                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
-	                                //cl (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+	                                //DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+	                                (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
 	NotifySwapchainListeners("CreateSwapChain");
 
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
@@ -849,7 +849,7 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.Stereo = bHWStereoEnabled;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 #ifdef TARGET_WINDOWS_DESKTOP
-    swapChainDesc.BufferCount = 2; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
+    swapChainDesc.BufferCount = 3; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
 #else
     swapChainDesc.BufferCount = 3; // Xbox don't like 6 backbuffers (3 is fine even for 4K 60 fps)
 #endif
@@ -857,8 +857,8 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.SwapEffect = CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin10)
                                    ? DXGI_SWAP_EFFECT_FLIP_DISCARD
                                    : DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-	//cl swapChainDesc.Flags = (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+    //swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	swapChainDesc.Flags = (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     swapChainDesc.SampleDesc.Count = 1;
     swapChainDesc.SampleDesc.Quality = 0;
@@ -910,10 +910,10 @@ void DX::DeviceResources::ResizeBuffers()
 	HRESULT hr = swapChain->QueryInterface(__uuidof(IDXGISwapChain2), (void**) &swapChain2);
 	if(SUCCEEDED(hr) && swapChain2)
 	{
-	  ComPtr<IDXGIDevice1> dxgiDevice;
-	  hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
+	  //ComPtr<IDXGIDevice1> dxgiDevice;
+	  //hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
 	  HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
-	  dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
+	  //dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
 	  swapChain2->Release();
 	}
 #endif
@@ -1202,6 +1202,7 @@ bool DX::DeviceResources::Begin()
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
 {
+  static bool forceHistoryReset;
   FinishCommandList();
 
   // The first argument instructs DXGI to block until VSync, putting the application
@@ -1213,29 +1214,122 @@ void DX::DeviceResources::Present()
   int64_t start = CurrentHostCounter();
   //cl HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
   HRESULT hr = m_swapChain->Present1(0, 0, &parameters);  // waitable object node
+  int64_t end = CurrentHostCounter();
+  int64_t presentDurationCounts = end - start;
+  //double presentDurationSeconds = static_cast<double>(presentDurationCounts) / freq;
+  //forceHistoryReset = false;
+  //if(presentDurationSeconds > 0.004) {
+  //forceHistoryReset = true;
+  //}
 
-  DXGI_FRAME_STATISTICS stats;
-  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
-	CLog::LogF(LOGDEBUG, "Stats {} {} {} {}", stats.PresentCount, stats.PresentRefreshCount, stats.SyncRefreshCount, stats.SyncGPUTime.QuadPart, stats.SyncQPCTime.QuadPart);
+  DXGI_FRAME_STATISTICS stats1;
+  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats1))) {
+	CLog::LogF(LOGDEBUG, "Stats {} {} {} {}", stats1.PresentCount, stats1.PresentRefreshCount, stats1.SyncRefreshCount, stats1.SyncGPUTime.QuadPart, stats1.SyncQPCTime.QuadPart);
   }
 
 #if 1
   //cl Take a look at jitter, present() sometimes takes a long time because of GPU memory copy
-  int64_t end = CurrentHostCounter();
   static int64_t lastEnd = 0;
   int64_t presentDuration = end - start;
   int64_t duration = end - lastEnd;
   lastEnd = end;
   CLog::LogF(LOGDEBUG,"Present duration: {} ms, Present Inter frame time: {} ms", presentDuration / (float)freq * 1000, duration / (float)freq * 1000);
+
 #endif
-#if 1
-  int64_t start2 = CurrentHostCounter();
-  DWORD waitResult = WaitForSingleObjectEx(DX::DeviceResources::Get()->dxgiWaitHandle, 1000, TRUE); // Block until the DXGI hardware queue is ready to accept a frame
-  int64_t end2 = CurrentHostCounter();
-  static INT64 lastEnd2 = 0;
-  CLog::LogF(LOGDEBUG, "Wait duration: {:f} ms, inter post wait: {:f} ms", (end2 - start2) / (float) freq * 1000, (end2 - lastEnd2) / (float) freq * 1000);
-  lastEnd2 = end2;
-#endif
+  static bool bInit = false;
+  static LARGE_INTEGER frequency;
+  static double countsPerSecond;
+  static double targetFrameDuration;
+  static LONGLONG targetCountsPerFrame;
+  static LONGLONG resetThresholdCounts;
+  static LONGLONG minCountsClamp;
+  static LONGLONG maxCountsClamp;
+  static LARGE_INTEGER nextFrameTime;
+  static UINT64 lastPresentCount;
+  static UINT64 lastRefreshCount;
+
+  if(!bInit)
+  {
+	QueryPerformanceFrequency(&frequency);
+	countsPerSecond = static_cast<double>(frequency.QuadPart);
+
+	// Establish standard 60Hz timing intervals
+	targetFrameDuration = 1.0 / 60.0;
+	targetCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
+
+	// Calculate a threshold: anything longer than 1.5 frames means an intentional drop or hitch
+	resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * countsPerSecond);
+
+	minCountsClamp = static_cast<LONGLONG>((1.0 / 200.0) * countsPerSecond);
+	maxCountsClamp = static_cast<LONGLONG>((1.0 / 30.0) * countsPerSecond);
+
+	nextFrameTime;
+	QueryPerformanceCounter(&nextFrameTime);
+
+	lastPresentCount = 0;
+	lastRefreshCount = 0;
+	forceHistoryReset = true; // Forces baseline capture on the very first frame
+    bInit = true;
+  }
+
+  // Self-Contained Pacing Engine
+  DXGI_FRAME_STATISTICS stats;
+  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
+
+	if(forceHistoryReset) {
+	  // Re-anchor instantly without adjusting the timer math
+	  lastPresentCount = stats.PresentCount;
+	  lastRefreshCount = stats.PresentRefreshCount;
+
+	  forceHistoryReset = false;
+	}
+	else {
+	  UINT64 deltaPresent = stats.PresentCount - lastPresentCount;
+	  UINT64 deltaRefresh = stats.PresentRefreshCount - lastRefreshCount;
+
+	  if(deltaPresent > 0) {
+		// If deltaRefresh matches deltaPresent, we are perfectly synced.
+		// If they diverge, we adjust our speed by 20 microseconds.
+		if(deltaRefresh > deltaPresent) {
+		  targetCountsPerFrame -= static_cast<LONGLONG>(0.00002 * countsPerSecond);
+		}
+		else if(deltaRefresh < deltaPresent) {
+		  targetCountsPerFrame += static_cast<LONGLONG>(0.00002 * countsPerSecond);
+		}
+
+		// Hard safety boundaries for the oscillator math
+		if(targetCountsPerFrame < minCountsClamp) targetCountsPerFrame = minCountsClamp;
+		if(targetCountsPerFrame > maxCountsClamp) targetCountsPerFrame = maxCountsClamp;
+
+		lastPresentCount = stats.PresentCount;
+		lastRefreshCount = stats.PresentRefreshCount;
+	  }
+	}
+  }
+
+  // Roll timeline forward by the calibrated step size
+  nextFrameTime.QuadPart += (targetCountsPerFrame - presentDurationCounts);
+
+  LARGE_INTEGER currentTime;
+  QueryPerformanceCounter(&currentTime);
+
+  // AUTOMATIC DROP DETECTION: 
+  // If the actual CPU time has slipped past our expected next frame target 
+  // by more than 1.5 frames, we have intentionally dropped frames or hitched.
+  if((currentTime.QuadPart - nextFrameTime.QuadPart) > resetThresholdCounts) {
+	forceHistoryReset = true;
+	nextFrameTime.QuadPart = currentTime.QuadPart; // Snap the timeline forward
+  }
+
+  // Precise CPU Wait Gate
+  CLog::LogF(LOGDEBUG, "Wait start for nextFrameTime current time: {}, nextFrameTime: {}, diff: {}", currentTime.QuadPart, nextFrameTime.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
+  while(currentTime.QuadPart < nextFrameTime.QuadPart) {
+	Sleep(0);
+	QueryPerformanceCounter(&currentTime);
+  }
+
+  CLog::LogF(LOGDEBUG, "Wait end for nextFrameTime");
+
 
   // If the device was removed either by a disconnection or a driver upgrade, we
   // must recreate all device resources.
