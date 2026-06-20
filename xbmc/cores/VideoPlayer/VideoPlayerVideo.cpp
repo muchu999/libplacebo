@@ -1167,8 +1167,10 @@ bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
     }
     else if (m_picture.pts == DVD_NOPTS_VALUE)
       m_picture.pts = m_picture.dts;
-	//cl upsample pts, many containers have very bad pts precision, e.g 1ms
+
+	//cl Upsample pts, many containers have not very good pts precision, e.g 1ms. We keep the raw one in a new variable in case some function is not happy with the new value...
 	double pts1 = m_picture.pts;
+	m_picture.rawPts = m_picture.pts;  
 	m_picture.pts = upSampler.update(m_picture.pts, m_picture.iFlags & DVP_FLAG_INTERLACED);  //cl don't use frametime here, it is sometime hardcoded to 1/(25fps)
 	static double oldPts = 0;
 	CLog::Log(LOGDEBUG, "pts1: {:f}ms, pts: {:f}ms, diff: {:f}ms, upsampler diff:{:f}ms", pts1/1000.0, m_picture.pts / 1000.0, (m_picture.pts - pts1) / 1000.0, (m_picture.pts - oldPts) / 1000.0);
@@ -1364,7 +1366,7 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
   }
 
   //try to calculate the framerate
-  m_ptsTracker.Add(pPicture->pts);
+  m_ptsTracker.Add(pPicture->rawPts);  // Function not happy with upsampled PTS if it takes too much time to converge, filter changed and seems fixed but not sure enough...
   if (!m_stalled)
     CalcFrameRate();
 
@@ -1380,7 +1382,7 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
   CLog::Log(LOGDEBUG, "config_framerate: {}, m_fStableFrameRate: {}, m_fFrameRate: {}, iPlayingClock: {} ", config_framerate, m_fStableFrameRate, m_fFrameRate, iPlayingClock);
   if (m_speed < 0)
   {
-    double renderPts;
+	double renderPts;
     int queued, discard;
     int lateframes;
     double inputPts = m_droppingStats.m_lastPts;
@@ -1433,7 +1435,7 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
 
   if (!m_renderManager.AddVideoPicture(*pPicture, m_bAbortOutput, deintMethod, (m_syncState == ESyncState::SYNC_STARTING)))
   {
-    m_droppingStats.AddOutputDropGain(pPicture->pts, 1);
+	m_droppingStats.AddOutputDropGain(pPicture->pts, 1);
     return OUTPUT_DROPPED;
   }
 

@@ -49,6 +49,7 @@ public:
   CVideoBuffer *videoBuffer = nullptr;
 
   double pts; // timestamp in seconds, used in the CVideoPlayer class to keep track of pts
+  double rawPts;
   double dts;
   unsigned int iFlags;
   double iRepeatPicture;
