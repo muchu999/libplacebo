@@ -1340,7 +1340,7 @@ CRendererPL::CRenderBufferImpl::~CRenderBufferImpl()
 
 void CRendererPL::CRenderBufferImpl::ReleasePicture()
 {
-  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ReleasePicture: index:{}, pts:{:.0f}", this->frameIdx, this->pts);
+  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "index:{}, pts:{:.0f}", this->frameIdx, this->pts);
   for (int i = 0; i < plFormat.num_planes; i++)
   {
 	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &pltex[i]);
@@ -1350,6 +1350,8 @@ void CRendererPL::CRenderBufferImpl::ReleasePicture()
 
 void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
 {
+  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "index:{}, pts:{:.0f}", this->frameIdx, picture.pts);
+  
   __super::AppendPicture(picture);
   hdrDoviRpu = picture.hdrDoviRpu;
   hdrMetadata = picture.hdrMetadata;
