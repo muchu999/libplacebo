@@ -943,9 +943,9 @@ void DX::DeviceResources::ResizeBuffers()
 
     // Ensure that DXGI does not queue more than one frame at a time. This both reduces latency and
     // ensures that the application will only render after each VSync, minimizing power consumption.
-    ComPtr<IDXGIDevice1> dxgiDevice;
-    hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
-    dxgiDevice->SetMaximumFrameLatency(1);
+    //ComPtr<IDXGIDevice1> dxgiDevice;
+    //hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
+    //dxgiDevice->SetMaximumFrameLatency(1);
 
     if (m_IsHDROutput)
       SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
@@ -1202,7 +1202,6 @@ bool DX::DeviceResources::Begin()
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
 {
-  static bool forceHistoryReset;
   FinishCommandList();
 
   // The first argument instructs DXGI to block until VSync, putting the application
@@ -1247,6 +1246,7 @@ void DX::DeviceResources::Present()
   static LARGE_INTEGER nextFrameTime;
   static UINT64 lastPresentCount;
   static UINT64 lastRefreshCount;
+  static bool forceHistoryReset; // Forces baseline capture on the very first frame
 
   if(!bInit)
   {
@@ -1254,7 +1254,7 @@ void DX::DeviceResources::Present()
 	countsPerSecond = static_cast<double>(frequency.QuadPart);
 
 	// Establish standard 60Hz timing intervals
-	targetFrameDuration = 1.0 / 60.0;
+	targetFrameDuration = 1.0 / CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
 	targetCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
 
 	// Calculate a threshold: anything longer than 1.5 frames means an intentional drop or hitch
@@ -1263,13 +1263,12 @@ void DX::DeviceResources::Present()
 	minCountsClamp = static_cast<LONGLONG>((1.0 / 200.0) * countsPerSecond);
 	maxCountsClamp = static_cast<LONGLONG>((1.0 / 30.0) * countsPerSecond);
 
-	nextFrameTime;
 	QueryPerformanceCounter(&nextFrameTime);
 
 	lastPresentCount = 0;
 	lastRefreshCount = 0;
 	forceHistoryReset = true; // Forces baseline capture on the very first frame
-    bInit = true;
+	bInit = true;
   }
 
   // Self-Contained Pacing Engine
@@ -1280,7 +1279,6 @@ void DX::DeviceResources::Present()
 	  // Re-anchor instantly without adjusting the timer math
 	  lastPresentCount = stats.PresentCount;
 	  lastRefreshCount = stats.PresentRefreshCount;
-
 	  forceHistoryReset = false;
 	}
 	else {
@@ -1308,7 +1306,7 @@ void DX::DeviceResources::Present()
   }
 
   // Roll timeline forward by the calibrated step size
-  nextFrameTime.QuadPart += (targetCountsPerFrame - presentDurationCounts);
+  nextFrameTime.QuadPart += targetCountsPerFrame;
 
   LARGE_INTEGER currentTime;
   QueryPerformanceCounter(&currentTime);
