@@ -1096,7 +1096,6 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
 
   iPlayingClock = m_pClock->GetClock(iCurrentClock, false); // snapshot current clock
 
-  CLog::Log(LOGDEBUG, "config_framerate: {}, m_fStableFrameRate: {}, m_fFrameRate: {}, iPlayingClock: {} ", config_framerate, m_fStableFrameRate, m_fFrameRate, iPlayingClock);
   if (m_speed < 0)
   {
 	double renderPts;
