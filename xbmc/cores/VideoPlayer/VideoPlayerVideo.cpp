@@ -623,7 +623,7 @@ public:
 	last_raw_pts = 0;
 
 	// Kalman States
-	est_duration_us = 33333.33; // Sensible 30fps baseline default
+	est_duration_us = 33333.33; // Default baseline (30fps)
 	P_pts = 1000.0;
 	P_dur = 1000.0;
 
@@ -632,7 +632,7 @@ public:
 	cadence_long_us = 0.0;
 
 	// Dynamic Truncation Tracking
-	detected_grid_us = 1.0; // Default to highest precision (1 microsecond)
+	detected_grid_us = 1.0;
   }
 
   double update(int64_t raw_pts_us, bool is_interlaced) {
@@ -650,10 +650,11 @@ public:
 	  }
 	}
 
-	// --- ADAPTIVE SEEK DETECTION ---
+	// --- ADAPTIVE SEEK / DISCONTINUITY DETECTION ---
 	if(is_initialized_) {
 	  double max_expected = is_interlaced_cadence ? cadence_long_us : est_duration_us;
 	  double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts + max_expected));
+	  // Triggers reset on true stream jumps or seeking actions
 	  if(deviation > (max_expected * 2.5)) {
 		reset(is_interlaced);
 		frame_count = 1;
@@ -688,13 +689,15 @@ public:
 	}
 	last_raw_pts = raw_pts_us;
 
-	// --- PHASE 2: CADENCE-AWARE PREDICTION ---
+	// --- PHASE 2: GLOBAL CADENCE PATTERN TRACKING ---
 	double current_step_prediction = est_duration_us;
-	double structural_threshold = std::max(2500.0, detected_grid_us * 2.5);
-	bool has_true_interlaced_cadence = is_interlaced_cadence &&
-	  ((cadence_long_us - cadence_short_us) > structural_threshold);
 
-	if(has_true_interlaced_cadence) {
+	// Support 3:2 pulldown patterns (24fps wrapped inside 30fps/60hz packages)
+	// Structural split must stand out cleanly above container quantization jitter
+	double structural_threshold = std::max(1500.0, detected_grid_us * 1.5);
+	bool has_true_cadence = (cadence_long_us - cadence_short_us) > structural_threshold;
+
+	if(has_true_cadence) {
 	  double pred_short = est_pts + cadence_short_us;
 	  double pred_long = est_pts + cadence_long_us;
 	  if(std::abs(static_cast<double>(raw_pts_us) - pred_short) < std::abs(static_cast<double>(raw_pts_us) - pred_long)) {
@@ -708,50 +711,52 @@ public:
 	  current_step_prediction = est_duration_us;
 	}
 
-	// --- FIX 1: REBALANCED COVARIANCE MATRIX ---
-	// Instead of linear multiplication scaling up to 250,000, we clamp the measurement noise floor.
-	const double R_pts = (detected_grid_us > 5.0) ? (detected_grid_us * 2.0) : 10.0;
-	const double Q_pts = 1.0;  // Lowered to prevent internal filter jitter
-	const double Q_dur = 0.01; // Tighter velocity constraint
+	// --- PHASE 3: FRAME-RATE ADAPTIVE COVARIANCE ---
+	// Tightens R for high-frame rates (16.6ms at 60fps) to eliminate high frequency jitter
+	double rate_scale = std::clamp(est_duration_us / 33333.33, 0.5, 2.0);
+	const double R_pts = (detected_grid_us > 5.0) ? (detected_grid_us * 1.5 * rate_scale) : 10.0;
+	const double Q_pts = 0.5 * rate_scale;
+	const double Q_dur = 0.005 * rate_scale;
 
 	double pred_pts = est_pts + current_step_prediction;
 
-	// Correct variance propagation: P_pts updates based on time variance contribution, not raw velocity value
+	// Normalized variance propagation path
 	P_pts += P_dur + Q_pts;
 	P_dur += Q_dur;
 
 	double K = P_pts / (P_pts + R_pts);
 	double measurement = static_cast<double>(raw_pts_us);
 
-	// --- FIX 2: INNOVATION DEADBAND ---
-	// If the measurement error is inside the expected quantization jitter window, 
-	// we shrink the innovation to prevent the filter from chasing truncation artifacts.
+	// --- PHASE 4: HIGH-PRECISION DEADBAND ---
+	// Clamped innovation deadband protects sub-millisecond timeline consistency
 	double innovation = measurement - pred_pts;
-	double deadband = detected_grid_us * 0.45; // Slightly less than half a grid width
+	double deadband = std::min(detected_grid_us * 0.40, 150.0);
+
 	if(std::abs(innovation) < deadband) {
-	  innovation = 0.0; // Trust the internal prediction completely inside this window
+	  innovation = 0.0;
 	}
 	else {
-	  // Smoothly scale innovation outside the deadband
 	  innovation = (innovation > 0) ? (innovation - deadband) : (innovation + deadband);
 	}
 
 	est_pts = pred_pts + K * innovation;
 
-	// --- PHASE 3: DYNAMIC VELOCITY FEEDBACK LEARNING ---
+	// --- PHASE 5: DYNAMIC CADENCE FEEDBACK LEARNING ---
 	double error = innovation * K;
 
-	if(!has_true_interlaced_cadence) {
-	  est_duration_us += error * 0.05;
+	if(!has_true_cadence) {
+	  // Smoothly follows true system clock deltas (e.g. 41.708ms for 23.976fps)
+	  est_duration_us += error * 0.04;
 	  cadence_short_us = est_duration_us;
 	  cadence_long_us = est_duration_us;
 	}
 	else {
+	  // Actively balances asymmetric lane patterns (e.g., WebRTC variations or Interlaced fields)
 	  if(current_step_prediction == cadence_short_us) {
-		cadence_short_us += error * 0.04;
+		cadence_short_us += error * 0.03;
 	  }
 	  else {
-		cadence_long_us += error * 0.04;
+		cadence_long_us += error * 0.03;
 	  }
 	  if(cadence_short_us > cadence_long_us) {
 		std::swap(cadence_short_us, cadence_long_us);
@@ -760,23 +765,25 @@ public:
 	}
 	P_pts = (1.0 - K) * P_pts;
 
-	// --- FIX 3: TIGHTENED BOUNDARY & MONOTONICITY GUARD ---
-	// Reduced window from 0.5 to 0.15 to heavily suppress visible snapping gaps.
-	double max_allowed_pts = static_cast<double>(raw_pts_us) + (detected_grid_us * 0.15);
+	// --- PHASE 6: BOUNDARY GUARD ---
+	// Window scaled down significantly to hide snaps on fractional 50Hz/60Hz streams
+	double guard_limit = std::min(detected_grid_us * 0.12, 60.0);
+	double max_allowed_pts = static_cast<double>(raw_pts_us) + guard_limit;
+
 	if(est_pts > max_allowed_pts) {
 	  est_pts = max_allowed_pts;
 	}
 	if(last_returned_pts_ >= 0.0 && est_pts <= last_returned_pts_) {
-	  est_pts = last_returned_pts_ + 1.0;
+	  est_pts = last_returned_pts_ + 1.0; // Enforce strict strict monotonicity
 	}
 	last_returned_pts_ = est_pts;
 
 	return est_pts;
   }
+
 private:
-  // Helper function to find greatest common divisor of floating point steps
   double compute_gcd(double a, double b) {
-	while(std::abs(b) > 0.001) { // Tolerable epsilon limit for microsecond variations
+	while(std::abs(b) > 0.01) {
 	  double z = std::fmod(a, b);
 	  a = b;
 	  b = z;
@@ -795,11 +802,8 @@ private:
   bool is_interlaced_cadence;
   double cadence_short_us;
   double cadence_long_us;
-
-  // Custom dynamic filter state
   double detected_grid_us;
 };
-
 
 UniversalFlagPTSUpsampler upSampler;
 
