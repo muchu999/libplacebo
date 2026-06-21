@@ -714,9 +714,11 @@ public:
 	// --- PHASE 3: FRAME-RATE ADAPTIVE COVARIANCE ---
 	// Tightens R for high-frame rates (16.6ms at 60fps) to eliminate high frequency jitter
 	double rate_scale = std::clamp(est_duration_us / 33333.33, 0.5, 2.0);
+	bool is_warming_up = (frame_count < 30);
+
+	const double Q_pts = (is_warming_up ? 0.5 : 0.01) * rate_scale;
+	const double Q_dur = (is_warming_up ? 0.005 : 0.0001) * rate_scale;
 	const double R_pts = (detected_grid_us > 5.0) ? (detected_grid_us * 1.5 * rate_scale) : 10.0;
-	const double Q_pts = 0.5 * rate_scale;
-	const double Q_dur = 0.005 * rate_scale;
 
 	double pred_pts = est_pts + current_step_prediction;
 
@@ -729,8 +731,9 @@ public:
 
 	// --- PHASE 4: HIGH-PRECISION DEADBAND ---
 	// Clamped innovation deadband protects sub-millisecond timeline consistency
+	double error_margin = is_warming_up ? 0.20 : 0.49; // Narrower deadband during startup
+	double deadband = std::min(detected_grid_us * error_margin, is_warming_up ? 150.0 : 490.0);
 	double innovation = measurement - pred_pts;
-	double deadband = std::min(detected_grid_us * 0.40, 150.0);
 
 	if(std::abs(innovation) < deadband) {
 	  innovation = 0.0;
@@ -767,14 +770,15 @@ public:
 
 	// --- PHASE 6: BOUNDARY GUARD ---
 	// Window scaled down significantly to hide snaps on fractional 50Hz/60Hz streams
-	double guard_limit = std::min(detected_grid_us * 0.12, 60.0);
+	double guard_limit = detected_grid_us * 0.55; // Allow the smooth line to breathe within the 1ms block
 	double max_allowed_pts = static_cast<double>(raw_pts_us) + guard_limit;
+	double min_allowed_pts = static_cast<double>(raw_pts_us) - guard_limit; // Add a lower bound guard too
 
 	if(est_pts > max_allowed_pts) {
 	  est_pts = max_allowed_pts;
 	}
-	if(last_returned_pts_ >= 0.0 && est_pts <= last_returned_pts_) {
-	  est_pts = last_returned_pts_ + 1.0; // Enforce strict strict monotonicity
+	if(est_pts < min_allowed_pts) {
+	  est_pts = min_allowed_pts;
 	}
 	last_returned_pts_ = est_pts;
 
