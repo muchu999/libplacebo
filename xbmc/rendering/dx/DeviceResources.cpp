@@ -945,7 +945,7 @@ void DX::DeviceResources::ResizeBuffers()
     // ensures that the application will only render after each VSync, minimizing power consumption.
     //ComPtr<IDXGIDevice1> dxgiDevice;
     //hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
-    //dxgiDevice->SetMaximumFrameLatency(1);
+    //  dxgiDevice->SetMaximumFrameLatency(1);
 
     if (m_IsHDROutput)
       SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
@@ -1205,9 +1205,9 @@ private:
   LARGE_INTEGER frequency;
   double countsPerSecond;
 
-  // App state variables
-  double targetRefreshRate = 60.0; // Current operational target
-  double lastRefreshRate = 0.0;    // Tracks changes to trigger a recalculation
+  // Global target tracking variables
+  double targetRefreshRate = 60.0; 
+  double lastRefreshRate = 0.0;
 
   LONGLONG baseCountsPerFrame = 0;
   LONGLONG targetCountsPerFrame = 0;
@@ -1216,109 +1216,98 @@ private:
   LONGLONG maxCountsClamp = 0;
   LONGLONG resetThresholdCounts = 0;
 
-  LARGE_INTEGER nextFrameTime;
-
-  UINT64 lastPresentCount = 0;
-  UINT64 lastRefreshCount = 0;
-  bool forceHistoryReset = true;
-  int settleFrameCounter = 0;
-
+  LARGE_INTEGER nextFrameTime = {};
+  LARGE_INTEGER lastFrameTime = {};
 public:
   CPacer()
   {
 	QueryPerformanceFrequency(&frequency);
 	countsPerSecond = static_cast<double>(frequency.QuadPart);
-	QueryPerformanceCounter(&nextFrameTime);
-  }
 
+	// Global target tracking variables
+	targetRefreshRate = 0; 
+	lastRefreshRate = 0.0;
+
+	baseCountsPerFrame = 0;
+	targetCountsPerFrame = 0;
+	 adaptiveStepCounts = 0;
+	minCountsClamp = 0;
+	maxCountsClamp = 0;
+	resetThresholdCounts = 0;
+
+	QueryPerformanceCounter(&nextFrameTime);
+	lastFrameTime = nextFrameTime;
+  }
   void update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, double presentDuration)
   {
-	// 4. Delta-Normalized Adaptive Pacing
-	DXGI_FRAME_STATISTICS stats;
-	if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
-	  if(forceHistoryReset || settleFrameCounter > 0) {
-		lastPresentCount = stats.PresentCount;
-		lastRefreshCount = stats.PresentRefreshCount;
+	static LONGLONG actualFramePeriod = 0;
 
-		if(settleFrameCounter > 0) {
-		  settleFrameCounter--;
-		}
-		else {
-		  forceHistoryReset = false;
-		}
+	// 6. CPU-SIDE PHASE LOCKED LOOP (Bypasses buggy GetFrameStatistics entirely)
+	// Compare our actual physical CPU wake period against our strict hardware baseline target
+	if(actualFramePeriod > 0) {
+	  if(actualFramePeriod > baseCountsPerFrame) {
+		// The loop ran too slow (stalled by OS scheduling). Shave time off the next target to catch up.
+		targetCountsPerFrame -= adaptiveStepCounts;
 	  }
-	  else {
-		UINT64 deltaPresent = stats.PresentCount - lastPresentCount;
-		UINT64 deltaRefresh = stats.PresentRefreshCount - lastRefreshCount;
-
-		if(deltaPresent > 0 && deltaRefresh > 0) {
-		  // Normalize any hardware or driver-level token bunching
-		  UINT64 normalizedPresent = 1;
-		  UINT64 normalizedRefresh = (deltaRefresh > deltaPresent) ? 2 : ((deltaRefresh < deltaPresent) ? 0 : 1);
-
-		  if(normalizedRefresh > normalizedPresent) {
-			targetCountsPerFrame -= adaptiveStepCounts; // CPU too slow -> Speed up
-		  }
-		  else if(normalizedRefresh < normalizedPresent) {
-			targetCountsPerFrame += adaptiveStepCounts; // CPU too fast -> Slow down
-		  }
-		  else {
-			// Perfect sync lock. Decay gently back toward the center of our current mode.
-			if(targetCountsPerFrame > baseCountsPerFrame) targetCountsPerFrame--;
-			if(targetCountsPerFrame < baseCountsPerFrame) targetCountsPerFrame++;
-		  }
-
-		  // Enforce safety limits proportional to our current frequency configuration
-		  if(targetCountsPerFrame < minCountsClamp) targetCountsPerFrame = minCountsClamp;
-		  if(targetCountsPerFrame > maxCountsClamp) targetCountsPerFrame = maxCountsClamp;
-
-		  lastPresentCount = stats.PresentCount;
-		  lastRefreshCount = stats.PresentRefreshCount;
-		}
+	  else if(actualFramePeriod < baseCountsPerFrame) {
+		// The loop ran too fast. Add padding time to the next target to slow it down.
+		targetCountsPerFrame += adaptiveStepCounts;
 	  }
+
+	  // Keep the oscillator clamped safely within a tight 5% window of the target HZ
+	  if(targetCountsPerFrame < minCountsClamp) targetCountsPerFrame = minCountsClamp;
+	  if(targetCountsPerFrame > maxCountsClamp) targetCountsPerFrame = maxCountsClamp;
 	}
 
-	// 5. Absolute Re-Anchor Fallback
-	static LARGE_INTEGER frameStartTime = {};
-	nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
-
+	// 7. ADVANCE TIMELINE ABSOLUTELY
+	// Advance the frame target using the dynamically tuned step size.
+	nextFrameTime.QuadPart += targetCountsPerFrame;
+	
+	targetRefreshRate = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
 	// 1. DYNAMIC RE-INDEX CHECK:
-	double targetRefreshRate = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
+	// Safely recalculates all mathematical bounds the exact frame the frequency changes
 	if(targetRefreshRate != lastRefreshRate) {
 	  double targetFrameDuration = 1.0 / targetRefreshRate;
 
 	  baseCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
-	  targetCountsPerFrame = baseCountsPerFrame; // Reset our tracking oscillator to center
+	  targetCountsPerFrame = baseCountsPerFrame; // Reset oscillator to center
 
-	  // Scale our tuning steps proportionally to the new target frame duration
-	  adaptiveStepCounts = static_cast<LONGLONG>(targetFrameDuration * 0.005 * countsPerSecond);
-	  minCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 0.90) * countsPerSecond);
-	  maxCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 1.10) * countsPerSecond);
+	  // Setup tiny, high-precision tuning steps (0.1% of a frame window)
+	  adaptiveStepCounts = static_cast<LONGLONG>(targetFrameDuration * 0.001 * countsPerSecond);
+	  minCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 0.95) * countsPerSecond);
+	  maxCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 1.05) * countsPerSecond);
 	  resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * countsPerSecond);
 
-	  // Force a history reset and give the monitor hardware 15 frames to physically settle
-	  settleFrameCounter = 15;
-	  forceHistoryReset = true;
-
-	  lastRefreshRate = targetRefreshRate; // Commit state change
+	  QueryPerformanceCounter(&nextFrameTime);
+	  lastFrameTime = nextFrameTime;
+	  lastRefreshRate = targetRefreshRate;
 	}
 
 	LARGE_INTEGER currentTime;
 	QueryPerformanceCounter(&currentTime);
 
-	// 2. Timeline Safety Recouper
+	// 2. TIMELINE SAFETY RECOUPER: Prevents runaway debt if the OS hitches or window moves
 	if((currentTime.QuadPart - nextFrameTime.QuadPart) > resetThresholdCounts) {
-	  forceHistoryReset = true;
 	  nextFrameTime.QuadPart = currentTime.QuadPart;
 	}
 
-	// 3. Precise CPU Timing Gate
-	CLog::LogF(LOGDEBUG, "Wait start for nextFrameTime current time: {}, nextFrameTime: {}, diff: {}", currentTime.QuadPart, nextFrameTime.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
+	// 3. REGULAR PACING TIMING GATE: Forces microsecond-accurate scheduling stability
 	while(currentTime.QuadPart < nextFrameTime.QuadPart) {
-	  Sleep(0);
+	  // Use Sleep(0) only if we have more than 1ms left, otherwise spin-lock 
+	  // to prevent the OS scheduler from introducing 2ms quantization stutters
+	  if((nextFrameTime.QuadPart - currentTime.QuadPart) > static_cast<LONGLONG>(0.001 * countsPerSecond)) {
+		Sleep(1);
+	  }
+	  else {
+		Sleep(0);
+	  }
 	  QueryPerformanceCounter(&currentTime);
 	}
-	frameStartTime = currentTime;
+
+	// 4. MEASURE THE TRUE CPU FRAME PERIOD
+	// Calculate exactly how long the PREVIOUS frame actually took from wake-to-wake
+	actualFramePeriod = currentTime.QuadPart - lastFrameTime.QuadPart;
+	lastFrameTime = currentTime;
   }
 };
 
