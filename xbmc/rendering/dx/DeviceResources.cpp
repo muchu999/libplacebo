@@ -797,8 +797,8 @@ void DX::DeviceResources::ResizeBuffers()
     m_swapChain->GetDesc1(&scDesc);
     hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
                                     lround(m_outputSize.Height), scDesc.Format,
-	                                //DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
-	                                (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+	                                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+	                                //(windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
 	NotifySwapchainListeners("CreateSwapChain");
 
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
@@ -857,8 +857,8 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.SwapEffect = CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin10)
                                    ? DXGI_SWAP_EFFECT_FLIP_DISCARD
                                    : DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    //swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-	swapChainDesc.Flags = (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+	//swapChainDesc.Flags = (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
 	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     swapChainDesc.SampleDesc.Count = 1;
     swapChainDesc.SampleDesc.Quality = 0;
@@ -913,7 +913,7 @@ void DX::DeviceResources::ResizeBuffers()
 	  //ComPtr<IDXGIDevice1> dxgiDevice;
 	  //hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
 	  HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
-	  //dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
+	  dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
 	  swapChain2->Release();
 	}
 #endif
@@ -1204,98 +1204,57 @@ class CPacer
 private:
   LARGE_INTEGER frequency;
   double countsPerSecond;
-
-  // Global target tracking variables
-  double targetRefreshRate = 60.0; 
+  double targetRefreshRate = 60.0; // Dynamically switch to 24.0, 60.0, 144.0, etc.
   double lastRefreshRate = 0.0;
-
-  LONGLONG baseCountsPerFrame = 0;
-  LONGLONG targetCountsPerFrame = 0;
-  LONGLONG adaptiveStepCounts = 0;
-  LONGLONG minCountsClamp = 0;
-  LONGLONG maxCountsClamp = 0;
-  LONGLONG resetThresholdCounts = 0;
-
-  LARGE_INTEGER nextFrameTime = {};
-  LARGE_INTEGER lastFrameTime = {};
+  LONGLONG countsPerFrame = 0;
+  LONGLONG hitchThreshold = 0;
+  LARGE_INTEGER nextFrameTarget;
 public:
   CPacer()
   {
 	QueryPerformanceFrequency(&frequency);
 	countsPerSecond = static_cast<double>(frequency.QuadPart);
-
-	// Global target tracking variables
-	targetRefreshRate = 0; 
+	targetRefreshRate = 0.0; // Dynamically switch to 24.0, 60.0, 144.0, etc.
 	lastRefreshRate = 0.0;
-
-	baseCountsPerFrame = 0;
-	targetCountsPerFrame = 0;
-	 adaptiveStepCounts = 0;
-	minCountsClamp = 0;
-	maxCountsClamp = 0;
-	resetThresholdCounts = 0;
-
-	QueryPerformanceCounter(&nextFrameTime);
-	lastFrameTime = nextFrameTime;
+	countsPerFrame = 0;
+	hitchThreshold = 0;
+	QueryPerformanceCounter(&nextFrameTarget);
   }
   void update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, double presentDuration)
   {
-	static LONGLONG actualFramePeriod = 0;
-
-	// 6. CPU-SIDE PHASE LOCKED LOOP (Bypasses buggy GetFrameStatistics entirely)
-	// Compare our actual physical CPU wake period against our strict hardware baseline target
-	if(actualFramePeriod > 0) {
-	  if(actualFramePeriod > baseCountsPerFrame) {
-		// The loop ran too slow (stalled by OS scheduling). Shave time off the next target to catch up.
-		targetCountsPerFrame -= adaptiveStepCounts;
-	  }
-	  else if(actualFramePeriod < baseCountsPerFrame) {
-		// The loop ran too fast. Add padding time to the next target to slow it down.
-		targetCountsPerFrame += adaptiveStepCounts;
-	  }
-
-	  // Keep the oscillator clamped safely within a tight 5% window of the target HZ
-	  if(targetCountsPerFrame < minCountsClamp) targetCountsPerFrame = minCountsClamp;
-	  if(targetCountsPerFrame > maxCountsClamp) targetCountsPerFrame = maxCountsClamp;
-	}
-
-	// 7. ADVANCE TIMELINE ABSOLUTELY
-	// Advance the frame target using the dynamically tuned step size.
-	nextFrameTime.QuadPart += targetCountsPerFrame;
-	
-	targetRefreshRate = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
 	// 1. DYNAMIC RE-INDEX CHECK:
-	// Safely recalculates all mathematical bounds the exact frame the frequency changes
+	// Instantly recalculates our absolute time step when the frequency changes
+	targetRefreshRate = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
 	if(targetRefreshRate != lastRefreshRate) {
 	  double targetFrameDuration = 1.0 / targetRefreshRate;
+	  countsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
+	  hitchThreshold = countsPerFrame * 2; // Threshold to catch major OS freezes
 
-	  baseCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
-	  targetCountsPerFrame = baseCountsPerFrame; // Reset oscillator to center
-
-	  // Setup tiny, high-precision tuning steps (0.1% of a frame window)
-	  adaptiveStepCounts = static_cast<LONGLONG>(targetFrameDuration * 0.001 * countsPerSecond);
-	  minCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 0.95) * countsPerSecond);
-	  maxCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 1.05) * countsPerSecond);
-	  resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * countsPerSecond);
-
-	  QueryPerformanceCounter(&nextFrameTime);
-	  lastFrameTime = nextFrameTime;
+	  // Re-anchor the timeline baseline safely to the current time
+	  QueryPerformanceCounter(&nextFrameTarget);
 	  lastRefreshRate = targetRefreshRate;
 	}
+
+	// 6. THE IMMUTABLE TIMELINE STEP:
+	// Step our target forward by the exact mathematical duration. 
+	nextFrameTarget.QuadPart += countsPerFrame;
 
 	LARGE_INTEGER currentTime;
 	QueryPerformanceCounter(&currentTime);
 
-	// 2. TIMELINE SAFETY RECOUPER: Prevents runaway debt if the OS hitches or window moves
-	if((currentTime.QuadPart - nextFrameTime.QuadPart) > resetThresholdCounts) {
-	  nextFrameTime.QuadPart = currentTime.QuadPart;
+	// 2. MAJOR HITCH / RECOVERY GATE:
+	// If an external OS stall or window move pushes the current time past 
+	// our target by more than 2 frames, snap the timeline straight forward.
+	if((currentTime.QuadPart - nextFrameTarget.QuadPart) > hitchThreshold) {
+	  nextFrameTarget.QuadPart = currentTime.QuadPart;
 	}
 
-	// 3. REGULAR PACING TIMING GATE: Forces microsecond-accurate scheduling stability
-	while(currentTime.QuadPart < nextFrameTime.QuadPart) {
-	  // Use Sleep(0) only if we have more than 1ms left, otherwise spin-lock 
-	  // to prevent the OS scheduler from introducing 2ms quantization stutters
-	  if((nextFrameTime.QuadPart - currentTime.QuadPart) > static_cast<LONGLONG>(0.001 * countsPerSecond)) {
+	// 3. THE ABSOLUTE CPU TIMING GATE:
+	// Perfectly throttles your fast frames to a rock-solid, regular pace.
+	while(currentTime.QuadPart < nextFrameTarget.QuadPart) 
+	{
+	  // High-precision hybrid sleep/spin to eliminate OS scheduling jitter
+	  if((nextFrameTarget.QuadPart - currentTime.QuadPart) > static_cast<LONGLONG>(0.001 * countsPerSecond)) {
 		Sleep(1);
 	  }
 	  else {
@@ -1303,11 +1262,6 @@ public:
 	  }
 	  QueryPerformanceCounter(&currentTime);
 	}
-
-	// 4. MEASURE THE TRUE CPU FRAME PERIOD
-	// Calculate exactly how long the PREVIOUS frame actually took from wake-to-wake
-	actualFramePeriod = currentTime.QuadPart - lastFrameTime.QuadPart;
-	lastFrameTime = currentTime;
   }
 };
 
@@ -1325,6 +1279,7 @@ void DX::DeviceResources::Present()
   // Present frame
   DXGI_PRESENT_PARAMETERS parameters = {};
   UINT64 start = CurrentHostCounter();
+  DX::DeviceResources::Get()->GetImmediateContext()->Flush();
   HRESULT hr = m_swapChain->Present1(0, 0, &parameters);
   UINT64 end = CurrentHostCounter();
   UINT64 presentDuration = end - start;
