@@ -1229,7 +1229,7 @@ public:
 	countsPerSecond = static_cast<double>(frequency.QuadPart);
 	QueryPerformanceCounter(&nextFrameTime);
   }
-  void update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, double presentDuration)
+  void Update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain)
   {
 
 	static LARGE_INTEGER frameStartTime = {};
@@ -1317,6 +1317,7 @@ public:
 	}
 
 	// 3. Precise CPU Timing Gate
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "current time: {}, nextFrameTime: {}, diff: {}", (double) currentTime.QuadPart/frequency.QuadPart, (double) nextFrameTime.QuadPart/frequency.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
 	while(currentTime.QuadPart < nextFrameTime.QuadPart) {
 	  Sleep(0);
 	  QueryPerformanceCounter(&currentTime);
@@ -1326,7 +1327,7 @@ public:
   }
 };
 
-CPacer pacer;
+CPacer Pacer;
 
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
@@ -1340,12 +1341,13 @@ void DX::DeviceResources::Present()
   // Present frame
   DXGI_PRESENT_PARAMETERS parameters = {};
   UINT64 start = CurrentHostCounter();
-  DX::DeviceResources::Get()->GetImmediateContext()->Flush();
+  //DX::DeviceResources::Get()->GetImmediateContext()->Flush();
   HRESULT hr = m_swapChain->Present1(0, 0, &parameters);
+  //DwmFlush();
   UINT64 end = CurrentHostCounter();
   UINT64 presentDuration = end - start;
   UINT64 period = end - lastEnd;
-  lastEnd = end;
+  lastEnd = end; 
 
   // Stats
   DXGI_FRAME_STATISTICS stats1;
@@ -1358,10 +1360,10 @@ void DX::DeviceResources::Present()
   }
 
   // Log
-  CLog::LogF(LOGDEBUG,"Present duration: {} ms, Present period: {} ms, PresentCount = {}, PresentRefreshCount = {}", presentDuration / (float)freq * 1000, period / (float)freq * 1000, PresentCount, PresentRefreshCount);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {}, Present period: {}, PresentCount = {}, PresentRefreshCount = {}", (double) presentDuration / freq, (double) period / freq, PresentCount, PresentRefreshCount);
 
   // Pacer
-  pacer.update(m_swapChain, presentDuration);
+  Pacer.Update(m_swapChain);
 
   // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
