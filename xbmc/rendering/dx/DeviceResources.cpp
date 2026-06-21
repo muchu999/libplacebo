@@ -914,7 +914,7 @@ void DX::DeviceResources::ResizeBuffers()
 	  //hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
 	  HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
 	  //dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
-	  //swapChain2->Release();
+	  swapChain2->Release();
 	}
 #endif
 	
@@ -1304,6 +1304,9 @@ public:
 	  }
 	}
 
+	// 5. Absolute Re-Anchor Fallback
+	nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
+
 	LARGE_INTEGER currentTime;
 	QueryPerformanceCounter(&currentTime);
 
@@ -1320,9 +1323,6 @@ public:
 	}
 
 	frameStartTime = currentTime;
-
-	// 5. Absolute Re-Anchor Fallback
-	nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
   }
 };
 
