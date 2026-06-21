@@ -1201,11 +1201,12 @@ bool DX::DeviceResources::Begin()
 
 class CPacer
 {
+private:
   LARGE_INTEGER frequency;
   double countsPerSecond;
 
   // App state variables
-  double targetRefreshRate = 60.0; // Current operational target (24.0 or 60.0)
+  double targetRefreshRate = 60.0; // Current operational target
   double lastRefreshRate = 0.0;    // Tracks changes to trigger a recalculation
 
   LONGLONG baseCountsPerFrame = 0;
@@ -1221,6 +1222,7 @@ class CPacer
   UINT64 lastRefreshCount = 0;
   bool forceHistoryReset = true;
   int settleFrameCounter = 0;
+
 public:
   CPacer()
   {
@@ -1281,8 +1283,6 @@ public:
 	nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
 
 	// 1. DYNAMIC RE-INDEX CHECK:
-	// If the engine state or player changes the refresh rate, immediately 
-	// recalculate our math constants to prevent a timeline crash.
 	double targetRefreshRate = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
 	if(targetRefreshRate != lastRefreshRate) {
 	  double targetFrameDuration = 1.0 / targetRefreshRate;
@@ -1318,8 +1318,6 @@ public:
 	  Sleep(0);
 	  QueryPerformanceCounter(&currentTime);
 	}
-	CLog::LogF(LOGDEBUG, "Wait end for nextFrameTime");
-
 	frameStartTime = currentTime;
   }
 };
@@ -1329,43 +1327,38 @@ CPacer pacer;
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
 {
+  static UINT64 freq = CurrentHostFrequency();
+  static UINT64 lastEnd = 0;
+
+  //
   FinishCommandList();
 
-  // The first argument instructs DXGI to block until VSync, putting the application
-  // to sleep until the next VSync. This ensures we don't waste any cycles rendering
-  // frames that will never be displayed to the screen.
-  CLog::LogF(LOGDEBUG, "Present start");
+  // Present frame
   DXGI_PRESENT_PARAMETERS parameters = {};
-  static int64_t freq = CurrentHostFrequency();
-  int64_t start = CurrentHostCounter();
-  //cl HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
-  HRESULT hr = m_swapChain->Present1(0, 0, &parameters);  // waitable object node
-  int64_t end = CurrentHostCounter();
-  int64_t presentDurationCounts = end - start;
-  //double presentDurationSeconds = static_cast<double>(presentDurationCounts) / freq;
-  //forceHistoryReset = false;
-  //if(presentDurationSeconds > 0.004) {
-  //forceHistoryReset = true;
-  //}
+  UINT64 start = CurrentHostCounter();
+  HRESULT hr = m_swapChain->Present1(0, 0, &parameters);
+  UINT64 end = CurrentHostCounter();
+  UINT64 presentDuration = end - start;
+  UINT64 period = end - lastEnd;
+  lastEnd = end;
 
+  // Stats
   DXGI_FRAME_STATISTICS stats1;
-  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats1))) {
-	CLog::LogF(LOGDEBUG, "Stats {} {} {} {}", stats1.PresentCount, stats1.PresentRefreshCount, stats1.SyncRefreshCount, stats1.SyncGPUTime.QuadPart, stats1.SyncQPCTime.QuadPart);
+  UINT64 PresentCount = 0;
+  UINT64 PresentRefreshCount = 0;
+  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats1))) 
+  {
+	PresentCount = stats1.PresentCount;
+	PresentRefreshCount = stats1.PresentRefreshCount;
   }
 
-  #if 1
-  //cl Take a look at jitter, present() sometimes takes a long time because of GPU memory copy
-  static int64_t lastEnd = 0;
-  int64_t presentDuration = end - start;
-  int64_t duration = end - lastEnd;
-  lastEnd = end;
-  CLog::LogF(LOGDEBUG,"Present duration: {} ms, Present Inter frame time: {} ms", presentDuration / (float)freq * 1000, duration / (float)freq * 1000);
-  #endif
+  // Log
+  CLog::LogF(LOGDEBUG,"Present duration: {} ms, Present period: {} ms, PresentCount = {}, PresentRefreshCount = {}", presentDuration / (float)freq * 1000, period / (float)freq * 1000, PresentCount, PresentRefreshCount);
 
+  // Pacer
   pacer.update(m_swapChain, presentDuration);
 
-  // If the device was removed either by a disconnection or a driver upgrade, we
-  // must recreate all device resources.
+  // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
   {
     HandleDeviceLost(hr == DXGI_ERROR_DEVICE_REMOVED);
