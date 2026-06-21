@@ -942,6 +942,9 @@ public:
 	is_interlaced_cadence_ = is_interlaced;
 	cadence_short_us_ = 0.0;
 	cadence_long_us_ = 0.0;
+
+	// Dynamic Truncation Tracking
+	detected_grid_us_ = 1.0; // Default to highest precision (1 microsecond)
   }
 
   double update(int64_t raw_pts_us, bool is_interlaced) {
@@ -951,11 +954,9 @@ public:
 	if(is_initialized_ && (is_interlaced != is_interlaced_cadence_)) {
 	  is_interlaced_cadence_ = is_interlaced;
 	  if(!is_interlaced_cadence_) {
-		// Interlaced -> Progressive: Collapse back to a single average velocity
 		est_duration_us_ = (cadence_short_us_ + cadence_long_us_) / 2.0;
 	  }
 	  else {
-		// Progressive -> Interlaced: Initialize cadence limits around current baseline
 		cadence_short_us_ = est_duration_us_;
 		cadence_long_us_ = est_duration_us_;
 	  }
@@ -965,7 +966,6 @@ public:
 	if(is_initialized_) {
 	  double max_expected = is_interlaced_cadence_ ? cadence_long_us_ : est_duration_us_;
 	  double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts_ + max_expected));
-
 	  if(deviation > (max_expected * 2.5)) {
 		reset(is_interlaced);
 		frame_count_ = 1;
@@ -977,36 +977,41 @@ public:
 	  est_pts_ = static_cast<double>(raw_pts_us);
 	  last_raw_pts_ = raw_pts_us;
 	  is_interlaced_cadence_ = is_interlaced;
-
-	  // Seed base guesses
 	  cadence_short_us_ = 33333.33;
 	  cadence_long_us_ = 33333.33;
-
 	  is_initialized_ = true;
 	  return est_pts_;
 	}
 
-	// On the second frame, catch the very first delta to instantly set up our tracking velocities
-	if(frame_count_ == 2) {
-	  double initial_delta = static_cast<double>(raw_pts_us - last_raw_pts_);
-	  if(initial_delta > 0.0) {
+	// --- DYNAMIC GRID DETECTION ---
+	// Compute delta to observe truncation grids (like 1000us for 1ms, 10000us for 10ms, etc.)
+	int64_t raw_delta = std::abs(raw_pts_us - last_raw_pts_);
+	if(raw_delta > 0) {
+	  if(frame_count_ == 2) {
+		// Initialize our grid with the first observed jump
+		detected_grid_us_ = static_cast<double>(raw_delta);
+
+		// Seed initial velocities
+		double initial_delta = static_cast<double>(raw_delta);
 		est_duration_us_ = initial_delta;
 		cadence_short_us_ = initial_delta;
 		cadence_long_us_ = initial_delta;
+	  }
+	  else {
+		// Update running grid using a fractional GCD approach
+		detected_grid_us_ = compute_gcd(detected_grid_us_, static_cast<double>(raw_delta));
+		// Clamp floor to 1 microsecond to prevent precision breakdown
+		if(detected_grid_us_ < 1.0) detected_grid_us_ = 1.0;
 	  }
 	}
 	last_raw_pts_ = raw_pts_us;
 
 	// --- PHASE 2: CADENCE-AWARE PREDICTION ---
 	double current_step_prediction = est_duration_us_;
-
 	if(is_interlaced_cadence_) {
-	  // Check if the current frame aligns better with the short-step or long-step timeline
 	  double pred_short = est_pts_ + cadence_short_us_;
 	  double pred_long = est_pts_ + cadence_long_us_;
-
-	  if(std::abs(static_cast<double>(raw_pts_us) - pred_short) <
-		std::abs(static_cast<double>(raw_pts_us) - pred_long)) {
+	  if(std::abs(static_cast<double>(raw_pts_us) - pred_short) < std::abs(static_cast<double>(raw_pts_us) - pred_long)) {
 		current_step_prediction = cadence_short_us_;
 	  }
 	  else {
@@ -1014,9 +1019,12 @@ public:
 	  }
 	}
 
-	// Precision Auto-Detection: check if data is 1ms truncated or high precision
-	bool is_truncated = (raw_pts_us % 1000 == 0);
-	const double R_pts = is_truncated ? 500000.0 : 10.0;
+	// --- GENERALIZED NOISE FILTERING ---
+	// Dynamically scale R_pts based on the observed truncation grid.
+	// A grid of 1.0us implies high-precision source -> low R (trust measurement)
+	// A grid of 1000.0us implies 1ms truncation -> high R (smooth over the steps)
+	const double R_pts = (detected_grid_us_ > 5.0) ? (detected_grid_us_ * 500.0) : 10.0;
+
 	const double Q_pts = 5.0;
 	const double Q_dur = 0.05;
 
@@ -1026,7 +1034,6 @@ public:
 
 	double K = P_pts_ / (P_pts_ + R_pts);
 	double measurement = static_cast<double>(raw_pts_us);
-
 	est_pts_ = pred_pts + K * (measurement - pred_pts);
 
 	// --- PHASE 3: DYNAMIC VELOCITY FEEDBACK LEARNING ---
@@ -1035,40 +1042,43 @@ public:
 	  est_duration_us_ += error * 0.05;
 	}
 	else {
-	  // Adaptive Cadence Multi-Threading:
-	  // Only update the specific cadence lane that matched this frame's reality.
-	  // This prevents a uniform stream from shifting, while allowing 3:2 pulldown
-	  // to expand into separate 33ms and 50ms branches smoothly.
 	  if(current_step_prediction == cadence_short_us_) {
 		cadence_short_us_ += error * 0.04;
 	  }
 	  else {
 		cadence_long_us_ += error * 0.04;
 	  }
-
-	  // If the values ever cross over structurally, sort them to maintain order
 	  if(cadence_short_us_ > cadence_long_us_) {
 		std::swap(cadence_short_us_, cadence_long_us_);
 	  }
 	}
-
 	P_pts_ = (1.0 - K) * P_pts_;
 
 	// --- PHASE 4: BOUNDARY & MONOTONICITY GUARD ---
-	double max_allowed_pts = static_cast<double>(raw_pts_us) + 500.0;
+	// Guard window scales with the detected truncation grid to allow breathing room
+	double max_allowed_pts = static_cast<double>(raw_pts_us) + (detected_grid_us_ * 0.5);
 	if(est_pts_ > max_allowed_pts) {
 	  est_pts_ = max_allowed_pts;
 	}
-
 	if(last_returned_pts_ >= 0.0 && est_pts_ <= last_returned_pts_) {
 	  est_pts_ = last_returned_pts_ + 1.0;
 	}
-
 	last_returned_pts_ = est_pts_;
-	return est_pts_;
+
+	return est_pts;
   }
 
 private:
+  // Helper function to find greatest common divisor of floating point steps
+  double compute_gcd(double a, double b) {
+	while(std::abs(b) > 0.001) { // Tolerable epsilon limit for microsecond variations
+	  double z = std::fmod(a, b);
+	  a = b;
+	  b = z;
+	}
+	return a;
+  }
+
   bool is_initialized_;
   int64_t frame_count_;
   int64_t last_raw_pts_;
@@ -1077,11 +1087,14 @@ private:
   double P_pts_;
   double P_dur_;
   double last_returned_pts_;
-
   bool is_interlaced_cadence_;
   double cadence_short_us_;
   double cadence_long_us_;
+
+  // Custom dynamic filter state
+  double detected_grid_us_;
 };
+
 
 UniversalFlagPTSUpsampler upSampler;
 
@@ -1333,7 +1346,6 @@ void CVideoPlayerVideo::ProcessOverlays(const VideoPicture* pSource, double pts)
 
 CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPicture* pPicture)
 {
-  CLog::Log(LOGDEBUG, "Start");
   m_bAbortOutput = false;
 
   if (m_processInfo.GetVideoStereoMode() != pPicture->stereoMode)
@@ -1417,7 +1429,6 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
   // don't wait when going ff
   if (m_speed > DVD_PLAYSPEED_NORMAL)
     maxWaitTime = std::max(timeToDisplay, 0ms);
-  CLog::Log(LOGDEBUG, "maxWaitTime: {}", maxWaitTime);
   int buffer = m_renderManager.WaitForBuffer(m_bAbortOutput, maxWaitTime);
   if (buffer < 0)
   {
@@ -1439,7 +1450,6 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
     return OUTPUT_DROPPED;
   }
 
-  CLog::Log(LOGDEBUG, "Done");
   return OUTPUT_NORMAL;
 }
 
