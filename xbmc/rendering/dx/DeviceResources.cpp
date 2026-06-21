@@ -1199,6 +1199,133 @@ bool DX::DeviceResources::Begin()
   return true;
 }
 
+class CPacer
+{
+  LARGE_INTEGER frequency;
+  double countsPerSecond;
+
+  // App state variables
+  double targetRefreshRate = 60.0; // Current operational target (24.0 or 60.0)
+  double lastRefreshRate = 0.0;    // Tracks changes to trigger a recalculation
+
+  LONGLONG baseCountsPerFrame = 0;
+  LONGLONG targetCountsPerFrame = 0;
+  LONGLONG adaptiveStepCounts = 0;
+  LONGLONG minCountsClamp = 0;
+  LONGLONG maxCountsClamp = 0;
+  LONGLONG resetThresholdCounts = 0;
+
+  LARGE_INTEGER nextFrameTime;
+
+  UINT64 lastPresentCount = 0;
+  UINT64 lastRefreshCount = 0;
+  bool forceHistoryReset = true;
+  int settleFrameCounter = 0;
+public:
+  CPacer()
+  {
+	QueryPerformanceFrequency(&frequency);
+	countsPerSecond = static_cast<double>(frequency.QuadPart);
+	QueryPerformanceCounter(&nextFrameTime);
+  }
+
+  void update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, double presentDuration)
+  {
+	// 4. Delta-Normalized Adaptive Pacing
+	DXGI_FRAME_STATISTICS stats;
+	if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
+	  if(forceHistoryReset || settleFrameCounter > 0) {
+		lastPresentCount = stats.PresentCount;
+		lastRefreshCount = stats.PresentRefreshCount;
+
+		if(settleFrameCounter > 0) {
+		  settleFrameCounter--;
+		}
+		else {
+		  forceHistoryReset = false;
+		}
+	  }
+	  else {
+		UINT64 deltaPresent = stats.PresentCount - lastPresentCount;
+		UINT64 deltaRefresh = stats.PresentRefreshCount - lastRefreshCount;
+
+		if(deltaPresent > 0 && deltaRefresh > 0) {
+		  // Normalize any hardware or driver-level token bunching
+		  UINT64 normalizedPresent = 1;
+		  UINT64 normalizedRefresh = (deltaRefresh > deltaPresent) ? 2 : ((deltaRefresh < deltaPresent) ? 0 : 1);
+
+		  if(normalizedRefresh > normalizedPresent) {
+			targetCountsPerFrame -= adaptiveStepCounts; // CPU too slow -> Speed up
+		  }
+		  else if(normalizedRefresh < normalizedPresent) {
+			targetCountsPerFrame += adaptiveStepCounts; // CPU too fast -> Slow down
+		  }
+		  else {
+			// Perfect sync lock. Decay gently back toward the center of our current mode.
+			if(targetCountsPerFrame > baseCountsPerFrame) targetCountsPerFrame--;
+			if(targetCountsPerFrame < baseCountsPerFrame) targetCountsPerFrame++;
+		  }
+
+		  // Enforce safety limits proportional to our current frequency configuration
+		  if(targetCountsPerFrame < minCountsClamp) targetCountsPerFrame = minCountsClamp;
+		  if(targetCountsPerFrame > maxCountsClamp) targetCountsPerFrame = maxCountsClamp;
+
+		  lastPresentCount = stats.PresentCount;
+		  lastRefreshCount = stats.PresentRefreshCount;
+		}
+	  }
+	}
+
+	// 5. Absolute Re-Anchor Fallback
+	static LARGE_INTEGER frameStartTime = {};
+	nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
+
+	// 1. DYNAMIC RE-INDEX CHECK:
+	// If the engine state or player changes the refresh rate, immediately 
+	// recalculate our math constants to prevent a timeline crash.
+	double targetRefreshRate = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
+	if(targetRefreshRate != lastRefreshRate) {
+	  double targetFrameDuration = 1.0 / targetRefreshRate;
+
+	  baseCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
+	  targetCountsPerFrame = baseCountsPerFrame; // Reset our tracking oscillator to center
+
+	  // Scale our tuning steps proportionally to the new target frame duration
+	  adaptiveStepCounts = static_cast<LONGLONG>(targetFrameDuration * 0.005 * countsPerSecond);
+	  minCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 0.90) * countsPerSecond);
+	  maxCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 1.10) * countsPerSecond);
+	  resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * countsPerSecond);
+
+	  // Force a history reset and give the monitor hardware 15 frames to physically settle
+	  settleFrameCounter = 15;
+	  forceHistoryReset = true;
+
+	  lastRefreshRate = targetRefreshRate; // Commit state change
+	}
+
+	LARGE_INTEGER currentTime;
+	QueryPerformanceCounter(&currentTime);
+
+	// 2. Timeline Safety Recouper
+	if((currentTime.QuadPart - nextFrameTime.QuadPart) > resetThresholdCounts) {
+	  forceHistoryReset = true;
+	  nextFrameTime.QuadPart = currentTime.QuadPart;
+	}
+
+	// 3. Precise CPU Timing Gate
+	CLog::LogF(LOGDEBUG, "Wait start for nextFrameTime current time: {}, nextFrameTime: {}, diff: {}", currentTime.QuadPart, nextFrameTime.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
+	while(currentTime.QuadPart < nextFrameTime.QuadPart) {
+	  Sleep(0);
+	  QueryPerformanceCounter(&currentTime);
+	}
+	CLog::LogF(LOGDEBUG, "Wait end for nextFrameTime");
+
+	frameStartTime = currentTime;
+  }
+};
+
+CPacer pacer;
+
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
 {
@@ -1226,119 +1353,16 @@ void DX::DeviceResources::Present()
 	CLog::LogF(LOGDEBUG, "Stats {} {} {} {}", stats1.PresentCount, stats1.PresentRefreshCount, stats1.SyncRefreshCount, stats1.SyncGPUTime.QuadPart, stats1.SyncQPCTime.QuadPart);
   }
 
-#if 1
+  #if 1
   //cl Take a look at jitter, present() sometimes takes a long time because of GPU memory copy
   static int64_t lastEnd = 0;
   int64_t presentDuration = end - start;
   int64_t duration = end - lastEnd;
   lastEnd = end;
   CLog::LogF(LOGDEBUG,"Present duration: {} ms, Present Inter frame time: {} ms", presentDuration / (float)freq * 1000, duration / (float)freq * 1000);
+  #endif
 
-#endif
-  static bool bInit = false;
-  static LARGE_INTEGER frequency;
-  static double countsPerSecond;
-  static LONGLONG baseCountsPerFrame;
-  static double targetFrameDuration;
-  static LONGLONG targetCountsPerFrame;
-  static LONGLONG resetThresholdCounts;
-  static LONGLONG minCountsClamp;
-  static LONGLONG maxCountsClamp;
-  static LARGE_INTEGER nextFrameTime;
-  static UINT64 lastPresentCount;
-  static UINT64 lastRefreshCount;
-  static bool forceHistoryReset; // Forces baseline capture on the very first frame
-  static LONGLONG adaptiveStepCounts;
-
-  if(!bInit)
-  {
-	QueryPerformanceFrequency(&frequency);
-	countsPerSecond = static_cast<double>(frequency.QuadPart);
-
-	// Establish standard 60Hz timing intervals
-	targetFrameDuration = 1.0 / CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
-	baseCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * countsPerSecond);
-	targetCountsPerFrame = baseCountsPerFrame;
-
-	// ADAPTIVE PACING STEP: Set the adjustment step to exactly 0.5% of a single frame window.
-    // At 60Hz, this is ~83 microseconds. At 24Hz, this automatically scales up to 208 microseconds!
-	adaptiveStepCounts = static_cast<LONGLONG>(targetFrameDuration * 0.005 * countsPerSecond);
-
-	// Allow the pacing loop to breathe up to 10% faster or slower to absorb drift
-	minCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 0.90) * countsPerSecond);
-	maxCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 1.10) * countsPerSecond);
-	resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * countsPerSecond);
-
-	QueryPerformanceCounter(&nextFrameTime);
-
-	lastPresentCount = 0;
-	lastRefreshCount = 0;
-	forceHistoryReset = true; // Forces baseline capture on the very first frame
-	bInit = true;
-  }
-
-  // Calculate exactly how many CPU counts the OS stole inside Present1()
-  LONGLONG presentStallCounts = end - start;
-
-  // 4. HARDWARE DELTA TUNING (Optional, safely handles crystal clock thermal drift)
-  DXGI_FRAME_STATISTICS stats;
-  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
-	if(forceHistoryReset) {
-	  lastPresentCount = stats.PresentCount;
-	  lastRefreshCount = stats.PresentRefreshCount;
-	  forceHistoryReset = false;
-	}
-	else {
-	  UINT64 deltaPresent = stats.PresentCount - lastPresentCount;
-	  UINT64 deltaRefresh = stats.PresentRefreshCount - lastRefreshCount;
-
-	  if(deltaPresent > 0 && deltaRefresh > 0) {
-		UINT64 normalizedPresent = 1;
-		UINT64 normalizedRefresh = (deltaRefresh > deltaPresent) ? 2 : ((deltaRefresh < deltaPresent) ? 0 : 1);
-
-		if(normalizedRefresh > normalizedPresent) {
-		  targetCountsPerFrame -= adaptiveStepCounts;
-		}
-		else if(normalizedRefresh < normalizedPresent) {
-		  targetCountsPerFrame += adaptiveStepCounts;
-		}
-		else {
-		  if(targetCountsPerFrame > baseCountsPerFrame) targetCountsPerFrame--;
-		  if(targetCountsPerFrame < baseCountsPerFrame) targetCountsPerFrame++;
-		}
-
-		lastPresentCount = stats.PresentCount;
-		lastRefreshCount = stats.PresentRefreshCount;
-	  }
-	}
-  }
-  static LARGE_INTEGER frameStartTime = {};
-
-  // 5. DYNAMIC TIME-DEBT SUBTRACTOR:
-  // We step our timeline forward by the calibrated frame duration, BUT we subtract 
-  // any time that the Windows 10 kernel already forced us to wait inside Present1().
-  // If Frame 2 blocked for 20ms, nextFrameTime is moved 20ms into the past, 
-  // forcing Frame 3 to skip the CPU timing gate entirely and process instantly.
-  nextFrameTime.QuadPart = (frameStartTime.QuadPart + targetCountsPerFrame);// - presentStallCounts;
-  LARGE_INTEGER currentTime;
-  QueryPerformanceCounter(&currentTime);
-
-  // 1. HARD TIMELINE SAFETY: Prevents runaway debt if the user shifts focus
-  if(currentTime.QuadPart > nextFrameTime.QuadPart) {
-	nextFrameTime.QuadPart = currentTime.QuadPart;
-  }
-
-  // 2. TIMING GATE: Throttles fast frames on Windows 11, or unblocked frames on Windows 10
-  CLog::LogF(LOGDEBUG, "Wait start for nextFrameTime current time: {}, nextFrameTime: {}, diff: {}", currentTime.QuadPart, nextFrameTime.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
-  while(currentTime.QuadPart < nextFrameTime.QuadPart) {
-	Sleep(0);
-	QueryPerformanceCounter(&currentTime);
-  }
-
-  frameStartTime = currentTime;
-
-  CLog::LogF(LOGDEBUG, "Wait end for nextFrameTime");
-
+  pacer.update(m_swapChain, presentDuration);
 
   // If the device was removed either by a disconnection or a driver upgrade, we
   // must recreate all device resources.
