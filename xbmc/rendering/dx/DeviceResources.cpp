@@ -1277,65 +1277,70 @@ void DX::DeviceResources::Present()
 	bInit = true;
   }
 
-  // 4. ADAPTIVE TUNING (Only adjusts when the hardware actually ticks)
+  // 3. HARDWARE-AGNOSTIC ADAPTIVE PACING (The Driver-Defeating Fix)
   DXGI_FRAME_STATISTICS stats;
   if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
 	if(forceHistoryReset) {
 	  lastPresentCount = stats.PresentCount;
 	  lastRefreshCount = stats.PresentRefreshCount;
 	  forceHistoryReset = false;
+	  CLog::LogF(LOGDEBUG, "Reset");
 	}
 	else {
+	  // Calculate baseline steps
 	  UINT64 deltaPresent = stats.PresentCount - lastPresentCount;
 	  UINT64 deltaRefresh = stats.PresentRefreshCount - lastRefreshCount;
 
-	  if(deltaPresent > 0) {
-		if(deltaRefresh > deltaPresent) {
-		  targetCountsPerFrame -= adaptiveStepCounts; // Monitor is faster, speed up CPU
+	  // FIX: Only evaluate timing if BOTH the monitor and driver actually advanced.
+	  // This completely ignores the broken token-bunching driver spikes.
+	  if(deltaPresent > 0 && deltaRefresh > 0) {
+
+		UINT64 normalizedPresent = (deltaPresent > 0) ? 1 : 0;
+		UINT64 normalizedRefresh = (deltaRefresh > 0) ? 1 : 0;
+
+		if(normalizedRefresh > normalizedPresent) {
+		  // Monitor outpaced us (CPU is slow) -> Speed up loop
+		  targetCountsPerFrame -= adaptiveStepCounts;
 		}
-		else if(deltaRefresh < deltaPresent) {
-		  targetCountsPerFrame += adaptiveStepCounts; // CPU is faster, slow down CPU
+		else if(normalizedRefresh < normalizedPresent) {
+		  // We outpaced the monitor (CPU is fast) -> Slow down loop
+		  targetCountsPerFrame += adaptiveStepCounts;
 		}
 		else {
-		  // Perfect sync lock. Gently decay back to baseline.
+		  // PERFECT LOCK: The monitor and application advanced 1 step together.
+		  // Slowly drift back toward the exact mathematical center of 24Hz or 60Hz.
 		  if(targetCountsPerFrame > baseCountsPerFrame) targetCountsPerFrame--;
 		  if(targetCountsPerFrame < baseCountsPerFrame) targetCountsPerFrame++;
 		}
-
-		if(targetCountsPerFrame < minCountsClamp) targetCountsPerFrame = minCountsClamp;
-		if(targetCountsPerFrame > maxCountsClamp) targetCountsPerFrame = maxCountsClamp;
-
+		// Safely update tracking histories only when a valid hardware interval occurred
 		lastPresentCount = stats.PresentCount;
 		lastRefreshCount = stats.PresentRefreshCount;
 	  }
+	  // NOTE: If deltaPresent is 0 or deltaRefresh is 0, we are in a mid-scanout driver 
+	  // dead-zone. We skip editing the timer entirely and preserve our past history states.
 	}
   }
+  static LARGE_INTEGER frameStartTime = {};
 
-  // 5. THE IMMUTABLE TARGET STEP (The Core Fix)
-  // Never add to nextFrameTime sequentially. Instead, calculate the next gate 
-  // strictly relative to when THIS current frame officially woke up.
-  static LARGE_INTEGER frameStartTime = {0};
+  // 4. Advance timeline strictly relative to this frame's actual startup tick
   nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
-
-
   LARGE_INTEGER currentTime;
   QueryPerformanceCounter(&currentTime);
 
-  // 1. THE RECOUPER: If we somehow fall behind, snap the timeline straight 
-  // to the current clock to guarantee the gate can always wait.
+  // 1. Hard Timeline Safety Recouper
   if(currentTime.QuadPart > nextFrameTime.QuadPart) {
 	nextFrameTime.QuadPart = currentTime.QuadPart;
   }
 
-  // 2. THE ABSOLUTE GATE: Safely forces your 0.5ms fast frames to sleep
+  // 2. Strict CPU Gate (Safely throttles your 0.5ms frames)
   CLog::LogF(LOGDEBUG, "Wait start for nextFrameTime current time: {}, nextFrameTime: {}, diff: {}", currentTime.QuadPart, nextFrameTime.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
   while(currentTime.QuadPart < nextFrameTime.QuadPart) {
 	Sleep(0);
 	QueryPerformanceCounter(&currentTime);
   }
 
-  // Capture the EXACT timestamp of when this frame actually started executing
   frameStartTime = currentTime;
+
 
   CLog::LogF(LOGDEBUG, "Wait end for nextFrameTime");
 
