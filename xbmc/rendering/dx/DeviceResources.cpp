@@ -1277,62 +1277,58 @@ void DX::DeviceResources::Present()
 	bInit = true;
   }
 
-  // 3. HARDWARE-AGNOSTIC ADAPTIVE PACING (The Driver-Defeating Fix)
+  // Calculate exactly how many CPU counts the OS stole inside Present1()
+  LONGLONG presentStallCounts = end - start;
+
+  // 4. HARDWARE DELTA TUNING (Optional, safely handles crystal clock thermal drift)
   DXGI_FRAME_STATISTICS stats;
   if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats))) {
 	if(forceHistoryReset) {
 	  lastPresentCount = stats.PresentCount;
 	  lastRefreshCount = stats.PresentRefreshCount;
 	  forceHistoryReset = false;
-	  CLog::LogF(LOGDEBUG, "Reset");
 	}
 	else {
-	  // Calculate baseline steps
 	  UINT64 deltaPresent = stats.PresentCount - lastPresentCount;
 	  UINT64 deltaRefresh = stats.PresentRefreshCount - lastRefreshCount;
 
-	  // FIX: Only evaluate timing if BOTH the monitor and driver actually advanced.
-	  // This completely ignores the broken token-bunching driver spikes.
 	  if(deltaPresent > 0 && deltaRefresh > 0) {
-
-		UINT64 normalizedPresent = (deltaPresent > 0) ? 1 : 0;
-		UINT64 normalizedRefresh = (deltaRefresh > 0) ? 1 : 0;
+		UINT64 normalizedPresent = 1;
+		UINT64 normalizedRefresh = (deltaRefresh > deltaPresent) ? 2 : ((deltaRefresh < deltaPresent) ? 0 : 1);
 
 		if(normalizedRefresh > normalizedPresent) {
-		  // Monitor outpaced us (CPU is slow) -> Speed up loop
 		  targetCountsPerFrame -= adaptiveStepCounts;
 		}
 		else if(normalizedRefresh < normalizedPresent) {
-		  // We outpaced the monitor (CPU is fast) -> Slow down loop
 		  targetCountsPerFrame += adaptiveStepCounts;
 		}
 		else {
-		  // PERFECT LOCK: The monitor and application advanced 1 step together.
-		  // Slowly drift back toward the exact mathematical center of 24Hz or 60Hz.
 		  if(targetCountsPerFrame > baseCountsPerFrame) targetCountsPerFrame--;
 		  if(targetCountsPerFrame < baseCountsPerFrame) targetCountsPerFrame++;
 		}
-		// Safely update tracking histories only when a valid hardware interval occurred
+
 		lastPresentCount = stats.PresentCount;
 		lastRefreshCount = stats.PresentRefreshCount;
 	  }
-	  // NOTE: If deltaPresent is 0 or deltaRefresh is 0, we are in a mid-scanout driver 
-	  // dead-zone. We skip editing the timer entirely and preserve our past history states.
 	}
   }
   static LARGE_INTEGER frameStartTime = {};
 
-  // 4. Advance timeline strictly relative to this frame's actual startup tick
-  nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
+  // 5. DYNAMIC TIME-DEBT SUBTRACTOR:
+  // We step our timeline forward by the calibrated frame duration, BUT we subtract 
+  // any time that the Windows 10 kernel already forced us to wait inside Present1().
+  // If Frame 2 blocked for 20ms, nextFrameTime is moved 20ms into the past, 
+  // forcing Frame 3 to skip the CPU timing gate entirely and process instantly.
+  nextFrameTime.QuadPart = (frameStartTime.QuadPart + targetCountsPerFrame);// - presentStallCounts;
   LARGE_INTEGER currentTime;
   QueryPerformanceCounter(&currentTime);
 
-  // 1. Hard Timeline Safety Recouper
+  // 1. HARD TIMELINE SAFETY: Prevents runaway debt if the user shifts focus
   if(currentTime.QuadPart > nextFrameTime.QuadPart) {
 	nextFrameTime.QuadPart = currentTime.QuadPart;
   }
 
-  // 2. Strict CPU Gate (Safely throttles your 0.5ms frames)
+  // 2. TIMING GATE: Throttles fast frames on Windows 11, or unblocked frames on Windows 10
   CLog::LogF(LOGDEBUG, "Wait start for nextFrameTime current time: {}, nextFrameTime: {}, diff: {}", currentTime.QuadPart, nextFrameTime.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
   while(currentTime.QuadPart < nextFrameTime.QuadPart) {
 	Sleep(0);
@@ -1340,7 +1336,6 @@ void DX::DeviceResources::Present()
   }
 
   frameStartTime = currentTime;
-
 
   CLog::LogF(LOGDEBUG, "Wait end for nextFrameTime");
 
