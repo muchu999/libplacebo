@@ -786,7 +786,7 @@ public:
 
 	// Kalman States
 	est_duration_us_ = 0.0;
-	P_pts_ = 1000.0;
+	P_pts = 1000.0;
 	P_dur_ = 1000.0;
 
 	is_interlaced_cadence_ = is_interlaced;
@@ -861,10 +861,10 @@ public:
 	const double R_pts = 500000.0;
 
 	double pred_pts = est_pts_ + current_step_prediction;
-	P_pts_ += P_dur_ + Q_pts;
+	P_pts += P_dur_ + Q_pts;
 	P_dur_ += Q_dur;
 
-	double K = P_pts_ / (P_pts_ + R_pts);
+	double K = P_pts / (P_pts + R_pts);
 	double measurement = static_cast<double>(raw_pts_us);
 
 	est_pts_ = pred_pts + K * (measurement - pred_pts);
@@ -879,7 +879,7 @@ public:
 	  cadence_long_us_ += error;
 	}
 
-	P_pts_ = (1.0 - K) * P_pts_;
+	P_pts = (1.0 - K) * P_pts;
 
 	// --- PHASE 3: BOUNDARY & MONOTONICITY GUARD ---
 	double max_allowed_pts = static_cast<double>(raw_pts_us) + 500.0;
@@ -912,7 +912,7 @@ private:
   int64_t frame_count_;
   double est_pts_;
   double est_duration_us_;
-  double P_pts_;
+  double P_pts;
   double P_dur_;
   double last_returned_pts_;
 
@@ -929,141 +929,158 @@ public:
 
   void reset(bool is_interlaced) {
 	is_initialized_ = false;
-	frame_count_ = 0;
-	est_pts_ = 0.0;
+	frame_count = 0;
+	est_pts = 0.0;
 	last_returned_pts_ = -1.0;
-	last_raw_pts_ = 0;
+	last_raw_pts = 0;
 
 	// Kalman States
-	est_duration_us_ = 33333.33; // Sensible 30fps baseline default
-	P_pts_ = 1000.0;
-	P_dur_ = 1000.0;
+	est_duration_us = 33333.33; // Sensible 30fps baseline default
+	P_pts = 1000.0;
+	P_dur = 1000.0;
 
-	is_interlaced_cadence_ = is_interlaced;
-	cadence_short_us_ = 0.0;
-	cadence_long_us_ = 0.0;
+	is_interlaced_cadence = is_interlaced;
+	cadence_short_us = 0.0;
+	cadence_long_us = 0.0;
 
 	// Dynamic Truncation Tracking
-	detected_grid_us_ = 1.0; // Default to highest precision (1 microsecond)
+	detected_grid_us = 1.0; // Default to highest precision (1 microsecond)
   }
 
   double update(int64_t raw_pts_us, bool is_interlaced) {
-	frame_count_++;
+	frame_count++;
 
 	// --- MID-STREAM MODE SWITCH DETECTION ---
-	if(is_initialized_ && (is_interlaced != is_interlaced_cadence_)) {
-	  is_interlaced_cadence_ = is_interlaced;
-	  if(!is_interlaced_cadence_) {
-		est_duration_us_ = (cadence_short_us_ + cadence_long_us_) / 2.0;
+	if(is_initialized_ && (is_interlaced != is_interlaced_cadence)) {
+	  is_interlaced_cadence = is_interlaced;
+	  if(!is_interlaced_cadence) {
+		est_duration_us = (cadence_short_us + cadence_long_us) / 2.0;
 	  }
 	  else {
-		cadence_short_us_ = est_duration_us_;
-		cadence_long_us_ = est_duration_us_;
+		cadence_short_us = est_duration_us;
+		cadence_long_us = est_duration_us;
 	  }
 	}
 
 	// --- ADAPTIVE SEEK DETECTION ---
 	if(is_initialized_) {
-	  double max_expected = is_interlaced_cadence_ ? cadence_long_us_ : est_duration_us_;
-	  double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts_ + max_expected));
+	  double max_expected = is_interlaced_cadence ? cadence_long_us : est_duration_us;
+	  double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts + max_expected));
 	  if(deviation > (max_expected * 2.5)) {
 		reset(is_interlaced);
-		frame_count_ = 1;
+		frame_count = 1;
 	  }
 	}
 
 	// --- PHASE 1: INITIALIZATION ---
 	if(!is_initialized_) {
-	  est_pts_ = static_cast<double>(raw_pts_us);
-	  last_raw_pts_ = raw_pts_us;
-	  is_interlaced_cadence_ = is_interlaced;
-	  cadence_short_us_ = 33333.33;
-	  cadence_long_us_ = 33333.33;
+	  est_pts = static_cast<double>(raw_pts_us);
+	  last_raw_pts = raw_pts_us;
+	  is_interlaced_cadence = is_interlaced;
+	  cadence_short_us = 33333.33;
+	  cadence_long_us = 33333.33;
 	  is_initialized_ = true;
-	  return est_pts_;
+	  return est_pts;
 	}
 
 	// --- DYNAMIC GRID DETECTION ---
 	// Compute delta to observe truncation grids (like 1000us for 1ms, 10000us for 10ms, etc.)
-	int64_t raw_delta = std::abs(raw_pts_us - last_raw_pts_);
+	int64_t raw_delta = std::abs(raw_pts_us - last_raw_pts);
 	if(raw_delta > 0) {
-	  if(frame_count_ == 2) {
+	  if(frame_count == 2) {
 		// Initialize our grid with the first observed jump
-		detected_grid_us_ = static_cast<double>(raw_delta);
+		detected_grid_us = static_cast<double>(raw_delta);
 
 		// Seed initial velocities
 		double initial_delta = static_cast<double>(raw_delta);
-		est_duration_us_ = initial_delta;
-		cadence_short_us_ = initial_delta;
-		cadence_long_us_ = initial_delta;
+		est_duration_us = initial_delta;
+		cadence_short_us = initial_delta;
+		cadence_long_us = initial_delta;
 	  }
 	  else {
 		// Update running grid using a fractional GCD approach
-		detected_grid_us_ = compute_gcd(detected_grid_us_, static_cast<double>(raw_delta));
+		detected_grid_us = compute_gcd(detected_grid_us, static_cast<double>(raw_delta));
 		// Clamp floor to 1 microsecond to prevent precision breakdown
-		if(detected_grid_us_ < 1.0) detected_grid_us_ = 1.0;
+		if(detected_grid_us < 1.0) detected_grid_us = 1.0;
 	  }
 	}
-	last_raw_pts_ = raw_pts_us;
+	last_raw_pts = raw_pts_us;
 
 	// --- PHASE 2: CADENCE-AWARE PREDICTION ---
-	double current_step_prediction = est_duration_us_;
-	if(is_interlaced_cadence_) {
-	  double pred_short = est_pts_ + cadence_short_us_;
-	  double pred_long = est_pts_ + cadence_long_us_;
+	double current_step_prediction = est_duration_us;
+
+	// Only split tracking if the structural difference between lanes is meaningful.
+	// If the detected grid is 1ms (1000us), a 1ms variation (41ms vs 42ms) is just rounding noise.
+	// We require the structural split to be at least 2.5x larger than the quantization grid.
+	double structural_threshold = std::max(2500.0, detected_grid_us * 2.5);
+	bool has_true_interlaced_cadence = is_interlaced_cadence &&
+	  ((cadence_long_us - cadence_short_us) > structural_threshold);
+
+	if(has_true_interlaced_cadence) {
+	  double pred_short = est_pts + cadence_short_us;
+	  double pred_long = est_pts + cadence_long_us;
 	  if(std::abs(static_cast<double>(raw_pts_us) - pred_short) < std::abs(static_cast<double>(raw_pts_us) - pred_long)) {
-		current_step_prediction = cadence_short_us_;
+		current_step_prediction = cadence_short_us;
 	  }
 	  else {
-		current_step_prediction = cadence_long_us_;
+		current_step_prediction = cadence_long_us;
 	  }
+	}
+	else {
+	  // If it's not structural, force both lanes to converge back onto the true rolling average
+	  current_step_prediction = est_duration_us;
 	}
 
 	// --- GENERALIZED NOISE FILTERING ---
-	// Dynamically scale R_pts based on the observed truncation grid.
-	// A grid of 1.0us implies high-precision source -> low R (trust measurement)
-	// A grid of 1000.0us implies 1ms truncation -> high R (smooth over the steps)
-	const double R_pts = (detected_grid_us_ > 5.0) ? (detected_grid_us_ * 500.0) : 10.0;
-
+	const double R_pts = (detected_grid_us > 5.0) ? (detected_grid_us * 500.0) : 10.0;
 	const double Q_pts = 5.0;
 	const double Q_dur = 0.05;
 
-	double pred_pts = est_pts_ + current_step_prediction;
-	P_pts_ += P_dur_ + Q_pts;
-	P_dur_ += Q_dur;
+	double pred_pts = est_pts + current_step_prediction;
+	P_pts += P_dur + Q_pts;
+	P_dur += Q_dur;
 
-	double K = P_pts_ / (P_pts_ + R_pts);
+	double K = P_pts / (P_pts + R_pts);
 	double measurement = static_cast<double>(raw_pts_us);
-	est_pts_ = pred_pts + K * (measurement - pred_pts);
+	est_pts = pred_pts + K * (measurement - pred_pts);
 
 	// --- PHASE 3: DYNAMIC VELOCITY FEEDBACK LEARNING ---
 	double error = (measurement - pred_pts) * K;
-	if(!is_interlaced_cadence_) {
-	  est_duration_us_ += error * 0.05;
+
+	if(!has_true_interlaced_cadence) {
+	  // Smoothly track the true underlying fractional frame rate (e.g., 41.708ms)
+	  est_duration_us += error * 0.05;
+
+	  // Keep the lanes pinned together so they don't drift apart due to noise
+	  cadence_short_us = est_duration_us;
+	  cadence_long_us = est_duration_us;
 	}
 	else {
-	  if(current_step_prediction == cadence_short_us_) {
-		cadence_short_us_ += error * 0.04;
+	  // True structural cadence detected (e.g., 3:2 pulldown or mixed fields)
+	  if(current_step_prediction == cadence_short_us) {
+		cadence_short_us += error * 0.04;
 	  }
 	  else {
-		cadence_long_us_ += error * 0.04;
+		cadence_long_us += error * 0.04;
 	  }
-	  if(cadence_short_us_ > cadence_long_us_) {
-		std::swap(cadence_short_us_, cadence_long_us_);
+	  if(cadence_short_us > cadence_long_us) {
+		std::swap(cadence_short_us, cadence_long_us);
 	  }
+	  // Update the master progressive baseline as the weighted average
+	  est_duration_us = (cadence_short_us + cadence_long_us) / 2.0;
 	}
-	P_pts_ = (1.0 - K) * P_pts_;
+	P_pts = (1.0 - K) * P_pts;
 
 	// --- PHASE 4: BOUNDARY & MONOTONICITY GUARD ---
 	// Guard window scales with the detected truncation grid to allow breathing room
-	double max_allowed_pts = static_cast<double>(raw_pts_us) + (detected_grid_us_ * 0.5);
-	if(est_pts_ > max_allowed_pts) {
-	  est_pts_ = max_allowed_pts;
+	double max_allowed_pts = static_cast<double>(raw_pts_us) + (detected_grid_us * 0.5);
+	if(est_pts > max_allowed_pts) {
+	  est_pts = max_allowed_pts;
 	}
-	if(last_returned_pts_ >= 0.0 && est_pts_ <= last_returned_pts_) {
-	  est_pts_ = last_returned_pts_ + 1.0;
+	if(last_returned_pts_ >= 0.0 && est_pts <= last_returned_pts_) {
+	  est_pts = last_returned_pts_ + 1.0;
 	}
-	last_returned_pts_ = est_pts_;
+	last_returned_pts_ = est_pts;
 
 	return est_pts;
   }
@@ -1080,19 +1097,19 @@ private:
   }
 
   bool is_initialized_;
-  int64_t frame_count_;
-  int64_t last_raw_pts_;
-  double est_pts_;
-  double est_duration_us_;
-  double P_pts_;
-  double P_dur_;
+  int64_t frame_count;
+  int64_t last_raw_pts;
+  double est_pts;
+  double est_duration_us;
+  double P_pts;
+  double P_dur;
   double last_returned_pts_;
-  bool is_interlaced_cadence_;
-  double cadence_short_us_;
-  double cadence_long_us_;
+  bool is_interlaced_cadence;
+  double cadence_short_us;
+  double cadence_long_us;
 
   // Custom dynamic filter state
-  double detected_grid_us_;
+  double detected_grid_us;
 };
 
 
