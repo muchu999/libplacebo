@@ -891,7 +891,7 @@ bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
 	m_picture.rawPts = m_picture.pts;  
 	m_picture.pts = upSampler.update(m_picture.pts, m_picture.iFlags & DVP_FLAG_INTERLACED);  //cl don't use frametime here, it is sometime hardcoded to 1/(25fps)
 	static double oldPts = 0;
-	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "raw pts: {:.0f}, filtered pts: {:.0f}, upsampler period:{:.3f}ms", pts1, m_picture.pts, (m_picture.pts - oldPts) / 1000.0);
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "raw pts: {:.0f}, filtered pts: {:.0f}, delta: {:.0f}, period:{:.3f}ms", pts1, m_picture.pts, m_picture.pts- pts1, (m_picture.pts - oldPts) / 1000.0);
 	oldPts = m_picture.pts; 
 		
     // use forced aspect if any
