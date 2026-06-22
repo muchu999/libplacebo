@@ -31,6 +31,7 @@
 #include <mutex>
 #include <dxgitype.h>
 #include <rendering/dx/DeviceResources.h>
+#include <utils/TimeUtils.h>
 
 using namespace std::chrono_literals;
 
@@ -553,7 +554,7 @@ private:
 	double current_settle_time = fast_settle + (slow_settle - fast_settle) * progress_ratio;
 
 	// Relax the response slightly specifically for higher framerates
-	if(current_fps > 55.0) {
+	if(current_fps >= 49.0) {
 	  current_settle_time *= 1.5;
 	}
 
@@ -634,7 +635,7 @@ public:
   }
 };
 
-FramePLL1 synchPLL;
+FramePLL2 synchPLL;
 DeferredJitterMonitor jitterMonitor1(120);
 DeferredJitterMonitor jitterMonitor2(120);
 
@@ -646,10 +647,16 @@ void CRenderManager::RecordFlipEndTime()
   static double oldDiff = 0;
   static double oldFlipEndTime2 = 0;
   static double oldDiff2 = 0;
-
   m_flipEndTime = m_dvdClock.GetClock();
   m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime);
   
+  if((m_flipEndTime- oldFlipEndTime) > 1000000.0 / fps * 1.6)
+  {
+	m_flipSkipped++;
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Skipped");
+  }
+
+
   double diff = m_flipEndTime - oldFlipEndTime;
   double diff2 = m_filteredFlipEndTime - oldFlipEndTime2;
 
@@ -663,7 +670,7 @@ void CRenderManager::RecordFlipEndTime()
   if(std::abs(diff2) > 200000)
 	jitterMonitor2.reset();
 
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "raw: {:.0f}, filtered: {:.0f}, raw jitter: {:.0f}, filtered jitter {:.0f}", m_flipEndTime, m_filteredFlipEndTime, m_rawJitter, m_rawJitter2);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "raw: {:.0f}, filtered: {:.0f}, raw jitter: {:.0f}, filtered jitter {:.0f}, raw-filtered delta: {}, flipSkipped: {}", m_flipEndTime, m_filteredFlipEndTime, m_rawJitter, m_rawJitter2, m_filteredFlipEndTime- m_flipEndTime, m_flipSkipped);
   oldFlipEndTime = m_flipEndTime;
   oldDiff = diff;
   oldFlipEndTime2 = m_filteredFlipEndTime;
@@ -1163,7 +1170,7 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
         double refreshrate, clockspeed;
         int missedvblanks;
 	
-        info.vsync = StringUtils::Format("VSyncOff: {:5.1f}, latency: {:6.3f}", m_clockSync.m_syncOffset / 1000, DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f);
+        info.vsync = StringUtils::Format("Flip skip: {}, VSyncOff: {:5.1f}, latency: {:6.3f}", m_flipSkipped, m_clockSync.m_syncOffset / 1000, DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f);
         if (m_dvdClock.GetClockInfo(missedvblanks, clockspeed, refreshrate))
         {
           info.vsync += StringUtils::Format("VSync: refresh:{:.3f} missed:{} speed:{:.3f}%",
@@ -1545,8 +1552,8 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
     m_presentevent.wait(lock, std::min(50ms, timeout));
     if (endtime.IsTimePast() || bStop)
     {
-      return -1;
-    }
+	  return -1;
+	}
   }
 
   // make sure overlay buffer is released, this won't happen on AddOverlay

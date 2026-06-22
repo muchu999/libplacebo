@@ -1317,7 +1317,7 @@ public:
 	}
 
 	// 3. Precise CPU Timing Gate
-	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "current time: {}, nextFrameTime: {}, diff: {}", (double) currentTime.QuadPart/frequency.QuadPart, (double) nextFrameTime.QuadPart/frequency.QuadPart, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart);
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "current time: {}, nextFrameTime: {}, diff: {} ms", (double) currentTime.QuadPart/frequency.QuadPart*1000.0, (double) nextFrameTime.QuadPart/frequency.QuadPart*1000.0, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart*1000.0);
 	while(currentTime.QuadPart < nextFrameTime.QuadPart) {
 	  Sleep(0);
 	  QueryPerformanceCounter(&currentTime);
@@ -1360,7 +1360,7 @@ void DX::DeviceResources::Present()
   }
 
   // Log
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {}, Present period: {}, PresentCount = {}, PresentRefreshCount = {}", (double) presentDuration / freq, (double) period / freq, PresentCount, PresentRefreshCount);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {} ms, Present period: {} ms, PresentCount = {}, PresentRefreshCount = {}", (double) presentDuration / freq*1000.0, (double) period / freq*1000.0, PresentCount, PresentRefreshCount);
 
   // Pacer
   Pacer.Update(m_swapChain);

@@ -162,6 +162,7 @@ public:
   pl_hdr_metadata m_PeakDetectMetadata = {};
   bool m_bHasPeakDetectMetadata = false;     //cl debug info move to CRendererPL?
   float m_RenderDuration = 0.0;
+  float m_RenderDurationGpu = 0.0;
   pl_color_space m_FrameInColor = {};
   pl_color_space m_FrameOutColor = {};
 

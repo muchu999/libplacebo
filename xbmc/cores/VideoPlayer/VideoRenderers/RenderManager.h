@@ -227,6 +227,7 @@ protected:
   CEvent m_initEvent;
   CDVDClock &m_dvdClock;
   IRenderMsg *m_playerPort;
+  double m_flipSkipped = 0.0;
   double m_flipEndTime = 0.0;
   double m_filteredFlipEndTime = 0.0;
   double m_rawJitter = 0.0;

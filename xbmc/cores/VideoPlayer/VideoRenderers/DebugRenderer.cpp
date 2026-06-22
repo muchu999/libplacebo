@@ -90,15 +90,23 @@ void CDebugRenderer::SetInfo(DEBUG_INFO_VIDEO& video, DEBUG_INFO_RENDER& render,
   // without use all these fixed values.
   if(bFlush)
 	m_adapter->FlushSubtitles();
+  std::string dummy = "-";
+  m_adapter->AddSubtitle(dummy, 0., 5000000.);
   m_adapter->AddSubtitle(video.videoSource, 0., 5000000.);
   m_adapter->AddSubtitle(video.metaPrim, 0., 5000000.);
   m_adapter->AddSubtitle(video.metaLight, 0., 5000000.);
+  m_adapter->AddSubtitle(render.renderFlags, 0., 5000000.);
+  m_adapter->AddSubtitle(render.videoOutput, 0., 5000000.);
   m_adapter->AddSubtitle(video.shader, 0., 5000000.);
+  m_adapter->AddSubtitle(dummy, 0., 5000000.);
   m_adapter->AddSubtitle(video.render1, 0., 5000000.);
   m_adapter->AddSubtitle(video.render2, 0., 5000000.);
   m_adapter->AddSubtitle(video.render3, 0., 5000000.);
-  m_adapter->AddSubtitle(render.renderFlags, 0., 5000000.);
-  m_adapter->AddSubtitle(render.videoOutput, 0., 5000000.);
+  m_adapter->AddSubtitle(video.render4, 0., 5000000.);
+  m_adapter->AddSubtitle(video.render5, 0., 5000000.);
+  m_adapter->AddSubtitle(video.render6, 0., 5000000.);
+  m_adapter->AddSubtitle(video.render7, 0., 5000000.);
+  m_adapter->AddSubtitle(video.render8, 0., 5000000.);
 }
 
 void CDebugRenderer::Render(CRect& src, CRect& dst, CRect& view)
