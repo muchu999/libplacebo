@@ -25648,3 +25648,12 @@ msgstr ""
 msgctxt "#55370"
 msgid "Disable on screen basic debug info"
 msgstr ""
+
+msgctxt "#55371"
+msgid "Application thread priority"
+msgstr ""
+
+msgctxt "#55372"
+msgid ""
+msgstr ""
+

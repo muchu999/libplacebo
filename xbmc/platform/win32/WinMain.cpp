@@ -246,7 +246,7 @@ _Use_decl_annotations_ INT WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, INT)
   }
 
   // use 1 ms timer precision - like SDL initialization used to do
-  timeBeginPeriod(1);
+  timeBeginPeriod(1); //cl 
 
 #ifndef _DEBUG
   // we don't want to see the "no disc in drive" windows message box
@@ -256,7 +256,7 @@ _Use_decl_annotations_ INT WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, INT)
   CAppEnvironment::SetUp(params);
 
   // Create and run the app
-  status = XBMC_Run(true);
+  status = XBMC_Run(true); //cl 
 
   CAppEnvironment::TearDown();
 
