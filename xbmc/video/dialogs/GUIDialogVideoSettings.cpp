@@ -2000,7 +2000,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_CACHING_SINGLE_FRAME, 55312, SettingLevel::Basic, videoSettings.m_PlaceboSkipCachingSingleFrame);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_SKIP_TARGET_CLEARING, 55368, SettingLevel::Basic, videoSettings.m_PlaceboSkipTargetClearing);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DEBUG_OSD, 55355, SettingLevel::Basic, videoSettings.m_PlaceboDebugOsd);
-	AddToggle(groupMisc, SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD, 55356, SettingLevel::Basic, videoSettings.m_PlaceboVideoDebugOsd);
+	//AddToggle(groupMisc, SETTING_LIB_PLACEBO_VIDEO_DEBUG_OSD, 55356, SettingLevel::Basic, videoSettings.m_PlaceboVideoDebugOsd);
 	AddToggle(groupMisc, SETTING_LIB_PLACEBO_DEBUG_HIDE, 55370, SettingLevel::Basic, videoSettings.m_PlaceboDebugHide);
 
 	InitializeShaderMenu(videoSettings, category);
