@@ -1220,7 +1220,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
 	renderTimeMonitor.update(buffer->m_RenderDuration);
 
-	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
 	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}",
 	  m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
 	oldRenderPts = renderPts;
@@ -1320,16 +1319,14 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 		CLog::LogFC(LOGDEBUG, LOGPLACEBO, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
 	  }
 	}
-	pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
-
-	// Stop gpu timer
-	pDeviceContext->End(current_frame.end);
-	pDeviceContext->End(current_frame.disjoint);
-	current_frame.is_active = true;
-	current_write_slot = (current_write_slot + 1) % QUERY_LATENCY;
-	pDeviceContext->Release();
-
   }
+  pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
+  // Stop gpu timer
+  pDeviceContext->End(current_frame.end);
+  pDeviceContext->End(current_frame.disjoint);
+  current_frame.is_active = true;
+  current_write_slot = (current_write_slot + 1) % QUERY_LATENCY;
+  pDeviceContext->Release();
 
   
   //pl_render_error err = pl_renderer_get_errors(PL::PLInstance::Get()->GetRenderer()).errors;
