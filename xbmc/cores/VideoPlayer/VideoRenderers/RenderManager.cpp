@@ -1176,8 +1176,8 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
           info.vsync += StringUtils::Format("VSync: refresh:{:.3f} missed:{} speed:{:.3f}%",
                                             refreshrate, missedvblanks, clockspeed * 100);
         }
-		info.jitter1 = StringUtils::Format("R jitterMax: {:4.1f}, JitterStdDev: {:4.1f}, Jitter: {:6.2f}", jitterMonitor1.calculatePeak() / 1000.0, std::sqrt(jitterMonitor1.calculateVariance()) / 1000.0, m_rawJitter / 1000.0);
-		info.jitter2 = StringUtils::Format("F JitterMax: {:4.1f}, JitterStdDev: {:4.1f}, Jitter: {:6.2f}", jitterMonitor2.calculatePeak() / 1000.0, std::sqrt(jitterMonitor2.calculateVariance()) / 1000.0, m_rawJitter2 / 1000.0);
+		info.jitter1 = StringUtils::Format("R jitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor1.calculatePeak() / 1000.0, std::sqrt(jitterMonitor1.calculateVariance()) / 1000.0, m_rawJitter / 1000.0);
+		info.jitter2 = StringUtils::Format("F JitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor2.calculatePeak() / 1000.0, std::sqrt(jitterMonitor2.calculateVariance()) / 1000.0, m_rawJitter2 / 1000.0);
 
         m_debugRenderer.SetInfo(info, true);
       }

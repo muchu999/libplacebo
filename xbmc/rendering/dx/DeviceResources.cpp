@@ -1308,7 +1308,9 @@ public:
 	nextFrameTime.QuadPart = frameStartTime.QuadPart + targetCountsPerFrame;
 
 	LARGE_INTEGER currentTime;
+	LARGE_INTEGER currentTimeCopy;
 	QueryPerformanceCounter(&currentTime);
+	currentTimeCopy = currentTime;
 
 	// 2. Timeline Safety Recouper
 	if((currentTime.QuadPart - nextFrameTime.QuadPart) > resetThresholdCounts) {
@@ -1317,12 +1319,20 @@ public:
 	}
 
 	// 3. Precise CPU Timing Gate
-	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "current time: {}, nextFrameTime: {}, diff: {} ms", (double) currentTime.QuadPart/frequency.QuadPart*1000.0, (double) nextFrameTime.QuadPart/frequency.QuadPart*1000.0, ((double) nextFrameTime.QuadPart - (double) currentTime.QuadPart) / (double) frequency.QuadPart*1000.0);
 	while(currentTime.QuadPart < nextFrameTime.QuadPart) {
 	  Sleep(0);
 	  QueryPerformanceCounter(&currentTime);
 	}
 
+	// Log;
+	static LARGE_INTEGER oldFrameStartTime = {};
+	double current = currentTimeCopy.QuadPart / (double) frequency.QuadPart * 1000.0;
+	double nextTime = frameStartTime.QuadPart / (double) frequency.QuadPart * 1000.0;
+	double period = (frameStartTime.QuadPart - oldFrameStartTime.QuadPart) / (double) frequency.QuadPart * 1000.0;
+	double diff = (nextFrameTime.QuadPart - currentTimeCopy.QuadPart) / (double) frequency.QuadPart * 1000.0;
+
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "time: {:.3f}, nextFrameTime: {:.3f}, wait time: {:.3f} ms, period: {:.3f} ms", current, nextTime, diff, period);
+	oldFrameStartTime = frameStartTime;
 	frameStartTime = currentTime;
   }
 };
@@ -1360,7 +1370,7 @@ void DX::DeviceResources::Present()
   }
 
   // Log
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {} ms, Present period: {} ms, PresentCount = {}, PresentRefreshCount = {}", (double) presentDuration / freq*1000.0, (double) period / freq*1000.0, PresentCount, PresentRefreshCount);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, PresentRefreshCount = {}", (double) presentDuration / freq*1000.0, (double) period / freq*1000.0, PresentCount, PresentRefreshCount);
 
   // Pacer
   Pacer.Update(m_swapChain);
