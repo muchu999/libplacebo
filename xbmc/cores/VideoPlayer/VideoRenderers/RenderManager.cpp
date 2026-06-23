@@ -157,7 +157,8 @@ bool CRenderManager::Configure(const VideoPicture& picture, float fps, unsigned 
 
     std::unique_lock lock2(m_presentlock);
     m_presentstep = PRESENT_READY;
-    m_presentevent.notifyAll();
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING,  "PRESENT_READY");
+	m_presentevent.notifyAll();
   }
 
   if (!m_stateEvent.Wait(1000ms))
@@ -769,6 +770,8 @@ void CRenderManager::FrameMove()
     if (m_queued.empty())
     {
       m_presentstep = PRESENT_IDLE;
+	  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_IDLE");
+
     }
     else
     {
@@ -781,7 +784,8 @@ void CRenderManager::FrameMove()
     if (m_presentstep == PRESENT_FLIP)
     {
       m_presentstep = PRESENT_FRAME;
-      m_presentevent.notifyAll();
+	  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_FRAME");
+	  m_presentevent.notifyAll();
     }
 
     // release all previous
@@ -1241,17 +1245,29 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
     if (m_presentstep == PRESENT_FRAME)
     {
       if (m.presentmethod == PRESENT_METHOD_BOB)
+	  {
         m_presentstep = PRESENT_FRAME2;
+		CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_FRAME2");
+	  }
       else
+	  {
         m_presentstep = PRESENT_IDLE;
-    }
+		CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_IDLE");
+	  }
+	}
     else if (m_presentstep == PRESENT_FRAME2)
+	{
       m_presentstep = PRESENT_IDLE;
+	  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_IDLE");
+	}
 
     if (m_presentstep == PRESENT_IDLE)
     {
       if (!m_queued.empty())
+	  {
         m_presentstep = PRESENT_READY;
+		CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_READY");
+	  }
     }
 
     m_presentevent.notifyAll();
@@ -1498,7 +1514,8 @@ bool CRenderManager::AddVideoPicture(const VideoPicture& picture, volatile std::
   if (m_presentstep == PRESENT_IDLE)
   {
     m_presentstep = PRESENT_READY;
-    m_presentevent.notifyAll();
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_READY");
+	m_presentevent.notifyAll();
   }
 
   if (wait)
@@ -1607,7 +1624,8 @@ void CRenderManager::PrepareNextRender()
   {
     CLog::Log(LOGERROR, "CRenderManager::PrepareNextRender - asked to prepare with nothing available");
     m_presentstep = PRESENT_IDLE;
-    m_presentevent.notifyAll();
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_IDLE");
+	m_presentevent.notifyAll();
     return;
   }
 
@@ -1723,7 +1741,8 @@ void CRenderManager::PrepareNextRender()
       m_lateframes = 0;
 
     m_presentstep = PRESENT_FLIP;
-    m_discard.push_back(m_presentsource);
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_FLIP");
+	m_discard.push_back(m_presentsource);
     m_presentsource = idx;
     m_queued.pop_front();
     m_presentpts = m_Queue[idx].pts - m_displayLatency;
@@ -1735,7 +1754,8 @@ void CRenderManager::PrepareNextRender()
   {
     m_lateframes = 0;
     m_presentstep = PRESENT_FLIP;
-    m_presentsourcePast = m_presentsource;
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_FLIP");
+	m_presentsourcePast = m_presentsource;
     m_presentsource = m_queued.front();
     m_queued.pop_front();
     m_presentpts = m_Queue[m_presentsource].pts - m_displayLatency - frametime / 2;
@@ -1754,7 +1774,10 @@ void CRenderManager::DiscardBuffer()
   }
 
   if(m_presentstep == PRESENT_READY)
+  {
     m_presentstep = PRESENT_IDLE;
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PRESENT_IDLE");
+  }
   m_presentevent.notifyAll();
 }
 
