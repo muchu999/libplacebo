@@ -849,7 +849,7 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.Stereo = bHWStereoEnabled;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 #ifdef TARGET_WINDOWS_DESKTOP
-    swapChainDesc.BufferCount = 3; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
+    swapChainDesc.BufferCount = 6; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
 #else
     swapChainDesc.BufferCount = 3; // Xbox don't like 6 backbuffers (3 is fine even for 4K 60 fps)
 #endif
