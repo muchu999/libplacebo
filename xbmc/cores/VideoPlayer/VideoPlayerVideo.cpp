@@ -800,12 +800,80 @@ private:
   double detected_grid_us;
 };
 
-/*
 
-tracking dampening window adjust: frame_count > 5, frame_count <= 5
-*/
+class DeferredJitterMonitor {
+private:
+  std::vector<double> history;
+  size_t writeIndex = 0;
+  size_t maxFrames = 0;
+  bool bufferFull = false;
+  size_t skipCount = 0;
+
+  // Helper to get active frame count in the buffer
+  size_t getActiveCount() const {
+	return bufferFull ? maxFrames : writeIndex;
+  }
+
+public:
+  DeferredJitterMonitor(size_t frameWindowSize) : maxFrames(frameWindowSize) {
+	history.resize(maxFrames, 0.0);
+  }
+
+  void update(double jitterUs) {
+	if(skipCount < 20)
+	{
+	  skipCount++;
+	  return;
+	}
+	history [writeIndex] = jitterUs;
+
+	writeIndex++;
+	if(writeIndex >= maxFrames) {
+	  writeIndex = 0;
+	  bufferFull = true;
+	}
+  }
+
+  double calculateVariance() const {
+	size_t count = getActiveCount();
+	if(count < 2) return 0.0;
+
+	double sum = 0.0;
+	for(size_t i = 0; i < count; ++i) {
+	  sum += history [i];
+	}
+	double mean = sum / count;
+
+	double varianceSum = 0.0;
+	for(size_t i = 0; i < count; ++i) {
+	  varianceSum += std::pow(history [i] - mean, 2);
+	}
+
+	return varianceSum / (count - 1);
+  }
+
+  double calculatePeak() const {
+	size_t count = getActiveCount();
+	if(count == 0) return 0.0;
+
+	double maxVal = history [0];
+	for(size_t i = 1; i < count; ++i) {
+	  if(history [i] > maxVal) {
+		maxVal = history [i];
+	  }
+	}
+	return maxVal;
+  }
+
+  void reset(void) {
+	writeIndex = 0;
+	skipCount = 0;
+	bufferFull = false;
+  }
+};
 
 
+// tracking dampening window adjust: frame_count > 5, frame_count <= 5
 class UniversalFlagPTSUpsampler4 {
 public:
   UniversalFlagPTSUpsampler4() {
@@ -987,7 +1055,7 @@ private:
 };
 
 UniversalFlagPTSUpsampler4 upSampler;
-
+DeferredJitterMonitor framePtsJitter(120);
 
 bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
 {
@@ -1076,9 +1144,13 @@ bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
 	m_picture.rawPts = m_picture.pts;  
 	m_picture.pts = upSampler.update(m_picture.pts, m_picture.iFlags & DVP_FLAG_INTERLACED);  //cl don't use frametime here, it is sometime hardcoded to 1/(25fps)
 	static double oldPts = 0;
+	static double oldDiff = 0;
 	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "raw pts: {:.0f}, filtered pts: {:.0f}, delta: {:.0f}, period:{:.3f}ms", pts1, m_picture.pts, m_picture.pts- pts1, (m_picture.pts - oldPts) / 1000.0);
-	oldPts = m_picture.pts; 
-		
+	double diff = m_picture.pts - oldPts;
+	framePtsJitter.update(std::abs(diff - oldDiff));
+	oldPts = m_picture.pts;
+	oldDiff = diff;
+
     // use forced aspect if any
     if (m_fForcedAspectRatio != 0.0f)
     {
@@ -1358,7 +1430,7 @@ std::string CVideoPlayerVideo::GetPlayerInfo()
     s << ", pc:" << pc;
   else
     s << ", pc:none";
-
+  s << ", ptsJitterMax:" << framePtsJitter.calculatePeak()/1000.0;
   return s.str();
 }
 
