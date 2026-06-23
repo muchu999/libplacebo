@@ -805,9 +805,10 @@ private:
 tracking dampening window adjust: frame_count > 5, frame_count <= 5
 */
 
-class UniversalFlagPTSUpsampler3 {
+
+class UniversalFlagPTSUpsampler4 {
 public:
-  UniversalFlagPTSUpsampler3() {
+  UniversalFlagPTSUpsampler4() {
 	reset(false);
   }
 
@@ -817,10 +818,11 @@ public:
 	est_pts = 0.0;
 	last_returned_pts_ = -1.0;
 
-	// Base progressive baseline default (23.976fps)
-	est_duration_us = 41708.33;
-	cadence_short_us = 41708.33;
-	cadence_long_us = 41708.33;
+	// Start with a neutral fallback (e.g., 30fps)
+	// The filter will quickly overwrite this during the first 5 frames
+	est_duration_us = 33333.33;
+	cadence_short_us = 33333.33;
+	cadence_long_us = 33333.33;
 
 	is_interlaced_cadence = is_interlaced;
 	cadence_lock_counter = 0;
@@ -844,21 +846,18 @@ public:
 	if(has_true_structural_cadence) {
 	  double pred_short = est_pts + cadence_short_us;
 	  double pred_long = est_pts + cadence_long_us;
-	  current_step_prediction = (std::abs(static_cast<double>(raw_pts_us) - pred_short) <
-		std::abs(static_cast<double>(raw_pts_us) - pred_long))
-		? cadence_short_us : cadence_long_us;
+	  current_step_prediction = (std::abs(static_cast<double>(raw_pts_us) - pred_short) < std::abs(static_cast<double>(raw_pts_us) - pred_long)) ? cadence_short_us : cadence_long_us;
 	}
 
 	double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts + current_step_prediction));
 
-	// CATCH THE SEEK: If the new timestamp jumped by more than 2.5 frames...
+	// Catch seeks or sudden frame rate changes
 	if(deviation > (std::max(est_duration_us, cadence_long_us) * 2.5)) {
-	  // Snap our timeline directly to the new pool instantly
 	  est_pts = static_cast<double>(raw_pts_us);
 	  last_returned_pts_ = est_pts;
-
-	  // Re-anchor frame_count to freeze tracking loops during startup noise
-	  frame_count = 1;
+	  frame_count = 1; // Reset frame count to seed the new frequency
+	  has_true_structural_cadence = false;
+	  cadence_lock_counter = 0;
 	  return est_pts;
 	}
 
@@ -875,10 +874,20 @@ public:
 	// --- 4. HYSTERESIS-BASED STRUCTURAL CADENCE DETECTION ---
 	double raw_delta = static_cast<double>(raw_pts_us) - est_pts;
 
-	// Skip cadence tuning during the first 5 frames post-seek to ignore settling noise
+	// SEEDING PHASE: Rapidly converge baseline duration on the first 5 frames
+	if(frame_count <= 5 && raw_delta > 0.0) {
+	  est_duration_us = (est_duration_us * 0.5) + (raw_delta * 0.5);
+	  cadence_short_us = est_duration_us;
+	  cadence_long_us = est_duration_us;
+	}
+
 	if(frame_count > 5) {
 	  bool current_step_looks_structural = false;
-	  if(is_interlaced_cadence && std::abs(raw_delta - est_duration_us) > 4000.0) {
+
+	  // DYNAMIC THRESHOLD: Use 25% of current frame duration instead of fixed 4000us
+	  double structural_threshold = est_duration_us * 0.25;
+
+	  if(is_interlaced_cadence && std::abs(raw_delta - est_duration_us) > structural_threshold) {
 		current_step_looks_structural = true;
 	  }
 
@@ -922,13 +931,13 @@ public:
 	// --- 7. PHASE-LOCKED LOOP FEEDBACK ADJUSTMENTS ---
 	double phase_error = static_cast<double>(raw_pts_us) - est_pts;
 
-	// Mute feedback completely for the first few frames post-seek to protect velocity
-	double alpha_phase = has_true_structural_cadence ? 0.30 : 0.10;
-	double beta_velocity = has_true_structural_cadence ? 0.05 : 0.01;
+	// Tighter gains prevent feedback explosions at high frequencies like 60Hz
+	double alpha_phase = has_true_structural_cadence ? 0.20 : 0.08;
+	double beta_velocity = has_true_structural_cadence ? 0.01 : 0.002;
 
 	if(frame_count <= 5) {
-	  alpha_phase *= 0.2;  // Trust the velocity memory; approach target gently
-	  beta_velocity = 0.0; // Freeze velocity modifications entirely
+	  alpha_phase *= 0.1;
+	  beta_velocity = 0.0; // Freeze velocity optimization during seeding
 	}
 
 	est_pts += phase_error * alpha_phase;
@@ -946,6 +955,7 @@ public:
 		else {
 		  cadence_long_us += phase_error * beta_velocity;
 		}
+
 		if(cadence_short_us > cadence_long_us) {
 		  std::swap(cadence_short_us, cadence_long_us);
 		}
@@ -959,7 +969,6 @@ public:
 	if(est_pts <= last_returned_pts_) {
 	  est_pts = last_returned_pts_ + 10.0;
 	}
-
 	last_returned_pts_ = est_pts;
 	return est_pts;
   }
@@ -970,14 +979,14 @@ private:
   double est_pts;
   double est_duration_us;
   double last_returned_pts_;
-
   bool is_interlaced_cadence;
   bool has_true_structural_cadence;
   int32_t cadence_lock_counter;
   double cadence_short_us;
   double cadence_long_us;
 };
-UniversalFlagPTSUpsampler3 upSampler;
+
+UniversalFlagPTSUpsampler4 upSampler;
 
 
 bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
