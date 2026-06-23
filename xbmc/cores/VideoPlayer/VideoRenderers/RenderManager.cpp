@@ -1726,7 +1726,8 @@ void CRenderManager::PrepareNextRender()
     {
       if (m_presentsourcePast >= 0)
       {
-        m_discard.push_back(m_presentsourcePast);
+		CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Skip");
+		m_discard.push_back(m_presentsourcePast);
         m_QueueSkip++;
       }
       m_presentsourcePast = m_queued.front();
