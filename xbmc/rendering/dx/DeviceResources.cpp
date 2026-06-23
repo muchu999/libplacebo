@@ -37,6 +37,7 @@ extern "C"
 #pragma comment(lib, "dxgi.lib")
 #endif // _DEBUG
 #include <utils/TimeUtils.h>
+#include "../../../project/BuildDependencies/msys64/usr/include/w32api/timeapi.h"
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -1381,6 +1382,38 @@ DWORD waitResult = WaitForSingleObjectEx(DX::DeviceResources::Get()->dxgiWaitHan
 
 // Pacer
 //  Pacer.Update(m_swapChain);
+
+static bool bInit= false;
+static LONGLONG targetQpc;
+double ticksPerFrame = (double) freq/ CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
+if(!bInit)
+{
+  LARGE_INTEGER startTime;
+  QueryPerformanceCounter(&startTime);
+  targetQpc = startTime.QuadPart;
+  bInit = true;
+}
+targetQpc += ticksPerFrame;
+
+LARGE_INTEGER currentQpc;
+QueryPerformanceCounter(&currentQpc);
+
+LONGLONG ticksRemaining = targetQpc - currentQpc.QuadPart;
+if(ticksRemaining < 0 || ticksRemaining > (ticksPerFrame * 2)) {
+  targetQpc = currentQpc.QuadPart + ticksPerFrame;
+  ticksRemaining = ticksPerFrame;
+}
+
+// Software Pacing Burn 
+LONGLONG safeBufferTicks = (freq * 2) / 1000; 
+CLog::LogFC(LOGDEBUG, LOGAVTIMING, "targetQpc: {}, currentQpc: {}, ticksRemaining: {}",  targetQpc, currentQpc.QuadPart, ticksRemaining);
+
+if(ticksRemaining > safeBufferTicks) {
+  DWORD sleepMs = (DWORD) (((ticksRemaining - safeBufferTicks) * 1000) / freq);
+  if(sleepMs > 0) {
+	Sleep(sleepMs);
+  }
+}
 
   // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)

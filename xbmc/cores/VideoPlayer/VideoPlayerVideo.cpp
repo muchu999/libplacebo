@@ -800,8 +800,184 @@ private:
   double detected_grid_us;
 };
 
+/*
 
-UniversalFlagPTSUpsampler upSampler;
+tracking dampening window adjust: frame_count > 5, frame_count <= 5
+*/
+
+class UniversalFlagPTSUpsampler3 {
+public:
+  UniversalFlagPTSUpsampler3() {
+	reset(false);
+  }
+
+  void reset(bool is_interlaced) {
+	is_initialized_ = false;
+	frame_count = 0;
+	est_pts = 0.0;
+	last_returned_pts_ = -1.0;
+
+	// Base progressive baseline default (23.976fps)
+	est_duration_us = 41708.33;
+	cadence_short_us = 41708.33;
+	cadence_long_us = 41708.33;
+
+	is_interlaced_cadence = is_interlaced;
+	cadence_lock_counter = 0;
+	has_true_structural_cadence = false;
+  }
+
+  double update(int64_t raw_pts_us, bool is_interlaced) {
+	frame_count++;
+
+	// --- 1. INITIALIZATION ---
+	if(!is_initialized_) {
+	  est_pts = static_cast<double>(raw_pts_us);
+	  is_interlaced_cadence = is_interlaced;
+	  is_initialized_ = true;
+	  last_returned_pts_ = est_pts;
+	  return est_pts;
+	}
+
+	// --- 2. AUTOMATIC SEEK / DISCONTINUITY DETECTION ---
+	double current_step_prediction = est_duration_us;
+	if(has_true_structural_cadence) {
+	  double pred_short = est_pts + cadence_short_us;
+	  double pred_long = est_pts + cadence_long_us;
+	  current_step_prediction = (std::abs(static_cast<double>(raw_pts_us) - pred_short) <
+		std::abs(static_cast<double>(raw_pts_us) - pred_long))
+		? cadence_short_us : cadence_long_us;
+	}
+
+	double deviation = std::abs(static_cast<double>(raw_pts_us) - (est_pts + current_step_prediction));
+
+	// CATCH THE SEEK: If the new timestamp jumped by more than 2.5 frames...
+	if(deviation > (std::max(est_duration_us, cadence_long_us) * 2.5)) {
+	  // Snap our timeline directly to the new pool instantly
+	  est_pts = static_cast<double>(raw_pts_us);
+	  last_returned_pts_ = est_pts;
+
+	  // Re-anchor frame_count to freeze tracking loops during startup noise
+	  frame_count = 1;
+	  return est_pts;
+	}
+
+	// --- 3. MID-STREAM MODE SWITCH ---
+	if(is_interlaced != is_interlaced_cadence) {
+	  is_interlaced_cadence = is_interlaced;
+	  if(!is_interlaced_cadence) {
+		has_true_structural_cadence = false;
+		cadence_lock_counter = 0;
+		est_duration_us = (cadence_short_us + cadence_long_us) / 2.0;
+	  }
+	}
+
+	// --- 4. HYSTERESIS-BASED STRUCTURAL CADENCE DETECTION ---
+	double raw_delta = static_cast<double>(raw_pts_us) - est_pts;
+
+	// Skip cadence tuning during the first 5 frames post-seek to ignore settling noise
+	if(frame_count > 5) {
+	  bool current_step_looks_structural = false;
+	  if(is_interlaced_cadence && std::abs(raw_delta - est_duration_us) > 4000.0) {
+		current_step_looks_structural = true;
+	  }
+
+	  if(current_step_looks_structural) {
+		cadence_lock_counter = std::min(cadence_lock_counter + 2, 15);
+	  }
+	  else {
+		cadence_lock_counter = std::max(cadence_lock_counter - 1, 0);
+	  }
+
+	  if(cadence_lock_counter >= 6) {
+		if(!has_true_structural_cadence) {
+		  has_true_structural_cadence = true;
+		  cadence_short_us = est_duration_us - std::abs(raw_delta - est_duration_us);
+		  cadence_long_us = est_duration_us + std::abs(raw_delta - est_duration_us);
+		}
+	  }
+	  else if(cadence_lock_counter == 0) {
+		has_true_structural_cadence = false;
+	  }
+	}
+
+	// --- 5. CADENCE-AWARE VELOCITY PREDICTION ---
+	if(has_true_structural_cadence) {
+	  double pred_short = est_pts + cadence_short_us;
+	  double pred_long = est_pts + cadence_long_us;
+	  if(std::abs(static_cast<double>(raw_pts_us) - pred_short) < std::abs(static_cast<double>(raw_pts_us) - pred_long)) {
+		current_step_prediction = cadence_short_us;
+	  }
+	  else {
+		current_step_prediction = cadence_long_us;
+	  }
+	}
+	else {
+	  current_step_prediction = est_duration_us;
+	}
+
+	// --- 6. TIMELINE PHASE ADVANCE ---
+	est_pts += current_step_prediction;
+
+	// --- 7. PHASE-LOCKED LOOP FEEDBACK ADJUSTMENTS ---
+	double phase_error = static_cast<double>(raw_pts_us) - est_pts;
+
+	// Mute feedback completely for the first few frames post-seek to protect velocity
+	double alpha_phase = has_true_structural_cadence ? 0.30 : 0.10;
+	double beta_velocity = has_true_structural_cadence ? 0.05 : 0.01;
+
+	if(frame_count <= 5) {
+	  alpha_phase *= 0.2;  // Trust the velocity memory; approach target gently
+	  beta_velocity = 0.0; // Freeze velocity modifications entirely
+	}
+
+	est_pts += phase_error * alpha_phase;
+
+	if(frame_count > 5) {
+	  if(!has_true_structural_cadence) {
+		est_duration_us += phase_error * beta_velocity;
+		cadence_short_us = est_duration_us;
+		cadence_long_us = est_duration_us;
+	  }
+	  else {
+		if(current_step_prediction == cadence_short_us) {
+		  cadence_short_us += phase_error * beta_velocity;
+		}
+		else {
+		  cadence_long_us += phase_error * beta_velocity;
+		}
+		if(cadence_short_us > cadence_long_us) {
+		  std::swap(cadence_short_us, cadence_long_us);
+		}
+		est_duration_us = (cadence_short_us + cadence_long_us) / 2.0;
+	  }
+	}
+
+	est_duration_us = std::clamp(est_duration_us, 8000.0, 150000.0);
+
+	// --- 8. MONOTONICITY & BOUNDARY GUARD ---
+	if(est_pts <= last_returned_pts_) {
+	  est_pts = last_returned_pts_ + 10.0;
+	}
+
+	last_returned_pts_ = est_pts;
+	return est_pts;
+  }
+
+private:
+  bool is_initialized_;
+  int64_t frame_count;
+  double est_pts;
+  double est_duration_us;
+  double last_returned_pts_;
+
+  bool is_interlaced_cadence;
+  bool has_true_structural_cadence;
+  int32_t cadence_lock_counter;
+  double cadence_short_us;
+  double cadence_long_us;
+};
+UniversalFlagPTSUpsampler3 upSampler;
 
 
 bool CVideoPlayerVideo::ProcessDecoderOutput(double &frametime, double &pts)
