@@ -647,7 +647,44 @@ void CRenderManager::RecordFlipEndTime()
   static double oldDiff = 0;
   static double oldFlipEndTime2 = 0;
   static double oldDiff2 = 0;
-  m_flipEndTime = m_dvdClock.GetClock();
+
+  const int CHECK_INTERVAL = 48; 
+  double freq = CurrentHostFrequency();
+  double ticksPerFrame = (double) DVD_TIME_BASE / fps;
+  static bool bInit = false;
+  static double currentPts = 0;
+  static int frameCounter = 0;
+  static double qpcDriftCorrection = 0.0; 
+  if(!bInit)
+  {
+	currentPts = m_dvdClock.GetClock();
+	frameCounter = 0;
+	qpcDriftCorrection = 0.0;
+	bInit = true;
+  }
+
+  double realPts = m_dvdClock.GetClock();
+  ++frameCounter;
+  currentPts += ticksPerFrame;
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "currentPts: {}, realPts: {}, diff: {} ms, frameCounterL {}, qpcDriftCorrection: {}", currentPts, realPts, (currentPts- realPts)/ (double)DVD_TIME_BASE*1000.0, frameCounter, qpcDriftCorrection);
+  if(std::abs(currentPts - realPts) > ticksPerFrame * 0.5)
+  {
+	currentPts = realPts;
+	frameCounter = 0;
+	qpcDriftCorrection = 0.0;
+  }
+  else
+  {
+	if(frameCounter >= CHECK_INTERVAL)
+	{
+	  frameCounter = 0;
+
+	  double ptsError = currentPts - realPts;
+	  qpcDriftCorrection = -((ptsError * 0.20) / CHECK_INTERVAL);
+	  currentPts -= (ptsError * 0.10);
+	}
+  }
+  m_flipEndTime = currentPts;
   m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime);
   
   if((m_flipEndTime- oldFlipEndTime) > 1000000.0 / fps * 1.6)
