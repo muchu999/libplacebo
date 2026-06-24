@@ -1838,7 +1838,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	//AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, static_cast<int>(videoSettings.m_Gamma), 14047, 1, 466, usePopup);
 	AddSlider(groupColorAjustment, SETTING_VIDEO_BRIGHTNESS, 464, SettingLevel::Basic, videoSettings.m_Brightness, "{:2.2f}", 0.0f, 0.05f, 100.0f, 464, usePopup);
 	AddSlider(groupColorAjustment, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, videoSettings.m_Contrast, "{:2.2f}", 0.0f, 0.02f, 100.0f, 465, usePopup);
-	AddSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, videoSettings.m_Gamma, "{:2.2f}", 0.0f, 0.1f, 100.0f, 466, usePopup);
+	AddSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, videoSettings.m_Gamma, "{:2.1f}", 0.0f, 0.1f, 100.0f, 466, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_HUE, 55222, SettingLevel::Basic, videoSettings.m_PlaceboHue, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55222, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSaturation, "{0:4.1f}", (float)0.0, (float)0.5, (float)100.0, 55210, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_TEMPERATURE, 55212, SettingLevel::Basic, videoSettings.m_PlaceboTemperature, "{0:6.0f}K", (float)1700, (float)10.0, (float)10000, 55212, usePopup);
