@@ -744,7 +744,6 @@ bool CRenderManager::IsPresenting()
 
 void CRenderManager::FrameMove()
 {
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Enter");
   bool firstFrame = false;
   UpdateResolution();
 

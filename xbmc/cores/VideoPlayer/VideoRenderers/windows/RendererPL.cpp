@@ -394,7 +394,7 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
   info.render7 = StringUtils::Format("Render time (t): {:0>4.1f}ms, mean: {:0>4.1f}, max:{:0>4.1f}, stdDev:{:0>4.1f}", plbuffer->m_RenderDurationGpu * 1000.0, meanGpu * 1000.0, renderTimeMonitorGpu.calculatePeak() * 1000.0, std::sqrt(varGpu) * 1000.0);
   info.render8 = StringUtils::Format("Render time (p): {:0>4.1f}ms, mean: {:0>4.1f}, max:{:0>4.1f}, stdDev:{:0>4.1f}", plbuffer->m_RenderDuration * 1000.0, mean * 1000.0, renderTimeMonitor.calculatePeak() * 1000.0, std::sqrt(var) * 1000.0);
 
-  info.shader = "-";
+
   if (plbuffer->hasHDR10PlusMetadata)
   {
 	info.shader = "Primaries (meta): ";

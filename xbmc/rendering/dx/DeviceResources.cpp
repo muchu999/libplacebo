@@ -1384,12 +1384,12 @@ void DX::DeviceResources::Present()
   // Log
   CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, PresentRefreshCount = {}", (double) presentDuration / freq*1000.0, (double) period / freq*1000.0, PresentCount, PresentRefreshCount);
 
-int64_t start2 = CurrentHostCounter();
+  //cl int64_t start2 = CurrentHostCounter();
 DWORD waitResult = WaitForSingleObjectEx(DX::DeviceResources::Get()->dxgiWaitHandle, 1000, TRUE); // Block until the DXGI hardware queue is ready to accept a frame
-int64_t end2 = CurrentHostCounter();
-static INT64 lastEnd2 = 0;
-CLog::LogF(LOGDEBUG, "Wait duration: {:f} ms, period (post wait): {:f} ms", (end2 - start2) / (float) freq * 1000, (end2 - lastEnd2) / (float) freq * 1000);
-lastEnd2 = end2;
+//int64_t end2 = CurrentHostCounter();
+//static INT64 lastEnd2 = 0;
+//CLog::LogF(LOGDEBUG, "Wait duration: {:f} ms, inter post wait: {:f} ms", (end2 - start2) / (float) freq * 1000, (end2 - lastEnd2) / (float) freq * 1000);
+//lastEnd2 = end2;
 
 // Pacer
 //  Pacer.Update(m_swapChain);

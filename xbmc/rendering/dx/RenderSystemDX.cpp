@@ -297,7 +297,6 @@ void CRenderSystemDX::PresentRender(bool rendered, bool videoLayer)
   }
 
   // time for decoder that may require the context
-  CLog::LogFC(LOGERROR, LOGAVTIMING, "Wait");
   {
     std::unique_lock lock(m_decoderSection);
     XbmcThreads::EndTime<> timer;
@@ -307,7 +306,6 @@ void CRenderSystemDX::PresentRender(bool rendered, bool videoLayer)
       m_decodingEvent.wait(lock, 1ms);
     }
   }
-  CLog::LogFC(LOGERROR, LOGAVTIMING, "Go");
 
   PresentRenderImpl(rendered);
 }
