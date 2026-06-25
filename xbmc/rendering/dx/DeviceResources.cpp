@@ -58,7 +58,7 @@ namespace winrt
 #define CHECK_ERR() if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return; }
 #define RETURN_ERR(ret) if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return (##ret); }
 
-#define pacer 0
+#define pacer 1
 
 bool DX::DeviceResources::CBackBuffer::Acquire(ID3D11Texture2D* pTexture)
 {
@@ -932,7 +932,7 @@ void DX::DeviceResources::ResizeBuffers()
 	  ComPtr<IDXGIDevice1> dxgiDevice;
 	  hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
       #if pacer
-        HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
+        HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
       #else
 	    HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
 	    dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
