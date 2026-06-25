@@ -326,7 +326,18 @@ bool DX::DeviceResources::SetFullScreen(bool fullscreen, RESOLUTION_INFO& res)
           recreate |= SUCCEEDED(m_swapChain->SetFullscreenState(true, pOutput.Get()));
           m_swapChain->GetFullscreenState(&bFullScreen, nullptr);
         }
-        bool resized = SUCCEEDED(m_swapChain->ResizeTarget(&currentMode));
+		if(CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin11_21H2))
+		{
+		  // Force Windows 11 to execute a hard hardware frequency change via Win32 before DXGI
+		  DEVMODEW dmScreenSettings = {};
+		  dmScreenSettings.dmSize = sizeof(dmScreenSettings);
+		  dmScreenSettings.dmPelsWidth = currentMode.Width;
+		  dmScreenSettings.dmPelsHeight = currentMode.Height;
+		  dmScreenSettings.dmDisplayFrequency = currentMode.RefreshRate.Numerator / (currentMode.RefreshRate.Denominator ? currentMode.RefreshRate.Denominator : 1);
+		  dmScreenSettings.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
+		  ::ChangeDisplaySettingsExW(nullptr, &dmScreenSettings, nullptr, CDS_FULLSCREEN | CDS_RESET, nullptr);
+		  ::Sleep(100); 		}
+		bool resized = SUCCEEDED(m_swapChain->ResizeTarget(&currentMode));
         if (resized) 
         {
           // some system doesn't inform windowing about desktop size changes
