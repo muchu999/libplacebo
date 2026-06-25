@@ -58,6 +58,8 @@ namespace winrt
 #define CHECK_ERR() if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return; }
 #define RETURN_ERR(ret) if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return (##ret); }
 
+#define pacer 0
+
 bool DX::DeviceResources::CBackBuffer::Acquire(ID3D11Texture2D* pTexture)
 {
   if (!pTexture)
@@ -809,8 +811,11 @@ void DX::DeviceResources::ResizeBuffers()
     m_swapChain->GetDesc1(&scDesc);
     hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
                                     lround(m_outputSize.Height), scDesc.Format,
-	                                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
-	                                //(windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+#if pacer
+	                                (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+#else
+                                    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+#endif
 	NotifySwapchainListeners("CreateSwapChain");
 
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
@@ -869,8 +874,11 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.SwapEffect = CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin10)
                                    ? DXGI_SWAP_EFFECT_FLIP_DISCARD
                                    : DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-	//swapChainDesc.Flags = (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+    #if pacer
+	  swapChainDesc.Flags = (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+    #else
+	  swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+    #endif
 	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     swapChainDesc.SampleDesc.Count = 1;
     swapChainDesc.SampleDesc.Quality = 0;
@@ -917,18 +925,20 @@ void DX::DeviceResources::ResizeBuffers()
       return;
     }
 
-#if 1 //cl 
 	IDXGISwapChain2* swapChain2 = nullptr;
 	HRESULT hr = swapChain->QueryInterface(__uuidof(IDXGISwapChain2), (void**) &swapChain2);
 	if(SUCCEEDED(hr) && swapChain2)
 	{
 	  ComPtr<IDXGIDevice1> dxgiDevice;
 	  hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
-	  HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
-	  dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
+      #if pacer
+        HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
+      #else
+	    HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
+	    dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
+      #endif
 	  swapChain2->Release();
 	}
-#endif
 	
 	m_IsHDROutput = (swapChainDesc.Format == DXGI_FORMAT_R10G10B10A2_UNORM) && isHdrEnabled;
 
@@ -1364,7 +1374,11 @@ void DX::DeviceResources::Present()
   DXGI_PRESENT_PARAMETERS parameters = {};
   UINT64 start = CurrentHostCounter();
   //DX::DeviceResources::Get()->GetImmediateContext()->Flush();
-  HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
+  #if pacer
+    HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
+  #else
+    HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
+  #endif
   //DwmFlush();
   UINT64 end = CurrentHostCounter();
   UINT64 presentDuration = end - start;
@@ -1384,47 +1398,53 @@ void DX::DeviceResources::Present()
   // Log
   CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, PresentRefreshCount = {}", (double) presentDuration / freq*1000.0, (double) period / freq*1000.0, PresentCount, PresentRefreshCount);
 
-  int64_t start2 = CurrentHostCounter();
-  DWORD waitResult = WaitForSingleObjectEx(DX::DeviceResources::Get()->dxgiWaitHandle, 1000, TRUE); // Block until the DXGI hardware queue is ready to accept a frame
-  int64_t end2 = CurrentHostCounter();
-  static INT64 lastEnd2 = 0;
-  CLog::LogF(LOGDEBUG, "Wait duration: {:f} ms, period (post wait): {:f} ms", (end2 - start2) / (float) freq * 1000, (end2 - lastEnd2) / (float) freq * 1000);
-  lastEnd2 = end2;
 
-// Pacer
-//  Pacer.Update(m_swapChain);
+  #if pacer
+    // Pacer
+    Pacer.Update(m_swapChain);
+  #else
+	int64_t start2 = CurrentHostCounter();
+	DWORD waitResult = WaitForSingleObjectEx(DX::DeviceResources::Get()->dxgiWaitHandle, 1000, TRUE); // Block until the DXGI hardware queue is ready to accept a frame
+	int64_t end2 = CurrentHostCounter();
+	static INT64 lastEnd2 = 0;
+	CLog::LogF(LOGDEBUG, "Wait duration: {:f} ms, period (post wait): {:f} ms", (end2 - start2) / (float) freq * 1000, (end2 - lastEnd2) / (float) freq * 1000);
+	lastEnd2 = end2;
 
-static bool bInit= false;
-static LONGLONG targetQpc;
-double ticksPerFrame = (double) freq/ CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
-if(!bInit)
-{
-  LARGE_INTEGER startTime;
-  QueryPerformanceCounter(&startTime);
-  targetQpc = startTime.QuadPart;
-  bInit = true;
-}
-targetQpc += ticksPerFrame;
+	static bool bInit = false;
+	static LONGLONG targetQpc;
+	double ticksPerFrame = (double) freq / CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
+	if(!bInit)
+	{
+	  LARGE_INTEGER startTime;
+	  QueryPerformanceCounter(&startTime);
+	  targetQpc = startTime.QuadPart;
+	  bInit = true;
+	}
+	targetQpc += ticksPerFrame;
 
-LARGE_INTEGER currentQpc;
-QueryPerformanceCounter(&currentQpc);
+	// 2. Sample the high-precision clock immediately upon waking
+	LARGE_INTEGER currentQpc;
+	QueryPerformanceCounter(&currentQpc);
 
-LONGLONG ticksRemaining = targetQpc - currentQpc.QuadPart;
-if(ticksRemaining < 0 || ticksRemaining > (ticksPerFrame * 2)) {
-  targetQpc = currentQpc.QuadPart + ticksPerFrame;
-  ticksRemaining = ticksPerFrame;
-}
+	LONGLONG ticksRemaining = targetQpc - currentQpc.QuadPart;
+	LONGLONG safeBufferTicks = (freq * 20) / 1000; // Your optimized 10ms cushion
 
-// Software Pacing Burn 
-LONGLONG safeBufferTicks = (freq * 2) / 1000; 
-CLog::LogFC(LOGDEBUG, LOGAVTIMING, "targetQpc: {}, currentQpc: {}, ticksRemaining: {}",  targetQpc, currentQpc.QuadPart, ticksRemaining);
+	// 3. Coarse Sleep: Only triggers during major clock desyncs or frame drops
+	if(ticksRemaining > safeBufferTicks) {
+	  DWORD sleepMs = (DWORD) ((ticksRemaining - safeBufferTicks) / 10000);
+	  if(sleepMs > 0) {
+		Sleep(sleepMs);
+	  }
+	}
 
-if(ticksRemaining > safeBufferTicks) {
-  DWORD sleepMs = (DWORD) (((ticksRemaining - safeBufferTicks) * 1000) / freq);
-  if(sleepMs > 0) {
-	Sleep(sleepMs);
-  }
-}
+	// 4. Precision Spin-Wait Lock
+	// This fills the sub-millisecond gap perfectly, preventing queue flooding
+	do {
+	  QueryPerformanceCounter(&currentQpc);
+	} while(currentQpc.QuadPart < (targetQpc - (freq * 12 / 1000)));
+	// Spin-locks until exactly 4ms before targetQpc to guarantee a safe render window
+	// 
+#endif
 
   // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)

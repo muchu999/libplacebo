@@ -744,6 +744,7 @@ bool CRenderManager::IsPresenting()
 
 void CRenderManager::FrameMove()
 {
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Enter");
   bool firstFrame = false;
   UpdateResolution();
 
@@ -810,6 +811,7 @@ void CRenderManager::FrameMove()
   m_playerPort->UpdateGuiRender(IsGuiLayer() || !m_pRenderer->HasVideoPlane() || firstFrame);
 
   ManageCaptures();
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Exit");
 }
 
 void CRenderManager::PreInit()
@@ -1574,6 +1576,7 @@ bool CRenderManager::Supports(ESCALINGMETHOD method) const
 int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
                                   std::chrono::milliseconds timeout)
 {
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Enter");
   std::unique_lock lock(m_presentlock);
 
   // check if gui is active and discard buffer if not
@@ -1597,7 +1600,8 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
     sleeptime = std::min(sleeptime, 20ms);
 	m_presentevent.wait(lock, sleeptime);
     DiscardBuffer();
-    return 0;
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Exit");
+	return 0;
   }
 
   XbmcThreads::EndTime<> endtime{timeout};
@@ -1606,6 +1610,7 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
     m_presentevent.wait(lock, std::min(50ms, timeout));
     if (endtime.IsTimePast() || bStop)
     {
+	  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Exit");
 	  return -1;
 	}
   }
@@ -1614,6 +1619,7 @@ int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
   m_overlays.Release(m_free.front());
 
   // return buffer level
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Exit");
   return m_queued.size() + m_discard.size();
 }
 
