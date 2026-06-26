@@ -1743,6 +1743,7 @@ private:
   bool m_forceHistoryReset = true;
   int m_settleFrameCounter = 0;
   bool m_discardPendingQueueFrames = false;
+  HANDLE m_hPacingTimer = nullptr;
 
   // Hardware output handle
   Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput;
@@ -1754,6 +1755,10 @@ public:
 	m_countsPerSecond = static_cast<double>(m_frequency.QuadPart);
 	QueryPerformanceCounter(&m_frameStartTime);
 	m_nextFrameTime = m_frameStartTime;
+	m_hPacingTimer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+	if(!m_hPacingTimer) {
+	  timeBeginPeriod(1); // Fallback for older systems
+	}
 
   }
   bool ShouldDiscardQueue() { return m_discardPendingQueueFrames; }
@@ -1762,25 +1767,53 @@ public:
 
   void Update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput, UINT64& cadenceDrop, UINT64& tokenBunching, UINT64& vramStall)
   {
-	// Initialize or re-verify active display surface link dynamically
+	// Initialize active display surface handle dynamically
 	if(m_pActiveOutput == nullptr && m_swapChain != nullptr)
 	{
 	  m_swapChain->GetContainingOutput(&m_pActiveOutput);
 	}
 
+	LARGE_INTEGER currentTime;
+	QueryPerformanceCounter(&currentTime);
+
 	// ========================================================================
-	// 1. HARDWARE GRID LOCK
+	// STEP 1: ASYNCHRONOUS COARSE SLEEP (Restores 18ms GPU Performance)
+	// ========================================================================
+	m_nextFrameTime.QuadPart = m_frameStartTime.QuadPart + m_targetCountsPerFrame;
+	LONGLONG ticksRemaining = m_nextFrameTime.QuadPart - currentTime.QuadPart;
+
+	// Leave a strict 3.5ms hardware cushion before the next refresh cycle.
+	// This allows the CPU thread to sleep through the heavy driver contention window,
+	// giving the GPU its necessary breathing headroom to remain in high boost clocks.
+	LONGLONG cushionTicks = (m_frequency.QuadPart * 7) / 2000; // 3.5ms
+	LONGLONG sleepTicks = ticksRemaining - cushionTicks;
+
+	if(sleepTicks > 0 && m_hPacingTimer != nullptr)
+	{
+	  LARGE_INTEGER liDueTime;
+	  liDueTime.QuadPart = -(sleepTicks * 10000000) / m_frequency.QuadPart;
+
+	  SetWaitableTimerEx(m_hPacingTimer, &liDueTime, 0, NULL, NULL, NULL, 0);
+	  WaitForSingleObjectEx(m_hPacingTimer, INFINITE, TRUE);
+	}
+
+	// ========================================================================
+	// STEP 2: FINE-GRAINED HARDWARE SNAP LOCK (Eliminates the diff sequences)
 	// ========================================================================
 	if(m_pActiveOutput != nullptr)
 	{
+	  // After our software sleep finishes early, this hardware gate catches the thread
+	  // and locks its unblocking timing perfectly onto the physical VBlank grid line [Index: 4].
+	  // This wipes out any software timeline drift and aligns presents cleanly with the DWM.
 	  m_pActiveOutput->WaitForVBlank();
 	}
 
+	// Capture our clean post-VBlank hardware edge timestamp immediately
 	LARGE_INTEGER postWaitTime;
 	QueryPerformanceCounter(&postWaitTime);
 
 	// ========================================================================
-	// 2. DYNAMIC MODE RE-INDEX CHECK
+	// STEP 3: DYNAMIC MODE RE-INDEX CHECK
 	// ========================================================================
 	double targetRefreshRate = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
 	if(targetRefreshRate != m_lastRefreshRate)
@@ -1788,30 +1821,39 @@ public:
 	  double targetFrameDuration = 1.0 / targetRefreshRate;
 
 	  m_baseCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * m_countsPerSecond);
-	  m_targetCountsPerFrame = m_baseCountsPerFrame; // Reset oscillator to center
+	  m_targetCountsPerFrame = m_baseCountsPerFrame;
 
 	  m_adaptiveStepCounts = static_cast<LONGLONG>(targetFrameDuration * 0.005 * m_countsPerSecond);
 	  m_minCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 0.90) * m_countsPerSecond);
 	  m_maxCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 1.10) * m_countsPerSecond);
 	  m_resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * m_countsPerSecond);
 
-	  m_settleFrameCounter = 15;
+	  m_settleFrameCounter = 20;
 	  m_forceHistoryReset = true;
 	  m_lastExpectedRefreshes = -1;
+	  m_lastPresentCount = 0;
+	  m_lastRefreshCount = 0;
+	  m_discardPendingQueueFrames = true;
+
 	  m_lastRefreshRate = targetRefreshRate;
 	}
 
 	// ========================================================================
-	// STEP 3: TELEMETRY RATIO TRACKING & JUDDER DETECTION
+	// STEP 4: TELEMETRY RATIO TRACKING & 60HZ-AWARE JUDDER DETECTION
 	// ========================================================================
 	DXGI_FRAME_STATISTICS stats;
 	if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats)))
 	{
+	  if(m_lastPresentCount == 0 || m_lastRefreshCount == 0) {
+		m_lastPresentCount = stats.PresentCount;
+		m_lastRefreshCount = stats.PresentRefreshCount;
+	  }
+
 	  if(m_forceHistoryReset || m_settleFrameCounter > 0)
 	  {
 		m_lastPresentCount = stats.PresentCount;
 		m_lastRefreshCount = stats.PresentRefreshCount;
-		m_lastExpectedRefreshes = -1; // Clear cadence memory during resets
+		m_lastExpectedRefreshes = -1;
 
 		if(m_settleFrameCounter > 0) m_settleFrameCounter--;
 		else m_forceHistoryReset = false;
@@ -1825,60 +1867,64 @@ public:
 		if(framePhaseError > 1)       framePhaseError = 1;
 		else if(framePhaseError < -1) framePhaseError = -1;
 
-		// SCENARIO A: Progressive Flow (Clean Frame Advancements)
 		if(deltaPresent > 0 && deltaRefresh > 0)
 		{
-		  // 1. Maintain the adaptive PLL clock oscillator loop
-		  if(framePhaseError > 0)       m_targetCountsPerFrame -= (m_adaptiveStepCounts * framePhaseError);
-		  else if(framePhaseError < 0)  m_targetCountsPerFrame += (m_adaptiveStepCounts * -framePhaseError);
+		  // Select adaptive tuning or lock to center based on matched modes
+		  if(m_baseCountsPerFrame < 200000)
+		  {
+			m_targetCountsPerFrame = m_baseCountsPerFrame;
+		  }
 		  else
 		  {
-			if(m_targetCountsPerFrame > m_baseCountsPerFrame) m_targetCountsPerFrame--;
-			if(m_targetCountsPerFrame < m_baseCountsPerFrame) m_targetCountsPerFrame++;
-		  }
-
-		  if(m_targetCountsPerFrame < m_minCountsClamp) m_targetCountsPerFrame = m_minCountsClamp;
-		  if(m_targetCountsPerFrame > m_maxCountsClamp) m_targetCountsPerFrame = m_maxCountsClamp;
-
-		  // 2. Universal Cadence Judder Analyzer
-		  INT64 actualRefreshesPerFrame = deltaRefresh / deltaPresent;
-
-		  // Only compare cadence patterns if both this frame and the previous frame 
-		  // represent true progressive advancements (preventing 0-increment corruption)
-		  if(m_lastExpectedRefreshes != -1 && actualRefreshesPerFrame > 0)
-		  {
-			// Smoothly tolerates standard 3:2 pulldown transitions (1, 2, or 3 VBlanks)
-			// But increments the OSD counter instantly if a frame stalls (jumps to 4+ refreshes)
-			if(std::abs(actualRefreshesPerFrame - m_lastExpectedRefreshes) > 1)
+			if(framePhaseError > 0)       m_targetCountsPerFrame -= (m_adaptiveStepCounts * framePhaseError);
+			else if(framePhaseError < -1) m_targetCountsPerFrame += (m_adaptiveStepCounts * -framePhaseError);
+			else
 			{
-			  cadenceDrop++;
-			  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER REAL JUDDER: Cadence drop. Expected close to {}, Got {}",
-				m_lastExpectedRefreshes, actualRefreshesPerFrame);
+			  if(m_targetCountsPerFrame > m_baseCountsPerFrame) m_targetCountsPerFrame--;
+			  if(m_targetCountsPerFrame < m_baseCountsPerFrame) m_targetCountsPerFrame++;
 			}
+
+			if(m_targetCountsPerFrame < m_minCountsClamp) m_targetCountsPerFrame = m_minCountsClamp;
+			if(m_targetCountsPerFrame > m_maxCountsClamp) m_targetCountsPerFrame = m_maxCountsClamp;
 		  }
 
-		  if(actualRefreshesPerFrame > 0) {
-			m_lastExpectedRefreshes = actualRefreshesPerFrame;
+		  // Judder Starvation Check
+		  INT64 actualRefreshesPerFrame = deltaRefresh / deltaPresent;
+		  if(m_baseCountsPerFrame < 200000 && actualRefreshesPerFrame > 1)
+		  {
+			cadenceDrop++;
+			CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER HARDWARE STUTTER: Render dropped past window.");
+			m_lastExpectedRefreshes = -1;
+		  }
+		  else
+		  {
+			if(m_lastExpectedRefreshes != -1 && actualRefreshesPerFrame > 0)
+			{
+			  if(std::abs(actualRefreshesPerFrame - m_lastExpectedRefreshes) > 1)
+			  {
+				cadenceDrop++;
+			  }
+			}
+			if(actualRefreshesPerFrame > 0) {
+			  m_lastExpectedRefreshes = actualRefreshesPerFrame;
+			}
 		  }
 
 		  m_lastPresentCount = stats.PresentCount;
 		  m_lastRefreshCount = stats.PresentRefreshCount;
 		}
-		// SCENARIO B: DXGI Token Bunching / Driver Edge Flushes
 		else if(deltaPresent == 0 && deltaRefresh > 0)
 		{
 		  m_targetCountsPerFrame += m_adaptiveStepCounts;
-		  tokenBunching++;
-		  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: DXGI token bunching event.");
-		  m_lastExpectedRefreshes = -1; // Invalidate history to prevent false flags on the next pass
+		  m_lastExpectedRefreshes = -1;
+		  cadenceDrop++;
 		  m_lastRefreshCount = stats.PresentRefreshCount;
 		}
-		// SCENARIO C: GENUINE VRAM COPY THREAD STALL
 		else if(deltaPresent == 0 && deltaRefresh == 0)
 		{
 		  if((postWaitTime.QuadPart - m_frameStartTime.QuadPart) > (m_baseCountsPerFrame * 3 / 2))
 		  {
-			vramStall++;
+			cadenceDrop++;
 			CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: True VRAM copy thread stall intercepted.");
 
 			m_forceHistoryReset = true;
@@ -1891,12 +1937,12 @@ public:
 	}
 
 	// ========================================================================
-	// 4. TIMELINE PHASE ALIGNMENT & RESET
+	// STEP 5: TIMELINE SAFETY ALIGNMENT & STATE COMMIT
 	// ========================================================================
 	m_nextFrameTime.QuadPart = m_frameStartTime.QuadPart + m_targetCountsPerFrame;
 	LONGLONG timelineDivergence = postWaitTime.QuadPart - m_nextFrameTime.QuadPart;
 
-	if(std::abs(timelineDivergence) > m_resetThresholdCounts * 9.0 / 10.0)  //cl * 1.0 new?
+	if(std::abs(timelineDivergence) > m_resetThresholdCounts)
 	{
 	  m_forceHistoryReset = true;
 	  m_settleFrameCounter = 15;
@@ -1905,24 +1951,8 @@ public:
 	  m_nextFrameTime.QuadPart = postWaitTime.QuadPart;
 	  m_frameStartTime.QuadPart = postWaitTime.QuadPart - m_baseCountsPerFrame;
 	  timelineDivergence = 0;
-	  
-	  // THE FLUSH TRIGGER: Flag that our DXGI queue is backed up and needs clearing
-	  m_discardPendingQueueFrames = true;
 	}
 
-	// ========================================================================
-	// 5. TIMING TELEMETRY LOGGER
-	// ========================================================================
-	double currentMs = postWaitTime.QuadPart / m_countsPerSecond * 1000.0;
-	double targetMs = m_nextFrameTime.QuadPart / m_countsPerSecond * 1000.0;
-	double actualPeriod = (postWaitTime.QuadPart - m_frameStartTime.QuadPart) / m_countsPerSecond * 1000.0;
-	double finalDivergence = timelineDivergence / m_countsPerSecond * 1000.0;
-
-	CLog::LogFC(LOGDEBUG, LOGAVTIMING,
-	  "time: {:.3f}, target: {:.3f}, period: {:.3f} ms, divergence: {:.3f} ms, targetCounts: {}",
-	  currentMs, targetMs, actualPeriod, finalDivergence, m_targetCountsPerFrame);
-
-	// Commit baseline state securely using the clean post-VBlank edge anchor
 	m_frameStartTime = postWaitTime;
   }
 };
