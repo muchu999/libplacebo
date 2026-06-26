@@ -137,6 +137,10 @@ public:
   static void PlLutTypeOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void PlDiffusionKernelOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current);
   static void SetVideoSettings(CVideoSettings& vs);
+  static double BrightnessPl2Kodi(double plBrightness);
+  static double BrightnessKodi2Pl(double kodiBrightness);
+  static double ContrastPl2Kodi(double plContrast);
+  static double ContrastKodi2Pl(double kodiContrast);
   static void UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings& vs);
   static void UpdateLibPLaceboParamsFromVideoSettings(CVideoSettings& vs);
   static void LoadLibplaceboSettings(CVideoSettings& vs);

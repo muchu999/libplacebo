@@ -122,6 +122,10 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboFrameMixerRadiusFactor = other.m_PlaceboFrameMixerRadiusFactor;
   m_PlaceboFrameMixerBypassQueue = other.m_PlaceboFrameMixerBypassQueue;
   m_PlaceboCropBottom = other.m_PlaceboCropBottom;
+  m_PlaceboBrightnessSdr = other.m_PlaceboBrightnessSdr;
+  m_PlaceboContrastSdr = other.m_PlaceboContrastSdr;
+  m_PlaceboBrightnessHdr = other.m_PlaceboBrightnessHdr;
+  m_PlaceboContrastHdr = other.m_PlaceboContrastHdr;
 
   // Shallow copy and deep copy of m_placeboOptions content
   if (m_placeboOptions && other.m_placeboOptions)
@@ -182,7 +186,11 @@ CVideoSettings::CVideoSettings()
   m_PlaceboFrameMixerRadiusFactor = 1.0;
   m_PlaceboFrameMixerBypassQueue = true;
   m_PlaceboCropBottom = 0;                    //cl reset these settings along with libplacebo reset to defaults ????
-  
+  m_PlaceboBrightnessSdr = 50.0f;
+  m_PlaceboContrastSdr = 50.0f;
+  m_PlaceboBrightnessHdr = 50.0f;
+  m_PlaceboContrastHdr = 50.0f;
+
   m_PlaceboShadersEnabled = {};
   m_PlaceboShadersFilename = {};
   m_PlaceboShadersParams = {};
@@ -327,6 +335,10 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if (m_PlaceboFrameMixerRadiusFactor != right.m_PlaceboFrameMixerRadiusFactor) return true;
   if(m_PlaceboFrameMixerBypassQueue != right.m_PlaceboFrameMixerBypassQueue) return true;
   if(m_PlaceboCropBottom != right.m_PlaceboCropBottom) return true;
+  if(m_PlaceboBrightnessSdr != right.m_PlaceboBrightnessSdr) return true;
+  if(m_PlaceboContrastSdr != right.m_PlaceboContrastSdr) return true;
+  if(m_PlaceboBrightnessHdr != right.m_PlaceboBrightnessHdr) return true;
+  if(m_PlaceboContrastHdr != right.m_PlaceboContrastHdr) return true;
 
   if (m_PlaceboShadersEnabled != right.m_PlaceboShadersEnabled) return true;
   if (m_PlaceboShadersFilename != right.m_PlaceboShadersFilename) return true;

@@ -249,6 +249,10 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_DEBUG_HIDE                          "video.libplacebo.debug_hide"
 #define SETTING_LIB_PLACEBO_FRAME_MIXER_BYPASS_QUEUE            "video.libplacebo.mixer_bypass_queue"
 #define SETTING_LIB_PLACEBO_CROP_BOTTOM                         "video.libplacebo.crop_bottom"
+#define SETTING_VIDEO_BRIGHTNESS_SDR      "video.brightness.sdr"
+#define SETTING_VIDEO_BRIGHTNESS_HDR      "video.brightness.hdr"
+#define SETTING_VIDEO_CONTRAST_SDR        "video.contrast.sdr"
+#define SETTING_VIDEO_CONTRAST_HDR        "video.contrast.hdr"
 
 #define CreateGroup(thegroup,thecategory) std::shared_ptr<CSettingGroup> thegroup = AddGroup(thecategory); if (thegroup == NULL) {CLog::Log(LOGERROR, "CGUIDialogLibplacebo: unable to setup settings");  return; }
 
@@ -334,18 +338,16 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PostProcess = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
 	appPlayer->SetVideoSettings(vs);
   }
-  else if (settingId == SETTING_VIDEO_BRIGHTNESS)
+  else if(settingId == SETTING_VIDEO_BRIGHTNESS)
   {
-	vs.m_Brightness = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-	vs.m_Brightness = std::round(vs.m_Brightness * 20.0) * 0.05;
-	m_placeboOptions->color_adjustment.brightness = vs.m_Brightness / 50.0 - 1.0;
+	CVideoSettings vs = appPlayer->GetVideoSettings();
+	vs.m_Brightness = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
-  else if (settingId == SETTING_VIDEO_CONTRAST)
+  else if(settingId == SETTING_VIDEO_CONTRAST)
   {
-	vs.m_Contrast = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-	vs.m_Contrast = std::round(vs.m_Contrast*50.0) * 0.02;
-	m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.99;
+	CVideoSettings vs = appPlayer->GetVideoSettings();
+	vs.m_Contrast = static_cast<float>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_VIDEO_GAMMA)
@@ -787,6 +789,30 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboCropBottom = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
+  else if(settingId == SETTING_VIDEO_BRIGHTNESS_SDR)
+  {
+	vs.m_PlaceboBrightnessSdr = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	vs.m_PlaceboBrightnessSdr = std::round(vs.m_PlaceboBrightnessSdr * 20.0) * 0.05;
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_VIDEO_BRIGHTNESS_HDR)
+  {
+	vs.m_PlaceboBrightnessHdr = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	vs.m_PlaceboBrightnessHdr = std::round(vs.m_PlaceboBrightnessHdr * 20.0) * 0.05;
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_VIDEO_CONTRAST_SDR)
+  {
+	vs.m_PlaceboContrastSdr = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	vs.m_PlaceboContrastSdr = std::round(vs.m_PlaceboContrastSdr * 50.0) * 0.02;
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_VIDEO_CONTRAST_HDR)
+  {
+	vs.m_PlaceboContrastHdr = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	vs.m_PlaceboContrastHdr = std::round(vs.m_PlaceboContrastHdr * 50.0) * 0.02;
+	appPlayer->SetVideoSettings(vs);
+	}
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED)
   {
 	vs.m_PlaceboDeinterlaceEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
@@ -1836,8 +1862,10 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	//AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_BRIGHTNESS, 464, SettingLevel::Basic, static_cast<int>(videoSettings.m_Brightness), 14047, 1, 464, usePopup);
 	//AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, static_cast<int>(videoSettings.m_Contrast), 14047, 1, 465, usePopup);
 	//AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, static_cast<int>(videoSettings.m_Gamma), 14047, 1, 466, usePopup);
-	AddSlider(groupColorAjustment, SETTING_VIDEO_BRIGHTNESS, 464, SettingLevel::Basic, videoSettings.m_Brightness, "{:6.2f}", 0.0f, 0.05f, 100.0f, 464, usePopup);
-	AddSlider(groupColorAjustment, SETTING_VIDEO_CONTRAST, 465, SettingLevel::Basic, videoSettings.m_Contrast, "{:6.2f}", 0.0f, 0.02f, 100.0f, 465, usePopup);
+	AddSlider(groupColorAjustment, SETTING_VIDEO_BRIGHTNESS_SDR, 55373, SettingLevel::Basic, videoSettings.m_PlaceboBrightnessSdr, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55373, usePopup);
+	AddSlider(groupColorAjustment, SETTING_VIDEO_BRIGHTNESS_HDR, 55375, SettingLevel::Basic, videoSettings.m_PlaceboBrightnessHdr, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55375, usePopup);
+	AddSlider(groupColorAjustment, SETTING_VIDEO_CONTRAST_SDR, 55374, SettingLevel::Basic, videoSettings.m_PlaceboContrastSdr, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55374, usePopup);
+	AddSlider(groupColorAjustment, SETTING_VIDEO_CONTRAST_HDR, 55376, SettingLevel::Basic, videoSettings.m_PlaceboContrastHdr, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55376, usePopup);
 	AddSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, videoSettings.m_Gamma, "{:5.1f}", 0.0f, 0.1f, 100.0f, 466, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_HUE, 55222, SettingLevel::Basic, videoSettings.m_PlaceboHue, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55222, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSaturation, "{0:4.1f}", (float)0.0, (float)0.5, (float)100.0, 55210, usePopup);

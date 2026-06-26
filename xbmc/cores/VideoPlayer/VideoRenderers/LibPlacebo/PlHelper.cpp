@@ -404,6 +404,23 @@ void PL::PLInstance::fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format)
   }
 }
 
+double CPLHelper::BrightnessPl2Kodi(double plBrightness)
+{
+  return (plBrightness + 1.0) * 50.0;  //cl rounding, all
+}
+double CPLHelper::BrightnessKodi2Pl(double kodiBrightness)
+{
+  return kodiBrightness / 50.0 - 1.0;
+}
+double CPLHelper::ContrastPl2Kodi(double plContrast)
+{
+  return log10f(plContrast * 99.0 / 100.0 + 0.01) * 25.0 + 50.0;
+}
+double CPLHelper::ContrastKodi2Pl(double kodiContrast)
+{
+  return (std::pow(10.0, (kodiContrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.99;
+}
+
 //cl this can be called from other threads which could cause a race condition
 void CPLHelper::SetVideoSettings(CVideoSettings& vs)
 {
@@ -430,8 +447,8 @@ void CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings& vs)
 {
   pl_options m_placeboOptions = vs.m_placeboOptions->getPlOptions();
 
-  vs.m_Brightness = (m_placeboOptions->color_adjustment.brightness + 1.0) * 50.0;
-  vs.m_Contrast = log10f(m_placeboOptions->color_adjustment.contrast * 99.0 / 100.0 + 0.01) * 25.0 + 50.0;
+  //vs.m_Brightness = (m_placeboOptions->color_adjustment.brightness + 1.0) * 50.0;
+  //vs.m_Contrast = log10f(m_placeboOptions->color_adjustment.contrast * 99.0 / 100.0 + 0.01) * 25.0 + 50.0;
   vs.m_Gamma = log10f(m_placeboOptions->color_adjustment.gamma * (1.0 - pow(10, -0.5)) + pow(10, -0.5)) * 40.0 + 20.0;
 
   vs.m_PlaceboColorAdjustmentEnabled = m_placeboOptions->params.color_adjustment != NULL;
@@ -540,9 +557,10 @@ void CPLHelper::UpdateVideoSettingsFromLibPLaceboParams(CVideoSettings& vs)
   vs.m_PlaceboSkipTargetClearing = m_placeboOptions->params.skip_target_clearing;
 
   // Update overriden default values for placebo specific settings that are not directly stored in m_placeboOptions, but only in CVideoSettings
-  /* //cl no! we assume the param settings are always meant for HDR and overriden in the renderer function if needed, never need to update them
+  /* //cl no! we assume the param settings are always meant for HDR/SDR and overriden in the renderer function if needed, never need to update them
   vs.m_PlaceboSdrSaturation = vs.m_PlaceboSaturation;
   vs.m_PlaceboSdrColorMapGamutMapping = vs.m_PlaceboColorMapGamutMapping;
+  vs.m_PlaceboBrightnessHdr
   ...
   */
 
@@ -555,8 +573,8 @@ void CPLHelper::UpdateLibPLaceboParamsFromVideoSettings(CVideoSettings& vs)
   m_placeboOptions->params.lut = vs.m_PlaceboLutType == -1 ? NULL : vs.m_PlaceboLut.get();
 
   m_placeboOptions->params.color_adjustment = vs.m_PlaceboColorAdjustmentEnabled ? &m_placeboOptions->color_adjustment : NULL;
-  m_placeboOptions->color_adjustment.brightness = vs.m_Brightness / 50.0 - 1.0;
-  m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.0;
+  //m_placeboOptions->color_adjustment.brightness = vs.m_Brightness / 50.0 - 1.0;
+  //m_placeboOptions->color_adjustment.contrast = (pow(10.0, (vs.m_Contrast - 50.0) / 25.0) - 0.01) * 100.0 / 99.0;
   m_placeboOptions->color_adjustment.gamma = (pow(10.0, (vs.m_Gamma - 20.0) / 40.0) - pow(10, -0.5)) * 1.0 / (1.0 - pow(10, -0.5));
   m_placeboOptions->color_adjustment.saturation = pow(10.0, (vs.m_PlaceboSaturation - 50.0) / 40.0);
   m_placeboOptions->color_adjustment.hue = fmod(vs.m_PlaceboHue, 360.0) * M_PI / 180.0;
@@ -693,6 +711,10 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetFloat(pNode, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
   XMLUtils::SetBoolean(pNode, "placebomixerbypassqueue", vs.m_PlaceboFrameMixerBypassQueue);
   XMLUtils::SetInt(pNode, "placebocropbottom", vs.m_PlaceboCropBottom);
+  XMLUtils::SetFloat(pNode, "placebobrightnesssdr", vs.m_PlaceboBrightnessSdr);
+  XMLUtils::SetFloat(pNode, "placebocontrastsdr", vs.m_PlaceboContrastSdr);
+  XMLUtils::SetFloat(pNode, "placebobrightnesshdr", vs.m_PlaceboBrightnessHdr);
+  XMLUtils::SetFloat(pNode, "placebocontrasthdr", vs.m_PlaceboContrastHdr);
 
   XMLUtils::SetFloat(pNode, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::SetBoolean(pNode, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
@@ -868,6 +890,10 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
   XMLUtils::GetBoolean(pElement, "placebomixerbypassqueue", vs.m_PlaceboFrameMixerBypassQueue);
   XMLUtils::GetInt(pElement, "placebocropbottom", vs.m_PlaceboCropBottom);
+  XMLUtils::GetFloat(pElement, "placebobrightnesssdr", vs.m_PlaceboBrightnessSdr);
+  XMLUtils::GetFloat(pElement, "placebocontrastsdr", vs.m_PlaceboContrastSdr);
+  XMLUtils::GetFloat(pElement, "placebobrightnesshdr", vs.m_PlaceboBrightnessHdr);
+  XMLUtils::GetFloat(pElement, "placebocontrasthdr", vs.m_PlaceboContrastHdr);
 
   XMLUtils::GetFloat(pElement, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);

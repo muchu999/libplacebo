@@ -25657,3 +25657,19 @@ msgctxt "#55372"
 msgid ""
 msgstr ""
 
+msgctxt "#55373"
+msgid "Display Brightness SDR"
+msgstr ""
+
+msgctxt "#55374"
+msgid "Display Contrast SDR"
+msgstr ""
+
+msgctxt "#55375"
+msgid "Display Brightness HDR"
+msgstr ""
+
+msgctxt "#55376"
+msgid "Display Contrast HDR"
+msgstr ""
+

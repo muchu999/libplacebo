@@ -1135,10 +1135,9 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   }
 
   // Apply SDR to HDR specific settings
+  pl_options opt = videoSettings.m_placeboOptions->getPlOptions();
   if(videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(frameIn.color.transfer) && pl_color_transfer_is_hdr(frameOut.color.transfer))
   {
-	pl_options opt = videoSettings.m_placeboOptions->getPlOptions();
-
 	opt->color_adjustment.saturation = pow(10.0, (videoSettings.m_PlaceboSdrSaturation - 50.0) / 40.0);
 	opt->color_map_params.inverse_tone_mapping = videoSettings.m_PlaceboSdrColorMapInverseToneMapping;
 	opt->color_map_params.gamut_expansion = videoSettings.m_PlaceboSdrColorMapGamutExpansion;
@@ -1162,6 +1161,17 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	opt->color_map_params.gamut_constants.softclip_desat = videoSettings.m_PlaceboSdrGamutConstantsSoftclipDesat;
 	opt->color_map_params.gamut_constants.softclip_knee = videoSettings.m_PlaceboSdrGamutConstantsSoftclipKnee;
   }
+  if(pl_color_transfer_is_hdr(frameOut.color.transfer))
+  {
+	opt->color_adjustment.brightness = CPLHelper::BrightnessKodi2Pl(videoSettings.m_PlaceboBrightnessHdr);
+	opt->color_adjustment.contrast = CPLHelper::ContrastKodi2Pl(videoSettings.m_PlaceboContrastHdr);
+  }
+  else
+  {
+	opt->color_adjustment.brightness = CPLHelper::BrightnessKodi2Pl(videoSettings.m_PlaceboBrightnessSdr);
+	opt->color_adjustment.contrast = CPLHelper::ContrastKodi2Pl(videoSettings.m_PlaceboContrastSdr);
+  }
+
 
 
   static bool bProfilingInit = false;

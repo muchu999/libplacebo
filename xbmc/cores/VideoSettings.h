@@ -381,6 +381,10 @@ public:
   float m_PlaceboFrameMixerRadiusFactor;
   bool m_PlaceboFrameMixerBypassQueue;  
   int m_PlaceboCropBottom;
+  float m_PlaceboBrightnessSdr;
+  float m_PlaceboContrastSdr;
+  float m_PlaceboBrightnessHdr;
+  float m_PlaceboContrastHdr;
 
   bool m_PlaceboColorAdjustmentEnabled;
   float m_PlaceboSaturation;
