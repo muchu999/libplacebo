@@ -919,7 +919,7 @@ void DX::DeviceResources::ResizeBuffers()
 	{
 	  ComPtr<IDXGIDevice1> dxgiDevice;
 	  hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
-      HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
+      HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
 	  swapChain2->GetContainingOutput(&m_pActiveOutput);
 	  swapChain2->Release();
 	}
