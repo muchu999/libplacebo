@@ -1901,28 +1901,45 @@ void DX::DeviceResources::Present()
   FinishCommandList();
 
   // Present frame
-  DXGI_PRESENT_PARAMETERS parameters = {};
-  UINT64 start = CurrentHostCounter();
-  //DX::DeviceResources::Get()->GetImmediateContext()->Flush();
+
   #if pacer
-    UINT flags = 0;
-    if(Pacer.ShouldDiscardQueue()) // Expose a simple getter for m_discardPendingQueueFrames
-    {
-	// DXGI_PRESENT_DO_NOT_SEQUENCE discards all pre-existing buffered frames 
-	// waiting inside the swap chain ring pipeline, instantly clearing the 10-second backlog.
-	  flags = DXGI_PRESENT_DO_NOT_SEQUENCE;
-	  Pacer.ClearDiscardFlag(); // Reset state
-	  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "DXGI_PRESENT_DO_NOT_SEQUENCE");
+  UINT presentFlags = 0;
+  UINT syncInterval = 0; // Default to 0 for perfect Windowed iFlip performance
+  DXGI_PRESENT_PARAMETERS presentParams = {0};
+  BOOL isFullscreen = FALSE;
+
+  Microsoft::WRL::ComPtr<IDXGIOutput> targetOutput;
+  if(SUCCEEDED(m_swapChain->GetFullscreenState(&isFullscreen, &targetOutput)))
+  {
+	if(isFullscreen)
+	{
+	  // Force the graphics driver to wait for the physical hardware VSync edge 
+	  // because we are in exclusive fullscreen mode and don't have the DWM protecting us.
+	  syncInterval = 1;
 	}
-    HRESULT hr = m_swapChain->Present1(0, flags, &parameters);
-  #else
-    HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
-  #endif
-  //DwmFlush();
+  }
+
+  if(Pacer.ShouldDiscardQueue())
+  {
+	presentFlags |= DXGI_PRESENT_RESTART;
+	Pacer.ClearDiscardFlag();
+  }
+
+  UINT64 start = CurrentHostCounter();
+  HRESULT hr = m_swapChain->Present1(syncInterval, presentFlags, &presentParams);
   UINT64 end = CurrentHostCounter();
   UINT64 presentDuration = end - start;
   UINT64 period = end - lastEnd;
-  lastEnd = end; 
+  lastEnd = end;
+#else
+  DXGI_PRESENT_PARAMETERS parameters = {};
+  UINT64 start = CurrentHostCounter();
+  HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
+  UINT64 end = CurrentHostCounter();
+  UINT64 presentDuration = end - start;
+  UINT64 period = end - lastEnd;
+  lastEnd = end;
+#endif
 
   // Stats
   DXGI_FRAME_STATISTICS stats1;
