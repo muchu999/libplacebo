@@ -650,7 +650,7 @@ void CRenderManager::RecordFlipEndTime()
   static double oldDiff2 = 0;
 
   const int CHECK_INTERVAL = 48; 
-  double freq = CurrentHostFrequency();
+  double freq = CurrentHostFrequency(); //cl opt all
   double ticksPerFrame = (double) DVD_TIME_BASE / fps;
   static bool bInit = false;
   static double currentPts = 0;
@@ -686,7 +686,7 @@ void CRenderManager::RecordFlipEndTime()
 	}
   }
   m_flipEndTime = currentPts;
-  m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime);
+  m_filteredFlipEndTime = synchPLL.process(fps, m_flipEndTime); //cl still needed?
   
   if((m_flipEndTime- oldFlipEndTime) > 1000000.0 / fps * 1.6)
   {
