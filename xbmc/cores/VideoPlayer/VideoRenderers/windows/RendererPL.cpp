@@ -1337,6 +1337,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //  vo->has_peak_detect_values = pl_renderer_get_hdr_metadata(p->rr, &vo->params->color.hdr);
   //}
   sourceRect = dst; //cl Pass dst to next render stage...
+  pDeviceContext->Flush();
 }
 
 //cl called on every frame before render

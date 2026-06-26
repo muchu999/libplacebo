@@ -56,6 +56,7 @@ namespace DX
     DeviceResources();
     virtual ~DeviceResources();
     void Release();
+	Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput;
 
 	using EventCallback = std::function<void(const std::string&)>;
 	class listener {
