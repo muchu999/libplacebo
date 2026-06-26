@@ -58,8 +58,6 @@ namespace winrt
 #define CHECK_ERR() if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return; }
 #define RETURN_ERR(ret) if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return (##ret); }
 
-#define pacer 1
-
 bool DX::DeviceResources::CBackBuffer::Acquire(ID3D11Texture2D* pTexture)
 {
   if (!pTexture)
@@ -811,11 +809,7 @@ void DX::DeviceResources::ResizeBuffers()
     m_swapChain->GetDesc1(&scDesc);
     hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
                                     lround(m_outputSize.Height), scDesc.Format,
-#if pacer
 	                                (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
-#else
-                                    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
-#endif
 	NotifySwapchainListeners("CreateSwapChain");
 
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
@@ -872,11 +866,7 @@ void DX::DeviceResources::ResizeBuffers()
 #endif
     // FLIP_DISCARD improves performance (needed in some systems for 4K HDR 60 fps)
     swapChainDesc.SwapEffect = CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin10) ? DXGI_SWAP_EFFECT_FLIP_DISCARD : DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    #if pacer
 	  swapChainDesc.Flags = windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-    #else
-	  swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
-    #endif
 	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     swapChainDesc.SampleDesc.Count = 1;
     swapChainDesc.SampleDesc.Quality = 0;
@@ -929,12 +919,7 @@ void DX::DeviceResources::ResizeBuffers()
 	{
 	  ComPtr<IDXGIDevice1> dxgiDevice;
 	  hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
-      #if pacer
-        HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
-      #else
-	    HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
-	    dxgiWaitHandle = swapChain2->GetFrameLatencyWaitableObject();
-      #endif
+      HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
 	  swapChain2->GetContainingOutput(&m_pActiveOutput);
 	  swapChain2->Release();
 	}
