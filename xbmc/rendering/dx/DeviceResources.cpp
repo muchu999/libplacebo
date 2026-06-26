@@ -1743,7 +1743,6 @@ private:
   bool m_forceHistoryReset = true;
   int m_settleFrameCounter = 0;
   bool m_discardPendingQueueFrames = false;
-  HANDLE m_hPacingTimer = nullptr;
 
   // Hardware output handle
   Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput;
@@ -1755,10 +1754,6 @@ public:
 	m_countsPerSecond = static_cast<double>(m_frequency.QuadPart);
 	QueryPerformanceCounter(&m_frameStartTime);
 	m_nextFrameTime = m_frameStartTime;
-	m_hPacingTimer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
-	if(!m_hPacingTimer) {
-	  timeBeginPeriod(1); // Fallback for older systems
-	}
 
   }
   bool ShouldDiscardQueue() { return m_discardPendingQueueFrames; }
@@ -1773,47 +1768,16 @@ public:
 	  m_swapChain->GetContainingOutput(&m_pActiveOutput);
 	}
 
-	LARGE_INTEGER currentTime;
-	QueryPerformanceCounter(&currentTime);
-
-	// 1. Calculate how many ticks are left until our next absolute frame target window
-	m_nextFrameTime.QuadPart = m_frameStartTime.QuadPart + m_targetCountsPerFrame;
-	LONGLONG ticksRemaining = m_nextFrameTime.QuadPart - currentTime.QuadPart;
-
-	// Leave an intentional 4ms safety cushion so our thread wakes up early enough 
-	// to complete libplacebo rendering BEFORE the monitor refreshes.
-	LONGLONG cushionTicks = (m_frequency.QuadPart * 4) / 1000;
-	LONGLONG sleepTicks = ticksRemaining - cushionTicks;
-
-	// 2. THE HIGH-RESOLUTION SOFTWARE TIMER GATE
-	// This gives your GPU the necessary idle gaps to remain in high-performance boost clocks
-	if(sleepTicks > 0 && m_hPacingTimer != nullptr)
+	// ========================================================================
+	// 1. HARDWARE GRID LOCK
+	// ========================================================================
+	if(m_pActiveOutput != nullptr)
 	{
-	  LARGE_INTEGER liDueTime;
-	  // Convert QPC ticks to relative 100-nanosecond intervals expected by the kernel timer
-	  liDueTime.QuadPart = -(sleepTicks * 10000000) / m_frequency.QuadPart;
-
-	  SetWaitableTimerEx(m_hPacingTimer, &liDueTime, 0, NULL, NULL, NULL, 0);
-	  WaitForSingleObjectEx(m_hPacingTimer, INFINITE, TRUE);
-	}
-	else if(sleepTicks > 0)
-	{
-	  // Fallback if the high-resolution kernel timer is unavailable
-	  DWORD sleepMs = static_cast<DWORD>((sleepTicks * 1000) / m_frequency.QuadPart);
-	  if(sleepMs > 0) Sleep(sleepMs);
+	  m_pActiveOutput->WaitForVBlank();
 	}
 
-	// 3. Precise sub-millisecond spin-lock to capture any remaining fractional truncation
-	QueryPerformanceCounter(&currentTime);
-	while(currentTime.QuadPart < (m_nextFrameTime.QuadPart - cushionTicks))
-	{
-	  YieldProcessor(); // Hyper-threaded friendly zero-overhead pause
-	  QueryPerformanceCounter(&currentTime);
-	}
-
-	// Capture our clean post-wait baseline clock anchor
-	LARGE_INTEGER postWaitTime = currentTime;
-
+	LARGE_INTEGER postWaitTime;
+	QueryPerformanceCounter(&postWaitTime);
 
 	// ========================================================================
 	// 2. DYNAMIC MODE RE-INDEX CHECK
