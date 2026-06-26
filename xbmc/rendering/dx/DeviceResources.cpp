@@ -1811,6 +1811,7 @@ public:
 	  {
 		m_lastPresentCount = stats.PresentCount;
 		m_lastRefreshCount = stats.PresentRefreshCount;
+		m_lastExpectedRefreshes = -1; // Clear cadence memory during resets
 
 		if(m_settleFrameCounter > 0) m_settleFrameCounter--;
 		else m_forceHistoryReset = false;
@@ -1824,10 +1825,10 @@ public:
 		if(framePhaseError > 1)       framePhaseError = 1;
 		else if(framePhaseError < -1) framePhaseError = -1;
 
-		// SCENARIO A: Normal Playback Progressing
-		if(deltaPresent > 0)
+		// SCENARIO A: Progressive Flow (Clean Frame Advancements)
+		if(deltaPresent > 0 && deltaRefresh > 0)
 		{
-		  // 1. Adjust the adaptive PLL clock oscillator loop
+		  // 1. Maintain the adaptive PLL clock oscillator loop
 		  if(framePhaseError > 0)       m_targetCountsPerFrame -= (m_adaptiveStepCounts * framePhaseError);
 		  else if(framePhaseError < 0)  m_targetCountsPerFrame += (m_adaptiveStepCounts * -framePhaseError);
 		  else
@@ -1841,45 +1842,48 @@ public:
 
 		  // 2. Universal Cadence Judder Analyzer
 		  INT64 actualRefreshesPerFrame = deltaRefresh / deltaPresent;
-		  if(m_lastExpectedRefreshes != -1)
+
+		  // Only compare cadence patterns if both this frame and the previous frame 
+		  // represent true progressive advancements (preventing 0-increment corruption)
+		  if(m_lastExpectedRefreshes != -1 && actualRefreshesPerFrame > 0)
 		  {
-			// Smoothly ignores 3:2 pulldown variations, flags genuine cadence anomalies
+			// Smoothly tolerates standard 3:2 pulldown transitions (1, 2, or 3 VBlanks)
+			// But increments the OSD counter instantly if a frame stalls (jumps to 4+ refreshes)
 			if(std::abs(actualRefreshesPerFrame - m_lastExpectedRefreshes) > 1)
 			{
 			  cadenceDrop++;
-			  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: Cadence disruption detected.");
+			  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER REAL JUDDER: Cadence drop. Expected close to {}, Got {}",
+				m_lastExpectedRefreshes, actualRefreshesPerFrame);
 			}
 		  }
-		  m_lastExpectedRefreshes = actualRefreshesPerFrame;
+
+		  if(actualRefreshesPerFrame > 0) {
+			m_lastExpectedRefreshes = actualRefreshesPerFrame;
+		  }
 
 		  m_lastPresentCount = stats.PresentCount;
 		  m_lastRefreshCount = stats.PresentRefreshCount;
 		}
-		// SCENARIO B: DXGI Token Bunching / Driver Skips
+		// SCENARIO B: DXGI Token Bunching / Driver Edge Flushes
 		else if(deltaPresent == 0 && deltaRefresh > 0)
 		{
 		  m_targetCountsPerFrame += m_adaptiveStepCounts;
 		  tokenBunching++;
 		  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: DXGI token bunching event.");
+		  m_lastExpectedRefreshes = -1; // Invalidate history to prevent false flags on the next pass
 		  m_lastRefreshCount = stats.PresentRefreshCount;
 		}
-		// SCENARIO C: GENUINE VRAM COPY STALL (Cadence Aware)
+		// SCENARIO C: GENUINE VRAM COPY THREAD STALL
 		else if(deltaPresent == 0 && deltaRefresh == 0)
 		{
-		  // Intentional 60Hz pulldown repeat cycles complete inside 16.6ms.
-		  // Adding a 1.5x threshold margin dynamically guarantees we filter out 
-		  // all normal pulldown frames while capturing true thread blocks.
 		  if((postWaitTime.QuadPart - m_frameStartTime.QuadPart) > (m_baseCountsPerFrame * 3 / 2))
 		  {
 			vramStall++;
 			CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: True VRAM copy thread stall intercepted.");
 
-			// Trigger a clean restart on the hardware grid line immediately
 			m_forceHistoryReset = true;
 			m_settleFrameCounter = 4;
 			m_targetCountsPerFrame = m_baseCountsPerFrame;
-
-			// Trigger a hardware queue flush right after the stall clears
 			m_discardPendingQueueFrames = true;
 		  }
 		}
