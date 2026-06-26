@@ -1206,29 +1206,38 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
     {
 	  //if (!m_renderDebugVideo)
       {
-        DEBUG_INFO_PLAYER info;
+		static DEBUG_INFO_PLAYER info = {};
+		static DEBUG_INFO_VIDEO video = {};
+		static DEBUG_INFO_RENDER render = {};
 
-        m_playerPort->GetDebugInfo(info.audio, info.video, info.player);
+		static auto lastUpdateTime = std::chrono::steady_clock::now();
+		static double cachedLibplaceboLoad = 0.0;
+		static double cachedDxvaLoad = 0.0;
 
-        double refreshrate, clockspeed;
-        int missedvblanks;
-	
-        info.vsync = StringUtils::Format("Flip skip: {}, VSyncOff: {:5.1f}, latency: {:6.3f}", m_flipSkipped, m_clockSync.m_syncOffset / 1000, DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f);
-        if (m_dvdClock.GetClockInfo(missedvblanks, clockspeed, refreshrate))
-        {
-          info.vsync += StringUtils::Format("VSync: refresh:{:.3f} missed:{} speed:{:.3f}%",
-                                            refreshrate, missedvblanks, clockspeed * 100);
-        }
-		info.jitter1 = StringUtils::Format("R jitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor1.calculatePeak() / 1000.0, std::sqrt(jitterMonitor1.calculateVariance()) / 1000.0, m_rawJitter / 1000.0);
-		info.jitter2 = StringUtils::Format("F JitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor2.calculatePeak() / 1000.0, std::sqrt(jitterMonitor2.calculateVariance()) / 1000.0, m_rawJitter2 / 1000.0);
+		auto currentTime = std::chrono::steady_clock::now();
+		auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastUpdateTime).count();
 
+		// Only query every so often
+		if(elapsedTime >= 500) {
+		  m_playerPort->GetDebugInfo(info.audio, info.video, info.player);
+		  double refreshrate, clockspeed;
+		  int missedvblanks;
+
+		  info.vsync = StringUtils::Format("Flip skip: {}, VSyncOff: {:5.1f}, latency: {:6.3f}", m_flipSkipped, m_clockSync.m_syncOffset / 1000, DVD_TIME_TO_MSEC(m_displayLatency) / 1000.0f);
+		  if(m_dvdClock.GetClockInfo(missedvblanks, clockspeed, refreshrate))
+		  {
+			info.vsync += StringUtils::Format("VSync: refresh:{:.3f} missed:{} speed:{:.3f}%",
+			  refreshrate, missedvblanks, clockspeed * 100);
+		  }
+		  info.jitter1 = StringUtils::Format("R jitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor1.calculatePeak() / 1000.0, std::sqrt(jitterMonitor1.calculateVariance()) / 1000.0, m_rawJitter / 1000.0);
+		  info.jitter2 = StringUtils::Format("F JitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor2.calculatePeak() / 1000.0, std::sqrt(jitterMonitor2.calculateVariance()) / 1000.0, m_rawJitter2 / 1000.0);
+		  
+		  video = m_pRenderer->GetDebugInfo(m_presentsource);
+		  render = CServiceBroker::GetWinSystem()->GetDebugInfo();
+
+		  lastUpdateTime = currentTime;
+		}
         m_debugRenderer.SetInfo(info, true);
-      }
-	  //else
-	  {
-		DEBUG_INFO_VIDEO video = m_pRenderer->GetDebugInfo(m_presentsource);
-		DEBUG_INFO_RENDER render = CServiceBroker::GetWinSystem()->GetDebugInfo();
-
 		m_debugRenderer.SetInfo(video, render, false);
 	  }
 
