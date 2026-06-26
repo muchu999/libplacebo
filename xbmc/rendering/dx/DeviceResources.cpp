@@ -1756,6 +1756,7 @@ public:
   }
   bool ShouldDiscardQueue() { return m_discardPendingQueueFrames; }
   void ClearDiscardFlag() { m_discardPendingQueueFrames = false; }
+  bool IsSettling() const { return m_settleFrameCounter > 0 || m_forceHistoryReset; }
 
   void Update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput)
   {
@@ -1848,6 +1849,20 @@ public:
 		  m_targetCountsPerFrame += m_adaptiveStepCounts;
 		  m_lastRefreshCount = stats.PresentRefreshCount;
 		}
+		// VRAM stall: Both counts are 0
+		else if(deltaPresent == 0 && deltaRefresh == 0)
+		{
+		  // If the true time elapsed since our last post-wait wakeup exceeds 1.5 frames,
+		  // the thread was blocked by an external copy stall.
+		  if((postWaitTime.QuadPart - m_frameStartTime.QuadPart) > (m_baseCountsPerFrame * 3 / 2))
+		  {
+			CLog::LogFC(LOGDEBUG, LOGAVTIMING, "NATIVE PACER RESET: VRAM Stall Detected inside Telemetry.");
+			m_forceHistoryReset = true;
+			m_settleFrameCounter = 4; // Short settle window to snap back quickly
+			m_targetCountsPerFrame = m_baseCountsPerFrame;
+		  }
+		}
+
 	  }
 	}
 
@@ -1931,7 +1946,62 @@ void DX::DeviceResources::Present()
   UINT64 presentDuration = end - start;
   UINT64 period = end - lastEnd;
   lastEnd = end;
-#else
+  // 2. Execute this telemetry calculation right after your Present1 pass
+  DXGI_FRAME_STATISTICS universalStats;
+  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&universalStats)))
+  {
+	if(m_lastTrackedRefresh != 0 && !Pacer.IsSettling())
+	{
+	  INT64 deltaPresent = static_cast<INT64>(universalStats.PresentCount) - static_cast<INT64>(m_lastTrackedPresent);
+	  INT64 deltaRefresh = static_cast<INT64>(universalStats.PresentRefreshCount) - static_cast<INT64>(m_lastTrackedRefresh);
+
+	  if(deltaPresent > 0)
+	  {
+		INT64 actualRefreshesPerFrame = deltaRefresh / deltaPresent;
+		if(m_lastExpectedRefreshes != -1)
+		{
+		  // Smoothly ignores the normal 2-to-3 jump of 3:2 pulldown, 
+		  // but flags it if a frame is accidentally held for 4 or more refreshes.
+		  if(std::abs(actualRefreshesPerFrame - m_lastExpectedRefreshes) > 1)
+		  {
+			m_JudderCadenceDrop++; // Valid cadence drop
+		  }
+		}
+		m_lastExpectedRefreshes = actualRefreshesPerFrame;
+	  }
+	  else if(deltaPresent == 0 && deltaRefresh > 0)
+	  {
+		m_JudderTokenBunching++; // Token bunching / DWM skip
+	  }
+	  // THE FIXED VRAM STALL DETECTOR: Both counts are 0
+	  else if(deltaPresent == 0 && deltaRefresh == 0)
+	  {
+		// Sample the system clock right now to audit our loop duration
+		LARGE_INTEGER osdCheckTime;
+		QueryPerformanceCounter(&osdCheckTime);
+
+		// Expose a public getter from your pacer class to grab the current m_baseCountsPerFrame,
+		// or fetch the current QPC frequency baseline ticks.
+		LONGLONG systemFrequency = Pacer.GetQpcFrequency();
+
+		// CRUCIAL THRESHOLD PROTECTION:
+		// An intentional 60Hz repeat step completes in exactly 16.6ms (~166,666 ticks).
+		// By forcing the OSD to only trigger if the thread has been blocked for more 
+		// than 25.0ms (250,000 ticks), we perfectly filter out 3:2 pulldown frames.
+		LONGLONG stallThresholdTicks = (systemFrequency * 25) / 1000;
+
+		// Note: You must compare this relative to your post-wait baseline clock marker
+		if((osdCheckTime.QuadPart - Pacer.GetLastFrameStartTime()) > stallThresholdTicks)
+		{
+		  m_JudderVramStall++; // Genuine VRAM Stall Event confirmed!
+		  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "OSD COUNTER: Logged true visual VRAM stall event.");
+		}
+	  }
+	}
+
+	m_lastTrackedPresent = universalStats.PresentCount;
+	m_lastTrackedRefresh = universalStats.PresentRefreshCount;
+  }  #else
   DXGI_PRESENT_PARAMETERS parameters = {};
   UINT64 start = CurrentHostCounter();
   HRESULT hr = m_swapChain->Present1(1, 0, &parameters);
@@ -2598,6 +2668,8 @@ DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo() const
           static_cast<double>(md.RefreshRate.Denominator),
       DXGIFormatToShortString(desc.Format), bits,
       DX::Windowing()->UseLimitedColor() ? "limited" : "full", range_min, range_max);
+
+  info.judder = StringUtils::Format("Judder TokenBunching: {}, CadenceDRop: {}, VramStall: {}", m_JudderTokenBunching, m_JudderCadenceDrop, m_JudderVramStall);
 
   return info;
 }
