@@ -1308,14 +1308,15 @@ public:
 	  {
 		INT64 deltaPresent = static_cast<INT64>(stats.PresentCount) - static_cast<INT64>(m_lastPresentCount);
 		INT64 deltaRefresh = static_cast<INT64>(stats.PresentRefreshCount) - static_cast<INT64>(m_lastRefreshCount);
-		INT64 framePhaseError = deltaRefresh - deltaPresent;
-
-		if(framePhaseError > 1)       framePhaseError = 1;
-		else if(framePhaseError < -1) framePhaseError = -1;
 
 		// SCENARIO A: Progressive Flow (Clean Frame Advancements)
 		if(deltaPresent > 0 && deltaRefresh > 0)
 		{
+		  INT64 framePhaseError = deltaRefresh - deltaPresent;
+
+		  if(framePhaseError > 1)       framePhaseError = 1;
+		  else if(framePhaseError < -1) framePhaseError = -1;
+
 		  // 1. Maintain the adaptive PLL clock oscillator loop
 		  if(framePhaseError > 0)       m_targetCountsPerFrame -= (m_adaptiveStepCounts * framePhaseError);
 		  else if(framePhaseError < 0)  m_targetCountsPerFrame += (m_adaptiveStepCounts * -framePhaseError);
@@ -1345,12 +1346,10 @@ public:
 			}
 		  }
 
-		  if(actualRefreshesPerFrame > 0) {
+		  if(actualRefreshesPerFrame > 0) 
+		  {
 			m_lastExpectedRefreshes = actualRefreshesPerFrame;
 		  }
-
-		  m_lastPresentCount = stats.PresentCount;
-		  m_lastRefreshCount = stats.PresentRefreshCount;
 		}
 		// SCENARIO B: DXGI Token Bunching / Driver Edge Flushes
 		else if(deltaPresent == 0 && deltaRefresh > 0)
@@ -1359,7 +1358,6 @@ public:
 		  tokenBunching++;
 		  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: DXGI token bunching event.");
 		  m_lastExpectedRefreshes = -1; // Invalidate history to prevent false flags on the next pass
-		  m_lastRefreshCount = stats.PresentRefreshCount;
 		}
 		// SCENARIO C: GENUINE VRAM COPY THREAD STALL
 		else if(deltaPresent == 0 && deltaRefresh == 0)
@@ -1374,7 +1372,16 @@ public:
 			m_targetCountsPerFrame = m_baseCountsPerFrame;
 			m_discardPendingQueueFrames = true;
 		  }
+		  else
+		  {
+			// deltaPresent == 0 && deltaRefresh == 0 should always be wrong since we present on every frame, deltaPresent should always increase
+			tokenBunching++;
+			CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: DXGI token bunching event.");
+			m_lastExpectedRefreshes = -1; // Invalidate history to prevent false flags on the next pass
+		  }
 		}
+		m_lastPresentCount = stats.PresentCount;
+		m_lastRefreshCount = stats.PresentRefreshCount;
 	  }
 	}
 
@@ -1426,7 +1433,10 @@ void DX::DeviceResources::Present()
   DXGI_PRESENT_PARAMETERS presentParams = {0};
 
   // Finish render before present step
+  UINT64 start = CurrentHostCounter();
   FinishCommandList();
+  UINT64 end = CurrentHostCounter();
+  UINT64 finishDuration = end - start;
 
   // Detect if we need blocking call for present1
   BOOL isFullscreen = FALSE;
@@ -1449,9 +1459,9 @@ void DX::DeviceResources::Present()
   }
 
   // Present frame
-  UINT64 start = CurrentHostCounter();
+  start = CurrentHostCounter();
   HRESULT hr = m_swapChain->Present1(syncInterval, presentFlags, &presentParams);
-  UINT64 end = CurrentHostCounter();
+  end = CurrentHostCounter();
   UINT64 presentDuration = end - start;
   UINT64 period = end - lastEnd;
   lastEnd = end;
@@ -1469,7 +1479,7 @@ void DX::DeviceResources::Present()
   // Log
   static UINT64 oldPresentCount = 0;
   static UINT64 oldPresentRefreshCount = 0;
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, diff = {}, PresentRefreshCount = {}, diff = {}", (double) presentDuration / freq*1000.0, (double) period / freq*1000.0, PresentCount, PresentCount - oldPresentCount, PresentRefreshCount, PresentRefreshCount- oldPresentRefreshCount);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, diff: {}, PresentRefreshCount: {}, diff: {}, FinishCommandList: {:.3f}", (double) presentDuration / freq*1000.0, (double) period / freq*1000.0, PresentCount, PresentCount - oldPresentCount, PresentRefreshCount, PresentRefreshCount- oldPresentRefreshCount, (double)finishDuration/freq*1000.0);
   oldPresentCount = PresentCount;
   oldPresentRefreshCount = PresentRefreshCount;
 
