@@ -25654,7 +25654,7 @@ msgid "Application thread priority"
 msgstr ""
 
 msgctxt "#55372"
-msgid ""
+msgid "Defaults to 0 in original Kodi, increasing to 15 will help reduce judder"
 msgstr ""
 
 msgctxt "#55373"
@@ -25671,5 +25671,13 @@ msgstr ""
 
 msgctxt "#55376"
 msgid "Display Contrast HDR"
+msgstr ""
+
+msgctxt "#55377"
+msgid "Presentation mode"
+msgstr ""
+
+msgctxt "#55378"
+msgstr "Windows present1 mode is Kodi's default, pacer mode might help judder in some cases"
 msgstr ""
 

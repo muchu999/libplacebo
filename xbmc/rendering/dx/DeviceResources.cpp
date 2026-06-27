@@ -39,6 +39,7 @@ extern "C"
 #include <utils/TimeUtils.h>
 #include "../../../project/BuildDependencies/msys64/usr/include/w32api/timeapi.h"
 #include <dwmapi.h>
+#include <cores/VideoSettings.h>
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -1249,14 +1250,20 @@ public:
   void ClearDiscardFlag() { m_discardPendingQueueFrames = false; }
   bool IsSettling() const { return m_settleFrameCounter > 0 || m_forceHistoryReset; }
 
-  void Update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput, UINT64& cadenceDrop, UINT64& tokenBunching, UINT64& vramStall)
+  HRESULT Update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput, UINT64& cadenceDrop, UINT64& tokenBunching, UINT64& vramStall)
   {
+	HRESULT hr = {};
 	LONGLONG vstart;
 	LONGLONG vend;
 	// Initialize or re-verify active display surface link dynamically
 	if(m_pActiveOutput == nullptr && m_swapChain != nullptr)
 	{
-	  m_swapChain->GetContainingOutput(&m_pActiveOutput);
+	  hr = m_swapChain->GetContainingOutput(&m_pActiveOutput);
+	  if(!SUCCEEDED(hr))
+	  {
+		CLog::LogF(LOGERROR, "GetContainingOutput failed: {}", hr);
+	    return(hr);
+	  }
 	}
 
 	// ========================================================================
@@ -1307,7 +1314,8 @@ public:
     } while((current.QuadPart - start.QuadPart) < targetTicks);
 
 	DXGI_FRAME_STATISTICS stats;
-	if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats)))
+	hr = m_swapChain->GetFrameStatistics(&stats);
+	if(SUCCEEDED(hr))
 	{
 	  if(m_forceHistoryReset || m_settleFrameCounter > 0)
 	  {
@@ -1398,6 +1406,11 @@ public:
 	  m_lastPresentCount = stats.PresentCount;
 	  m_lastRefreshCount = stats.PresentRefreshCount;
 	}
+	else
+	{
+      CLog::LogF(LOGERROR, "GetFrameStatistics failed: {}", hr);
+	  return(hr);
+	}
 
 	// ========================================================================
 	// 4. TIMELINE PHASE ALIGNMENT & RESET
@@ -1433,6 +1446,7 @@ public:
 
 	// Commit baseline state securely using the clean post-VBlank edge anchor
 	m_frameStartTime = postWaitTime;
+	return(hr);
   }
 };
 CPacer4 Pacer;
@@ -1440,67 +1454,95 @@ CPacer4 Pacer;
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
 {
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Enter");
-  static UINT64 freq = CurrentHostFrequency();
-  static UINT64 lastEnd = 0;
-  UINT presentFlags = 0;
-  UINT syncInterval = 0; 
-  DXGI_PRESENT_PARAMETERS presentParams = {0};
-
-  // Finish render before present step
-  UINT64 start = CurrentHostCounter();
-  FinishCommandList();
-  UINT64 end = CurrentHostCounter();
-  UINT64 finishDuration = end - start;
-
-  // Detect if we need blocking call for present1
-  BOOL isFullscreen = FALSE;
-  Microsoft::WRL::ComPtr<IDXGIOutput> targetOutput;
-  if(SUCCEEDED(m_swapChain->GetFullscreenState(&isFullscreen, &targetOutput)))
+  HRESULT hr = {};
+  EPRESENTMODE mode = (EPRESENTMODE) CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_PRESENTMODE);
+  if(mode == VS_PRESENTMODE_WINDOWS_PRESENT1)
   {
-	if(isFullscreen)
+	static UINT64 freq = CurrentHostFrequency();
+
+	// Finish render before present step
+	FinishCommandList();
+
+	// Present frame
+	UINT64 start = CurrentHostCounter();
+	static UINT64 lastEnd = 0;
+	DXGI_PRESENT_PARAMETERS presentParams = {0};
+	hr = m_swapChain->Present1(1, 0, &presentParams);
+	UINT64 end = CurrentHostCounter();
+	UINT64 presentDuration = end - start;
+	UINT64 period = end - lastEnd;
+	lastEnd = end;
+	// Log
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0);
+  }
+  else
+  {
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Enter");
+	static UINT64 freq = CurrentHostFrequency();
+	static UINT64 lastEnd = 0;
+	UINT presentFlags = 0;
+	UINT syncInterval = 0;
+	DXGI_PRESENT_PARAMETERS presentParams = {0};
+
+	// Finish render before present step
+	UINT64 start = CurrentHostCounter();
+	FinishCommandList();
+	UINT64 end = CurrentHostCounter();
+	UINT64 finishDuration = end - start;
+
+	// Detect if we need blocking call for present1
+	BOOL isFullscreen = FALSE;
+	Microsoft::WRL::ComPtr<IDXGIOutput> targetOutput;
+	if(SUCCEEDED(m_swapChain->GetFullscreenState(&isFullscreen, &targetOutput)))
 	{
-	  // Force the graphics driver to wait for the physical hardware VSync edge 
-	  // because we are in exclusive fullscreen mode and don't have the DWM protecting us.
-	  syncInterval = 1;
+	  if(isFullscreen)
+	  {
+		// Force the graphics driver to wait for the physical hardware VSync edge 
+		// because we are in exclusive fullscreen mode and don't have the DWM protecting us.
+		syncInterval = 1;
+	  }
 	}
+	else
+	{
+	  CLog::LogF(LOGERROR, "GetFullscreenState failed");
+	}
+
+	// Clear present queue if requested
+	if(Pacer.ShouldDiscardQueue())
+	{
+	  presentFlags |= DXGI_PRESENT_RESTART;
+	  Pacer.ClearDiscardFlag();
+	}
+
+	// Present frame
+	start = CurrentHostCounter();
+	HRESULT hr = m_swapChain->Present1(syncInterval, presentFlags, &presentParams);
+	end = CurrentHostCounter();
+	UINT64 presentDuration = end - start;
+	UINT64 period = end - lastEnd;
+	lastEnd = end;
+
+
+	// Pacer
+	Pacer.Update(m_swapChain, m_pActiveOutput, m_JudderCadenceDrop, m_JudderTokenBunching, m_JudderVramStall);
+
+	// Stats
+	DXGI_FRAME_STATISTICS stats1;
+	UINT64 PresentCount = 0;
+	UINT64 PresentRefreshCount = 0;
+	if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats1)))
+	{
+	  PresentCount = stats1.PresentCount;
+	  PresentRefreshCount = stats1.PresentRefreshCount;
+	}
+
+	// Log
+	static UINT64 oldPresentCount = 0;
+	static UINT64 oldPresentRefreshCount = 0;
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, diff: {}, PresentRefreshCount: {}, diff: {}, FinishCommandList: {:.3f}", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0, PresentCount, PresentCount - oldPresentCount, PresentRefreshCount, PresentRefreshCount - oldPresentRefreshCount, (double) finishDuration / freq * 1000.0);
+	oldPresentCount = PresentCount;
+	oldPresentRefreshCount = PresentRefreshCount;
   }
-
-  // Clear present queue if requested
-  if(Pacer.ShouldDiscardQueue())
-  {
-	presentFlags |= DXGI_PRESENT_RESTART;
-	Pacer.ClearDiscardFlag();
-  }
-
-  // Present frame
-  start = CurrentHostCounter();
-  HRESULT hr = m_swapChain->Present1(syncInterval, presentFlags, &presentParams);
-  end = CurrentHostCounter();
-  UINT64 presentDuration = end - start;
-  UINT64 period = end - lastEnd;
-  lastEnd = end;
-
-
-  // Pacer
-  Pacer.Update(m_swapChain, m_pActiveOutput, m_JudderCadenceDrop, m_JudderTokenBunching, m_JudderVramStall);
-
-  // Stats
-  DXGI_FRAME_STATISTICS stats1;
-  UINT64 PresentCount = 0;
-  UINT64 PresentRefreshCount = 0;
-  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats1)))
-  {
-	PresentCount = stats1.PresentCount;
-	PresentRefreshCount = stats1.PresentRefreshCount;
-  }
-
-  // Log
-  static UINT64 oldPresentCount = 0;
-  static UINT64 oldPresentRefreshCount = 0;
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, diff: {}, PresentRefreshCount: {}, diff: {}, FinishCommandList: {:.3f}", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0, PresentCount, PresentCount - oldPresentCount, PresentRefreshCount, PresentRefreshCount - oldPresentRefreshCount, (double) finishDuration / freq * 1000.0);
-  oldPresentCount = PresentCount;
-  oldPresentRefreshCount = PresentRefreshCount;
 
   // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)

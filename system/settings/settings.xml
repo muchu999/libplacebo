@@ -85,6 +85,26 @@
 		  </constraints>
 		  <control type="list" format="string" />
 		</setting>
+		<setting id="videoplayer.presentmode" type="integer" label="55377" help="55378">
+		  <requirement>HasLibplacebo</requirement>
+		  <dependencies>
+			<dependency type="enable">
+			  <condition setting="videoplayer.rendermethod" operator="is">5</condition>
+			  <!-- RENDER_METHOD_LIBPLACEBO -->
+			</dependency>
+		  </dependencies>
+		  <level>1</level>
+		  <default>0</default>
+		  <constraints>
+			<options>
+			  <option label="Windows present1">0</option>
+			  <!-- ViewModeNormal -->
+			  <option label="Pacer">1</option>
+			  <!-- ViewModeWideZoom -->
+			</options>
+		  </constraints>
+		  <control type="list" format="string" />
+		</setting>
 		<setting id="videoplayer.errorinaspect" type="integer" label="22021" help="36170">
           <level>2</level>
           <default>0</default>
