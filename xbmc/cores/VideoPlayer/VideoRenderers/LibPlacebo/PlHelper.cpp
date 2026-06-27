@@ -1833,12 +1833,25 @@ void CPLHelper::PlUpscalerOptionFiller(const std::shared_ptr<const CSetting>& se
 	f = pl_filter_configs[i];
 	if (!f->description)
 	  continue;
-	if (!(f->allowed & (PL_FILTER_UPSCALING | PL_FILTER_SCALING | PL_FILTER_ALL)))
+	if (!(f->recommended & PL_FILTER_UPSCALING))
 	  continue;
-	//if (!(f->recommended & PL_FILTER_UPSCALING))
-	//  continue;
+	char display_name [128];
+	snprintf(display_name, sizeof(display_name), "[COLOR gold]★[/COLOR] %s", f->description);
+	list.emplace_back(display_name, i);
+  }
+  for(int i = 0; i < pl_num_filter_configs; i++)
+  {
+	std::string strItem;
+	f = pl_filter_configs [i];
+	if(!f->description)
+	  continue;
+	if(!(f->allowed & (PL_FILTER_UPSCALING | PL_FILTER_SCALING | PL_FILTER_ALL)))
+	    continue;
+	if((f->recommended & PL_FILTER_UPSCALING))
+	  continue;
 	list.emplace_back(f->description, i);
   }
+
 }
 
 void CPLHelper::PlDownscalerOptionFiller(const std::shared_ptr<const CSetting>& setting, std::vector<IntegerSettingOption>& list, int& current)
@@ -1852,10 +1865,22 @@ void CPLHelper::PlDownscalerOptionFiller(const std::shared_ptr<const CSetting>& 
 	f = pl_filter_configs[i];
 	if (!f->description)
 	  continue;
-	if (!(f->allowed & PL_FILTER_DOWNSCALING))
+	if (!(f->recommended & PL_FILTER_DOWNSCALING))
 	  continue;
-	//if (!(f->recommended & (PL_FILTER_DOWNSCALING | PL_FILTER_SCALING | PL_FILTER_ALL)))
-	//  continue;
+	char display_name [128];
+	snprintf(display_name, sizeof(display_name), "[COLOR gold]★[/COLOR] %s", f->description);
+	list.emplace_back(display_name, i);
+  }
+  for(int i = 0; i < pl_num_filter_configs; i++)
+  {
+	std::string strItem;
+	f = pl_filter_configs [i];
+	if(!f->description)
+	  continue;
+	if (!(f->allowed & (PL_FILTER_DOWNSCALING | PL_FILTER_SCALING | PL_FILTER_ALL)))
+	  continue;
+	if((f->recommended & PL_FILTER_DOWNSCALING))
+	  continue;
 	list.emplace_back(f->description, i);
   }
 }
@@ -1871,10 +1896,22 @@ void CPLHelper::PlFrameMixerOptionFiller(const std::shared_ptr<const CSetting>& 
 	f = pl_filter_configs[i];
 	if (!f->description)
 	  continue;
-	if (!(f->allowed & (PL_FILTER_FRAME_MIXING | PL_FILTER_ALL)))
+	if (!(f->recommended & PL_FILTER_FRAME_MIXING))
 	  continue;
-	//if (!(f->recommended & PL_FILTER_FRAME_MIXING))
-	//  continue;
+	char display_name [128];
+	snprintf(display_name, sizeof(display_name), "[COLOR gold]★[/COLOR] %s", f->description);
+	list.emplace_back(display_name, i);
+  }
+  for(int i = 0; i < pl_num_filter_configs; i++)
+  {
+	std::string strItem;
+	f = pl_filter_configs [i];
+	if(!f->description)
+	  continue;
+	if(!(f->allowed & (PL_FILTER_FRAME_MIXING | PL_FILTER_ALL)))
+	  continue;
+	if ((f->recommended & PL_FILTER_FRAME_MIXING))
+	  continue;
 	list.emplace_back(f->description, i);
   }
 }
