@@ -97,10 +97,8 @@
 		  <default>0</default>
 		  <constraints>
 			<options>
-			  <option label="Windows present1">0</option>
-			  <!-- ViewModeNormal -->
-			  <option label="Pacer">1</option>
-			  <!-- ViewModeWideZoom -->
+			  <option label="Original">0</option>
+			  <option label="Pacer function">1</option>
 			</options>
 		  </constraints>
 		  <control type="list" format="string" />
