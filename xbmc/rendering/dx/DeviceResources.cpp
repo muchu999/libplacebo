@@ -38,6 +38,7 @@ extern "C"
 #endif // _DEBUG
 #include <utils/TimeUtils.h>
 #include "../../../project/BuildDependencies/msys64/usr/include/w32api/timeapi.h"
+#include <dwmapi.h>
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -1250,6 +1251,8 @@ public:
 
   void Update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput, UINT64& cadenceDrop, UINT64& tokenBunching, UINT64& vramStall)
   {
+	LONGLONG vstart;
+	LONGLONG vend;
 	// Initialize or re-verify active display surface link dynamically
 	if(m_pActiveOutput == nullptr && m_swapChain != nullptr)
 	{
@@ -1261,7 +1264,9 @@ public:
 	// ========================================================================
 	if(m_pActiveOutput != nullptr)
 	{
+	  vstart = CurrentHostCounter();
 	  m_pActiveOutput->WaitForVBlank();
+	  vend = CurrentHostCounter();
 	}
 
 	LARGE_INTEGER postWaitTime;
@@ -1292,17 +1297,26 @@ public:
 	// ========================================================================
 	// STEP 3: TELEMETRY RATIO TRACKING & JUDDER DETECTION
 	// ========================================================================
+	// Add a small delay after vblank for stats to settle
+	LARGE_INTEGER start, current;
+	LONGLONG targetTicks = (400 * m_frequency.QuadPart) / 1000000;
+	QueryPerformanceCounter(&start);
+	do 
+	{
+	  QueryPerformanceCounter(&current);
+    } while((current.QuadPart - start.QuadPart) < targetTicks);
+
 	DXGI_FRAME_STATISTICS stats;
 	if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats)))
 	{
 	  if(m_forceHistoryReset || m_settleFrameCounter > 0)
 	  {
-		m_lastPresentCount = stats.PresentCount;
-		m_lastRefreshCount = stats.PresentRefreshCount;
 		m_lastExpectedRefreshes = -1; // Clear cadence memory during resets
 
-		if(m_settleFrameCounter > 0) m_settleFrameCounter--;
-		else m_forceHistoryReset = false;
+		if(m_settleFrameCounter > 0) 
+		  m_settleFrameCounter--;
+		else 
+		  m_forceHistoryReset = false;
 	  }
 	  else
 	  {
@@ -1380,9 +1394,9 @@ public:
 			m_lastExpectedRefreshes = -1; // Invalidate history to prevent false flags on the next pass
 		  }
 		}
-		m_lastPresentCount = stats.PresentCount;
-		m_lastRefreshCount = stats.PresentRefreshCount;
 	  }
+	  m_lastPresentCount = stats.PresentCount;
+	  m_lastRefreshCount = stats.PresentRefreshCount;
 	}
 
 	// ========================================================================
@@ -1414,8 +1428,8 @@ public:
 	double finalDivergence = timelineDivergence / m_countsPerSecond * 1000.0;
 
 	CLog::LogFC(LOGDEBUG, LOGAVTIMING,
-	  "time: {:.3f}, target: {:.3f}, period: {:.3f} ms, divergence: {:.3f} ms, targetCounts: {}",
-	  currentMs, targetMs, actualPeriod, finalDivergence, m_targetCountsPerFrame);
+	  "time: {:.3f}, target: {:.3f}, period: {:.3f} ms, divergence: {:.3f} ms, targetCounts: {}, PresentCount: {}, PresentRefreshCount: {}, cadenceDrop: {}, tokenBunching: {}, vramStall: {}, vblankwait: {:3f}",
+	  currentMs, targetMs, actualPeriod, finalDivergence, m_targetCountsPerFrame, stats.PresentCount, stats.PresentRefreshCount, cadenceDrop, tokenBunching, vramStall, (vend-vstart)/ m_countsPerSecond*1000.0);
 
 	// Commit baseline state securely using the clean post-VBlank edge anchor
 	m_frameStartTime = postWaitTime;
@@ -1426,6 +1440,7 @@ CPacer4 Pacer;
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
 {
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Enter");
   static UINT64 freq = CurrentHostFrequency();
   static UINT64 lastEnd = 0;
   UINT presentFlags = 0;
@@ -1466,11 +1481,15 @@ void DX::DeviceResources::Present()
   UINT64 period = end - lastEnd;
   lastEnd = end;
 
+
+  // Pacer
+  Pacer.Update(m_swapChain, m_pActiveOutput, m_JudderCadenceDrop, m_JudderTokenBunching, m_JudderVramStall);
+
   // Stats
   DXGI_FRAME_STATISTICS stats1;
   UINT64 PresentCount = 0;
   UINT64 PresentRefreshCount = 0;
-  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats1))) 
+  if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats1)))
   {
 	PresentCount = stats1.PresentCount;
 	PresentRefreshCount = stats1.PresentRefreshCount;
@@ -1479,12 +1498,9 @@ void DX::DeviceResources::Present()
   // Log
   static UINT64 oldPresentCount = 0;
   static UINT64 oldPresentRefreshCount = 0;
-  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, diff: {}, PresentRefreshCount: {}, diff: {}, FinishCommandList: {:.3f}", (double) presentDuration / freq*1000.0, (double) period / freq*1000.0, PresentCount, PresentCount - oldPresentCount, PresentRefreshCount, PresentRefreshCount- oldPresentRefreshCount, (double)finishDuration/freq*1000.0);
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, diff: {}, PresentRefreshCount: {}, diff: {}, FinishCommandList: {:.3f}", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0, PresentCount, PresentCount - oldPresentCount, PresentRefreshCount, PresentRefreshCount - oldPresentRefreshCount, (double) finishDuration / freq * 1000.0);
   oldPresentCount = PresentCount;
   oldPresentRefreshCount = PresentRefreshCount;
-
-  // Pacer
-  Pacer.Update(m_swapChain, m_pActiveOutput, m_JudderCadenceDrop, m_JudderTokenBunching, m_JudderVramStall);
 
   // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
