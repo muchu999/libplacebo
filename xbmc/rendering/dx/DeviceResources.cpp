@@ -784,35 +784,12 @@ void DX::DeviceResources::DestroySwapChain()
   m_IsTransferPQ = false;
 }
 
-// RAII Guard to safely handle re-entrancy and early returns
-struct PresenterThreadGuard
-{
-  DX::DeviceResources* m_resources;
-
-  // 1. Shuts down the thread immediately upon entering the function
-  PresenterThreadGuard(DX::DeviceResources* res) : m_resources(res)
-  {
-	m_resources->StopPresentThread();
-  }
-
-  // 2. Automatically restarts the thread on ANY exit path (even error returns)
-  ~PresenterThreadGuard()
-  {
-	m_resources->StartPresentThread();
-  }
-};
-
 void DX::DeviceResources::ResizeBuffers()
 {
   if (!m_bDeviceCreated)
     return;
 
   CLog::LogF(LOGDEBUG, "resize buffers.");
-
-  // Instantiating this guard stops the presentation thread right now.
-  // When this function finishes (or hits an early error return), 
-  // the destructor automatically calls StartPresentThread().
-  PresenterThreadGuard threadGuard(this);
 
   bool bHWStereoEnabled = RenderStereoMode::HARDWAREBASED ==
                           CServiceBroker::GetWinSystem()->GetGfxContext().GetStereoMode();
@@ -988,12 +965,28 @@ void DX::DeviceResources::ResizeBuffers()
       SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
   }
 
+  Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
+  Microsoft::WRL::ComPtr<IDXGIAdapter> dxgiAdapter;
+  Microsoft::WRL::ComPtr<IDXGIFactory2> dxgiFactory;
+
+  if(SUCCEEDED(m_d3dDevice.As(&dxgiDevice)) &&
+	SUCCEEDED(dxgiDevice->GetAdapter(&dxgiAdapter)) &&
+	SUCCEEDED(dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory))))
+  {
+	// Crucial: Prevents DXGI from locking or corrupting the Win32 mouse cursor behavior
+	dxgiFactory->MakeWindowAssociation(m_window, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES);
+  }
   CLog::LogF(LOGDEBUG, "end resize buffers.");
 }
 
 // These resources need to be recreated every time the window size is changed.
 void DX::DeviceResources::CreateWindowSizeDependentResources()
 {
+  // STEP 1: FORCE SHUTDOWN BEFORE DESTRUCTING HANDLES
+  // Ensure the background presentation loop is joined and dead 
+  // before any swapchains are dropped to null.
+  StopPresentThread();
+
   ReleaseBackBuffer();
 
   DestroySwapChain();
@@ -1007,6 +1000,24 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
   CreateBackBuffer();
 
   NotifySwapchainListeners("CreateSwapChain");
+  // STEP 2: CONFIGURE THE FRESH FULLSCREEN SWAPCHAIN METRICS
+  Microsoft::WRL::ComPtr<IDXGISwapChain2> swapChain2;
+  if(SUCCEEDED(m_swapChain.As(&swapChain2)))
+  {
+	swapChain2->SetMaximumFrameLatency(1);
+  }
+
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
+  {
+	pMultithread->SetMultithreadProtected(TRUE);
+  }
+
+  // STEP 3: DEFINITIVE THREAD SPIN-UP (The Fix)
+  // We only spawn the thread here because every resource allocation is finished,
+  // the back-buffers are allocated, and the swapchain handle is guaranteed stable!
+  StartPresentThread();
+
 }
 
 // Determine the dimensions of the render target and whether it will be scaled down.
@@ -2248,12 +2259,12 @@ bool DX::DeviceResources::IsGCNOrOlder() const
 
 void DX::DeviceResources::StartPresentThread()
 {
-  if(m_presentRunning && m_presentThread.get_id() == std::thread::id())
+  if(m_presentRunning.load(std::memory_order_acquire) && m_presentThread.get_id() == std::thread::id())
   {
-	m_presentRunning = false;
+	m_presentRunning.store(false, std::memory_order_release);
   }
 
-  if(m_presentRunning) return;
+  if(m_presentRunning.load(std::memory_order_acquire)) return;
   if(!m_swapChain) return;
 
   if(m_presentThread.joinable())
@@ -2261,18 +2272,20 @@ void DX::DeviceResources::StartPresentThread()
 	m_presentThread.join();
   }
 
+  m_latencyWaitableObject = nullptr;
   Microsoft::WRL::ComPtr<IDXGISwapChain2> swapChain2;
   if(SUCCEEDED(m_swapChain.As(&swapChain2)))
   {
 	m_latencyWaitableObject = swapChain2->GetFrameLatencyWaitableObject();
   }
 
-  // Initialize the monotonic counters back to zero for the fresh thread
-  m_framesRendered.store(0, std::memory_order_relaxed);
-  m_framesPresented.store(0, std::memory_order_relaxed);
+  m_framesRendered.store(0, std::memory_order_release);
+  m_framesPresented.store(0, std::memory_order_release);
 
-  m_presentRunning = true;
+  // Set true BEFORE running the thread block
+  m_presentRunning.store(true, std::memory_order_release);
   m_presentThread = std::thread(&DeviceResources::PresentThreadLoop, this);
+
 }
 
 void DX::DeviceResources::StopPresentThread()
@@ -2312,10 +2325,10 @@ void DX::DeviceResources::PresentThreadLoop()
 
   while(m_presentRunning)
   {
-	// 1. Lockless / Deadlock-free Check: Wait until there is a new frame to display
+	// 1. Thread Synchronization Check
 	std::unique_lock<std::mutex> lock(m_presentMutex);
 	m_presentCv.wait(lock, [this] {
-	  return (m_framesRendered.load() > m_framesPresented.load()) || !m_presentRunning;
+	  return (m_framesRendered.load(std::memory_order_acquire) > m_framesPresented.load(std::memory_order_acquire)) || !m_presentRunning;
 	  });
 
 	if(!m_presentRunning) break;
@@ -2338,19 +2351,10 @@ void DX::DeviceResources::PresentThreadLoop()
 	// 2. Hardware Slot Wait: Ensure the GPU driver context queue has a free back buffer
 	if(m_latencyWaitableObject)
 	{
-	  DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 200);
-
-	  if(!m_presentRunning) break; // Check flag if we woke up due to shutdown
-
-	  if(waitResult == WAIT_FAILED || waitResult == WAIT_ABANDONED)
-	  {
-		break;
-	  }
-
-	  if(waitResult == WAIT_TIMEOUT)
-	  {
-		continue;
-	  }
+	  DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 50);
+	  if(!m_presentRunning) break;
+	  if(waitResult == WAIT_FAILED || waitResult == WAIT_ABANDONED) continue;
+	  if(waitResult == WAIT_TIMEOUT) continue;
 	}
 
 	if(!m_presentRunning) break;
@@ -2360,9 +2364,16 @@ void DX::DeviceResources::PresentThreadLoop()
 	m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), FALSE);
 	if(m_swapChain)
 	{
+	  // If a refresh rate switch is active, this line absorbs the multi-second block safely
 	  HRESULT hr = m_swapChain->Present(1, 0);
 	  m_presentResult.store(hr, std::memory_order_release);
+	  if(hr == DXGI_STATUS_OCCLUDED || hr == DXGI_ERROR_WAS_STILL_DRAWING)
+	  {
+		pMultithread->Leave();
 
+		std::this_thread::sleep_for(std::chrono::milliseconds(16));
+		continue;
+	  }
 	  if(hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
 	  {
 		m_presentResult.store(hr, std::memory_order_release);
@@ -2378,25 +2389,28 @@ void DX::DeviceResources::PresentThreadLoop()
 	}
 	pMultithread->Leave();
 
-	// 4. Update the absolute tracking metrics and wake up the renderer
-	{
-	  std::lock_guard<std::mutex> signalLock(m_presentMutex);
-	  m_framesPresented.fetch_add(1, std::memory_order_relaxed);
-	}
-	m_renderCv.notify_one();
+	// 4. LOCK-FREE METRIC UPDATE:
+	// We atomically increment the presentation index. The rendering thread 
+	// will see this update instantly on its next evaluation loop pass.
+	m_framesPresented.fetch_add(1, std::memory_order_release);
+
+	// Wake up the rendering loop condition variable safety checks
+	m_renderCv.notify_all();
   }
 
-  // Reset variables completely if the loop exits on thread teardown
-  {
-	std::lock_guard<std::mutex> lock(m_presentMutex);
-	m_framesRendered.store(0);
-	m_framesPresented.store(0);
-  }
+  // Cleanup sequence counters safely on thread exit
+  m_framesRendered.store(0, std::memory_order_release);
+  m_framesPresented.store(0, std::memory_order_release);
   m_renderCv.notify_all();
 }
-
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
+  // Auto-recovery valve remains active
+  if(!m_presentRunning.load(std::memory_order_acquire) && m_swapChain)
+  {
+	StartPresentThread();
+  }
+
   HRESULT lastPresentHr = m_presentResult.load(std::memory_order_acquire);
   if(lastPresentHr == DXGI_ERROR_DEVICE_REMOVED || lastPresentHr == DXGI_ERROR_DEVICE_RESET || lastPresentHr == DXGI_ERROR_INVALID_CALL)
   {
@@ -2409,25 +2423,24 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	m_d3dContext->Flush();
   }
 
+  m_framesRendered.fetch_add(1, std::memory_order_release);
+
+  // FIX: Perform a true state-based wait condition.
+  // If the monitor is changing frequencies, this will sleep cleanly for 
+  // the full 2 seconds, completely protecting your graphics cadence.
+  if((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) > 1)
   {
 	std::unique_lock<std::mutex> lock(m_presentMutex);
-
-	// 1. Advance our absolute rendered frame count
-	m_framesRendered.fetch_add(1, std::memory_order_relaxed);
-
-	// 2. BACKPRESSURE: If we are more than 1 frame ahead of what has been displayed, sleep.
-	// This is perfectly safe against missed notifications because it checks absolute state.
-	while((m_framesRendered.load() - m_framesPresented.load()) > 1 && m_presentRunning)
-	{
-	  m_renderCv.wait(lock);
-	}
+	m_renderCv.wait(lock, [this] {
+	  return ((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) <= 1) || !m_presentRunning.load(std::memory_order_acquire);
+	  });
   }
 
-  // Wake up the presenter thread
   m_presentCv.notify_one();
 
   return S_OK;
 }
+
 
 void DX::DeviceResources::DrainPresentationQueue()
 {
