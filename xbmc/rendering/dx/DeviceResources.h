@@ -270,13 +270,22 @@ private:
 	// Shared thread-safe clock for your PTS filter loop
 	std::atomic<int64_t> m_lastVsyncTimestamp {0};
 	HANDLE m_latencyWaitableObject = nullptr;
+	std::atomic<int> m_pendingFrames {0};
+	// Atomic status tracking for the asynchronous DXGI engine
+	std::atomic<HRESULT> m_presentResult {S_OK};
 
 
 public:
   void PresentThreadLoop();
   void StartPresentThread();
   void StopPresentThread();
-  void SignalFrameReady();
+  HRESULT SignalFrameReady();
+  void DrainPresentationQueue();
   int64_t GetLatestVsyncTime() const { return m_lastVsyncTimestamp.load(std::memory_order_acquire); }
+  // Public check so the rendering loop can audit the device state
+  HRESULT GetLastPresentResult() const { return m_presentResult.load(std::memory_order_acquire); }
+  void ResetPresentResult() {
+	m_presentResult.store(S_OK, std::memory_order_release);
+  }
   };
 }

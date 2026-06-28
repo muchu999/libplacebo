@@ -1493,7 +1493,7 @@ void DX::DeviceResources::Present()
 	static UINT64 lastEnd = 0;
 	DXGI_PRESENT_PARAMETERS presentParams = {0};
 	//hr = m_swapChain->Present1(1, 0, &presentParams);
-	SignalFrameReady();
+	hr = SignalFrameReady();
 	UINT64 end = CurrentHostCounter();
 	UINT64 presentDuration = end - start;
 	UINT64 period = end - lastEnd;
@@ -2264,57 +2264,100 @@ void DX::DeviceResources::PresentThreadLoop()
   ::SetThreadPriority(::GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
   Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-  if(FAILED(m_d3dContext.As(&pMultithread)))
-  {
-	CLog::LogF(LOGERROR, "DX::DeviceResources: Failed to query ID3D11Multithread.");
+  if(FAILED(m_d3dContext.As(&pMultithread))) {
 	return;
   }
 
   while(m_presentRunning)
   {
+	// 1. Thread Handoff: Wait for the rendering thread to signal a completed frame
 	std::unique_lock<std::mutex> lock(m_presentMutex);
 	m_presentCv.wait(lock, [this] { return m_frameReady.load() || !m_presentRunning; });
 
 	if(!m_presentRunning) break;
 	m_frameReady = false;
-	lock.unlock(); // Release CPU lock immediately
+	lock.unlock();
 
-	// 1. Kernel-level sleep waiting for an empty DXGI back buffer slot
+	// 2. Hardware Slot Wait: Ensure the GPU driver context queue has a free back buffer
 	if(m_latencyWaitableObject)
 	{
 	  ::WaitForSingleObject(m_latencyWaitableObject, INFINITE);
 	}
 
-	// 2. Wrap the execution context lock to shield libplacebo
+	// 3. Thread Safety Shield: Lock out context conflicts with libplacebo
 	pMultithread->Enter();
 
-	if(m_swapChain)
+	if(m_swapChain) // && m_d3dRenderTargetView) //cl
 	{
-	  // The thread blocks cleanly on hardware V-Sync right here
-	  m_swapChain->Present(1, 0);
+	  // 4. Hardware Presentation: This thread freezes cleanly right here on V-Sync
+	  HRESULT hr = m_swapChain->Present(1, 0);
 
-	  // 3. Atomically pass the exact completion clock string back to PTS filter
+	  if(hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+	  {
+		// If a seek triggers a device reset, do not execute timestamp tracking
+		pMultithread->Leave();
+
+		// Wake up the rendering thread immediately so it can process the error instead of sleeping
+		m_presentCv.notify_all();
+		continue;
+	  }
+
+	  // 5. Update PTS Filter Clock
 	  LARGE_INTEGER qpc;
 	  ::QueryPerformanceCounter(&qpc);
 	  m_lastVsyncTimestamp.store(qpc.QuadPart, std::memory_order_release);
 	}
 
 	pMultithread->Leave();
+
+	// 6. Release Backpressure Lock-Step:
+	// The V-Sync has unblocked us. Decrement the frames counter and wake up the 
+	// rendering thread so it can safely start drawing the next UI layer frame.
+	{
+	  std::lock_guard<std::mutex> signalLock(m_presentMutex);
+	  m_pendingFrames--;
+	}
+	m_presentCv.notify_all();
   }
 }
 
-// Public wrapper triggered by Kodi's renderer thread downstream of libplacebo
-void DX::DeviceResources::SignalFrameReady()
+HRESULT DX::DeviceResources::SignalFrameReady()
 {
   if(m_d3dContext)
   {
-	// Flush libplacebo commands directly out of the CPU driver down to hardware
+	// Flush commands to the GPU pipeline so execution starts immediately
 	m_d3dContext->Flush();
   }
 
+  std::unique_lock<std::mutex> lock(m_presentMutex);
+
+  // BACKPRESSURE: Increment the frame token count. 
+  // If there is already a frame being handled by the present thread, 
+  // force the rendering thread to sleep here until the monitor accepts it.
+  m_pendingFrames++;
+  if(m_pendingFrames.load() > 1)
   {
-	std::lock_guard<std::mutex> lock(m_presentMutex);
-	m_frameReady = true;
+	m_presentCv.wait(lock, [this] { return m_pendingFrames.load() <= 1 || !m_presentRunning; });
   }
-  m_presentCv.notify_one();
+
+  m_frameReady = true;
+  m_presentCv.notify_one(); // Wake up the high-priority present thread
+}
+
+void DX::DeviceResources::DrainPresentationQueue()
+{
+  std::unique_lock<std::mutex> lock(m_presentMutex);
+
+  // Force the atomic frames tracker back down to zero
+  m_pendingFrames = 0;
+  m_frameReady = false;
+
+  if(m_d3dContext)
+  {
+	// Force-flush any lingering libplacebo work remaining in the driver command pipelines
+	m_d3dContext->Flush();
+  }
+
+  // Wake any loops stalled on backpressure checks
+  m_presentCv.notify_all();
 }
