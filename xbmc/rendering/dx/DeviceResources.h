@@ -269,28 +269,23 @@ private:
 	std::atomic<uint64_t> m_framesRendered {0};
 	std::atomic<uint64_t> m_framesPresented {0};
 	std::atomic<bool> m_presentRunning {false};
-
-	// Shared thread-safe clock for your PTS filter loop
 	std::atomic<int64_t> m_lastVsyncTimestamp {0};
 	HANDLE m_latencyWaitableObject = nullptr;
-	// Atomic status tracking for the asynchronous DXGI engine
 	std::atomic<HRESULT> m_presentResult {S_OK};
 	std::mutex m_queueMutex;
 	std::queue<Microsoft::WRL::ComPtr<ID3D11CommandList>> m_frameQueue;
 
 
-
+	void PresentThreadLoop();
+	void StartPresentThread();
+	void StopPresentThread();
 public:
-  void PresentThreadLoop();
-  void StartPresentThread();
-  void StopPresentThread();
   HRESULT SignalFrameReady();
   void DrainPresentationQueue();
   int64_t GetLatestVsyncTime() const { return m_lastVsyncTimestamp.load(std::memory_order_acquire); }
+
   // Public check so the rendering loop can audit the device state
   HRESULT GetLastPresentResult() const { return m_presentResult.load(std::memory_order_acquire); }
-  void ResetPresentResult() {
-	m_presentResult.store(S_OK, std::memory_order_release);
-  }
+  void ResetPresentResult() { m_presentResult.store(S_OK, std::memory_order_release); }
   };
 }
