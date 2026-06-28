@@ -101,13 +101,17 @@ DX::DeviceResources::DeviceResources()
 {
 }
 
-DX::DeviceResources::~DeviceResources() = default;
+DX::DeviceResources::~DeviceResources() 
+{ 
+  StopPresentThread(); 
+}
 
 void DX::DeviceResources::Release()
 {
   if (!m_bDeviceCreated)
     return;
 
+  StopPresentThread();
   ReleaseBackBuffer();
   OnDeviceLost(true);
   DestroySwapChain();
@@ -2246,16 +2250,29 @@ void DX::DeviceResources::StartPresentThread()
 
 void DX::DeviceResources::StopPresentThread()
 {
+  // 1. If it's not running, do nothing
   if(!m_presentRunning) return;
 
+  // 2. Set the atomic flag to false BEFORE signaling
   m_presentRunning = false;
-  m_presentCv.notify_one();
 
+  // 3. Force-clear the pacing tokens so the loop doesn't hang
+  {
+	std::lock_guard<std::mutex> lock(m_presentMutex);
+	m_frameReady = false;
+	m_pendingFrames = 0;
+  }
+
+  // 4. Wake up the thread so it checks the m_presentRunning flag and exits
+  m_presentCv.notify_all();
+
+  // 5. Hard block: Wait for the operating system to completely terminate the thread execution
   if(m_presentThread.joinable())
   {
 	m_presentThread.join();
   }
 
+  // 6. Null out the kernel wait handle safely
   m_latencyWaitableObject = nullptr;
 }
 
@@ -2281,13 +2298,22 @@ void DX::DeviceResources::PresentThreadLoop()
 	// 2. Hardware Slot Wait: Ensure the GPU driver context queue has a free back buffer
 	if(m_latencyWaitableObject)
 	{
-	  ::WaitForSingleObject(m_latencyWaitableObject, INFINITE);
+	  DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 200);
+
+	  if(!m_presentRunning) break; // Check flag if we woke up due to shutdown
+
+	  if(waitResult == WAIT_TIMEOUT)
+	  {
+		// The frame didn't show up in time (e.g. window is minimized), 
+		// skip rendering loop and evaluate flags again.
+		continue;
+	  }
 	}
 
 	// 3. Thread Safety Shield: Lock out context conflicts with libplacebo
 	pMultithread->Enter();
 
-	if(m_swapChain) // && m_d3dRenderTargetView) //cl
+	if(m_swapChain)
 	{
 	  // 4. Hardware Presentation: This thread freezes cleanly right here on V-Sync
 	  HRESULT hr = m_swapChain->Present(1, 0);
@@ -2323,17 +2349,21 @@ void DX::DeviceResources::PresentThreadLoop()
 
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
+  // 1. Check for errors from the PREVIOUS frame's present call before doing work
+  HRESULT lastPresentHr = m_presentResult.load(std::memory_order_acquire);
+  if(lastPresentHr == DXGI_ERROR_DEVICE_REMOVED || lastPresentHr == DXGI_ERROR_DEVICE_RESET || lastPresentHr == DXGI_ERROR_INVALID_CALL)
+  {
+	// Reset the tracker so we don't handle the exact same error twice next loop
+	m_presentResult.store(S_OK, std::memory_order_release);
+	return lastPresentHr; // Return the error code directly to your existing check block!
+  }
+
   if(m_d3dContext)
   {
-	// Flush commands to the GPU pipeline so execution starts immediately
 	m_d3dContext->Flush();
   }
 
   std::unique_lock<std::mutex> lock(m_presentMutex);
-
-  // BACKPRESSURE: Increment the frame token count. 
-  // If there is already a frame being handled by the present thread, 
-  // force the rendering thread to sleep here until the monitor accepts it.
   m_pendingFrames++;
   if(m_pendingFrames.load() > 1)
   {
@@ -2341,7 +2371,10 @@ HRESULT DX::DeviceResources::SignalFrameReady()
   }
 
   m_frameReady = true;
-  m_presentCv.notify_one(); // Wake up the high-priority present thread
+  m_presentCv.notify_one();
+
+  // If everything is healthy, return S_OK
+  return S_OK;
 }
 
 void DX::DeviceResources::DrainPresentationQueue()

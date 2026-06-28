@@ -24,6 +24,7 @@ public:
 
   double GetClock(bool interpolated = true);
   double GetClock(double& absolute, bool interpolated = true);
+  double GetClock(int64_t timestamp);
 
   double ErrorAdjust(double error, const char* log);
   void Discontinuity(double clock, double absolute);

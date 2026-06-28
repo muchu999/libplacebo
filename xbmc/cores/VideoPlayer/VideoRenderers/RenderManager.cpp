@@ -658,7 +658,7 @@ void CRenderManager::RecordFlipEndTime()
   static double qpcDriftCorrection = 0.0; 
   if(!bInit)
   {
-	currentPts = m_dvdClock.GetClock();
+	currentPts = m_dvdClock.GetClock(DX::DeviceResources::Get()->GetLatestVsyncTime());
 	frameCounter = 0;
 	qpcDriftCorrection = 0.0;
 	bInit = true;
