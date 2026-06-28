@@ -264,13 +264,14 @@ private:
 	std::thread m_presentThread;
 	std::mutex m_presentMutex;
 	std::condition_variable m_presentCv;
-	std::atomic<bool> m_frameReady {false};
+	std::condition_variable m_renderCv;  // Used to wake up the Rendering Thread
+	std::atomic<uint64_t> m_framesRendered {0};
+	std::atomic<uint64_t> m_framesPresented {0};
 	std::atomic<bool> m_presentRunning {false};
 
 	// Shared thread-safe clock for your PTS filter loop
 	std::atomic<int64_t> m_lastVsyncTimestamp {0};
 	HANDLE m_latencyWaitableObject = nullptr;
-	std::atomic<int> m_pendingFrames {0};
 	// Atomic status tracking for the asynchronous DXGI engine
 	std::atomic<HRESULT> m_presentResult {S_OK};
 
