@@ -780,12 +780,35 @@ void DX::DeviceResources::DestroySwapChain()
   m_IsTransferPQ = false;
 }
 
+// RAII Guard to safely handle re-entrancy and early returns
+struct PresenterThreadGuard
+{
+  DX::DeviceResources* m_resources;
+
+  // 1. Shuts down the thread immediately upon entering the function
+  PresenterThreadGuard(DX::DeviceResources* res) : m_resources(res)
+  {
+	m_resources->StopPresentThread();
+  }
+
+  // 2. Automatically restarts the thread on ANY exit path (even error returns)
+  ~PresenterThreadGuard()
+  {
+	m_resources->StartPresentThread();
+  }
+};
+
 void DX::DeviceResources::ResizeBuffers()
 {
   if (!m_bDeviceCreated)
     return;
 
   CLog::LogF(LOGDEBUG, "resize buffers.");
+
+  // Instantiating this guard stops the presentation thread right now.
+  // When this function finishes (or hits an early error return), 
+  // the destructor automatically calls StartPresentThread().
+  PresenterThreadGuard threadGuard(this);
 
   bool bHWStereoEnabled = RenderStereoMode::HARDWAREBASED ==
                           CServiceBroker::GetWinSystem()->GetGfxContext().GetStereoMode();
@@ -811,7 +834,8 @@ void DX::DeviceResources::ResizeBuffers()
     m_swapChain->GetDesc1(&scDesc);
     hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
                                     lround(m_outputSize.Height), scDesc.Format,
-	                                (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
+	                                (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
+	);
 	NotifySwapchainListeners("CreateSwapChain");
 
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
@@ -869,6 +893,7 @@ void DX::DeviceResources::ResizeBuffers()
     // FLIP_DISCARD improves performance (needed in some systems for 4K HDR 60 fps)
     swapChainDesc.SwapEffect = CSysInfo::IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin10) ? DXGI_SWAP_EFFECT_FLIP_DISCARD : DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
 	  swapChainDesc.Flags = windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+	  swapChainDesc.Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 	swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     swapChainDesc.SampleDesc.Count = 1;
     swapChainDesc.SampleDesc.Quality = 0;
@@ -1467,7 +1492,8 @@ void DX::DeviceResources::Present()
 	UINT64 start = CurrentHostCounter();
 	static UINT64 lastEnd = 0;
 	DXGI_PRESENT_PARAMETERS presentParams = {0};
-	hr = m_swapChain->Present1(1, 0, &presentParams);
+	//hr = m_swapChain->Present1(1, 0, &presentParams);
+	SignalFrameReady();
 	UINT64 end = CurrentHostCounter();
 	UINT64 presentDuration = end - start;
 	UINT64 period = end - lastEnd;
@@ -2197,4 +2223,98 @@ bool DX::DeviceResources::IsGCNOrOlder() const
     return false;
 
   return true;
+}
+
+void DX::DeviceResources::StartPresentThread()
+{
+  // Safety 1: Don't spawn duplicate threads if called re-entrantly
+  if(m_presentRunning) return;
+
+  // Safety 2: If swapchain recreation failed, don't start the thread yet
+  if(!m_swapChain) return;
+
+  Microsoft::WRL::ComPtr<IDXGISwapChain2> swapChain2;
+  if(SUCCEEDED(m_swapChain.As(&swapChain2)))
+  {
+	m_latencyWaitableObject = swapChain2->GetFrameLatencyWaitableObject();
+  }
+
+  m_presentRunning = true;
+  m_frameReady = false;
+  m_presentThread = std::thread(&DeviceResources::PresentThreadLoop, this);
+}
+
+void DX::DeviceResources::StopPresentThread()
+{
+  if(!m_presentRunning) return;
+
+  m_presentRunning = false;
+  m_presentCv.notify_one();
+
+  if(m_presentThread.joinable())
+  {
+	m_presentThread.join();
+  }
+
+  m_latencyWaitableObject = nullptr;
+}
+
+void DX::DeviceResources::PresentThreadLoop()
+{
+  ::SetThreadPriority(::GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(FAILED(m_d3dContext.As(&pMultithread)))
+  {
+	CLog::LogF(LOGERROR, "DX::DeviceResources: Failed to query ID3D11Multithread.");
+	return;
+  }
+
+  while(m_presentRunning)
+  {
+	std::unique_lock<std::mutex> lock(m_presentMutex);
+	m_presentCv.wait(lock, [this] { return m_frameReady.load() || !m_presentRunning; });
+
+	if(!m_presentRunning) break;
+	m_frameReady = false;
+	lock.unlock(); // Release CPU lock immediately
+
+	// 1. Kernel-level sleep waiting for an empty DXGI back buffer slot
+	if(m_latencyWaitableObject)
+	{
+	  ::WaitForSingleObject(m_latencyWaitableObject, INFINITE);
+	}
+
+	// 2. Wrap the execution context lock to shield libplacebo
+	pMultithread->Enter();
+
+	if(m_swapChain)
+	{
+	  // The thread blocks cleanly on hardware V-Sync right here
+	  m_swapChain->Present(1, 0);
+
+	  // 3. Atomically pass the exact completion clock string back to PTS filter
+	  LARGE_INTEGER qpc;
+	  ::QueryPerformanceCounter(&qpc);
+	  m_lastVsyncTimestamp.store(qpc.QuadPart, std::memory_order_release);
+	}
+
+	pMultithread->Leave();
+  }
+}
+
+// Public wrapper triggered by Kodi's renderer thread downstream of libplacebo
+void DX::DeviceResources::SignalFrameReady()
+{
+  if(m_d3dContext)
+  {
+	// Flush libplacebo commands directly out of the CPU driver down to hardware
+	m_d3dContext->Flush();
+  }
+
+  {
+	std::lock_guard<std::mutex> lock(m_presentMutex);
+	m_frameReady = true;
+  }
+  m_presentCv.notify_one();
 }

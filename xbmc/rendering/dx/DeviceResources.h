@@ -259,5 +259,24 @@ namespace DX
     bool m_DXVA2SharedDecoderSurfaces{false};
     bool m_DXVASuperResolutionSupport{false};
     bool m_DXVA2UseFence{false};
+private:
+	// Multi-threaded Present Engine Primitives
+	std::thread m_presentThread;
+	std::mutex m_presentMutex;
+	std::condition_variable m_presentCv;
+	std::atomic<bool> m_frameReady {false};
+	std::atomic<bool> m_presentRunning {false};
+
+	// Shared thread-safe clock for your PTS filter loop
+	std::atomic<int64_t> m_lastVsyncTimestamp {0};
+	HANDLE m_latencyWaitableObject = nullptr;
+
+
+public:
+  void PresentThreadLoop();
+  void StartPresentThread();
+  void StopPresentThread();
+  void SignalFrameReady();
+  int64_t GetLatestVsyncTime() const { return m_lastVsyncTimestamp.load(std::memory_order_acquire); }
   };
 }

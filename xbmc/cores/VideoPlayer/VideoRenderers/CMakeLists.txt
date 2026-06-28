@@ -23,9 +23,11 @@ set(HEADERS BaseRenderer.h
 if(CORE_SYSTEM_NAME STREQUAL windows OR CORE_SYSTEM_NAME STREQUAL windowsstore)
   list(APPEND SOURCES WinRenderer.cpp
                       OverlayRendererDX.cpp
+                      Presenter.cpp
                       RenderCaptureDX.cpp)
   list(APPEND HEADERS WinRenderer.h
                       OverlayRendererDX.h
+                      Presenter.h
                       RenderCapture.h)
 endif()
 
