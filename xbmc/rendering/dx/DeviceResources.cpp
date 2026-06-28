@@ -2302,13 +2302,18 @@ void DX::DeviceResources::PresentThreadLoop()
 
 	  if(!m_presentRunning) break; // Check flag if we woke up due to shutdown
 
+	  if(waitResult == WAIT_FAILED || waitResult == WAIT_ABANDONED)
+	  {
+		break;
+	  }
+
 	  if(waitResult == WAIT_TIMEOUT)
 	  {
-		// The frame didn't show up in time (e.g. window is minimized), 
-		// skip rendering loop and evaluate flags again.
 		continue;
 	  }
 	}
+
+	if(!m_presentRunning) break;
 
 	// 3. Thread Safety Shield: Lock out context conflicts with libplacebo
 	pMultithread->Enter();
