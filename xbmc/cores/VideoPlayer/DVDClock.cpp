@@ -55,17 +55,6 @@ double CDVDClock::GetAbsoluteClock(bool interpolated /*= true*/)
   return SystemToAbsolute(current);
 }
 
-double CDVDClock::GetClock(int64_t timestamp)
-{
-  std::unique_lock lock(m_critSection);
-
-  int64_t current = timestamp;
-  m_systemAdjust += m_speedAdjust * (current - m_lastSystemTime);
-  m_lastSystemTime = current;
-
-  return SystemToPlaying(current);
-}
-
 double CDVDClock::GetClock(bool interpolated /*= true*/)
 {
   std::unique_lock lock(m_critSection);
