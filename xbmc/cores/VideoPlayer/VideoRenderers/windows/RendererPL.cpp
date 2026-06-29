@@ -64,79 +64,9 @@ CRendererPL::~CRendererPL()
 	DX::Windowing()->SetHdrColorSpace(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
 }
 
-class CRenderTimeMonitor {
-private:
-  std::vector<double> history;
-  size_t writeIndex = 0;
-  size_t maxFrames = 0;
-  bool bufferFull = false;
-  size_t skipCount = 0;
 
-  // Helper to get active frame count in the buffer
-  size_t getActiveCount() const {
-	return bufferFull ? maxFrames : writeIndex;
-  }
-
-public:
-  CRenderTimeMonitor(size_t frameWindowSize) : maxFrames(frameWindowSize) {
-	history.resize(maxFrames, 0.0);
-  }
-
-  void update(double jitterUs) {
-	if(skipCount < 20)
-	{
-	  skipCount++;
-	  return;
-	}
-	history [writeIndex] = jitterUs;
-
-	writeIndex++;
-	if(writeIndex >= maxFrames) {
-	  writeIndex = 0;
-	  bufferFull = true;
-	}
-  }
-
-  double calculateVariance(double& mean) const {
-	size_t count = getActiveCount();
-	if(count < 2) return 0.0;
-
-	double sum = 0.0;
-	for(size_t i = 0; i < count; ++i) {
-	  sum += history [i];
-	}
-	mean = sum / count;
-
-	double varianceSum = 0.0;
-	for(size_t i = 0; i < count; ++i) {
-	  varianceSum += std::pow(history [i] - mean, 2);
-	}
-
-	return varianceSum / (count - 1);
-  }
-
-  double calculatePeak() const {
-	size_t count = getActiveCount();
-	if(count == 0) return 0.0;
-
-	double maxVal = history [0];
-	for(size_t i = 1; i < count; ++i) {
-	  if(history [i] > maxVal) {
-		maxVal = history [i];
-	  }
-	}
-	return maxVal;
-  }
-
-  void reset(void) {
-	writeIndex = 0;
-	skipCount = 0;
-	bufferFull = false;
-  }
-};
-
-CRenderTimeMonitor renderTimeMonitor(120);
-CRenderTimeMonitor renderTimeMonitorGpu(120);
+CPLHelper::CMonitor renderTimeMonitor(120);
+CPLHelper::CMonitor renderTimeMonitorGpu(120);
 
 void CRendererPL::UpdateVideoFilters()
 {

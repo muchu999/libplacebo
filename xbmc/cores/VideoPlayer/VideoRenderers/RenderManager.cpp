@@ -32,6 +32,7 @@
 #include <dxgitype.h>
 #include <rendering/dx/DeviceResources.h>
 #include <utils/TimeUtils.h>
+#include "LibPlacebo/PlHelper.h"
 
 using namespace std::chrono_literals;
 
@@ -264,274 +265,6 @@ bool CRenderManager::IsConfigured() const
   else
     return false;
 }
-class DeferredJitterMonitor {
-private:
-  std::vector<double> history;
-  size_t writeIndex = 0;
-  size_t maxFrames = 0;
-  bool bufferFull = false;
-  size_t skipCount = 0;
-
-  // Helper to get active frame count in the buffer
-  size_t getActiveCount() const {
-	return bufferFull ? maxFrames : writeIndex;
-  }
-
-public:
-  DeferredJitterMonitor(size_t frameWindowSize) : maxFrames(frameWindowSize) {
-	history.resize(maxFrames, 0.0);
-  }
-
-  void update(double jitterUs) {
-	if(skipCount < 20)
-	{
-	  skipCount++;
-	  return;
-	}
-	history [writeIndex] = jitterUs;
-
-	writeIndex++;
-	if(writeIndex >= maxFrames) {
-	  writeIndex = 0;
-	  bufferFull = true;
-	}
-  }
-
-  double calculateVariance() const {
-	size_t count = getActiveCount();
-	if(count < 2) return 0.0;
-
-	double sum = 0.0;
-	for(size_t i = 0; i < count; ++i) {
-	  sum += history [i];
-	}
-	double mean = sum / count;
-
-	double varianceSum = 0.0;
-	for(size_t i = 0; i < count; ++i) {
-	  varianceSum += std::pow(history [i] - mean, 2);
-	}
-
-	return varianceSum / (count - 1);
-  }
-
-  double calculatePeak() const {
-	size_t count = getActiveCount();
-	if(count == 0) return 0.0;
-
-	double maxVal = history [0];
-	for(size_t i = 1; i < count; ++i) {
-	  if(history [i] > maxVal) {
-		maxVal = history [i];
-	  }
-	}
-	return maxVal;
-  }
-
-  void reset(void){
-	writeIndex = 0;
-	skipCount = 0;
-	bufferFull = false;
-  }
-};
-
-class FramePLL1 {
-private:
-  double current_fps;
-  double target_period;
-  double current_phase;
-  double current_freq;    // Frequency tracking accumulator
-  bool is_initialized;
-
-  double K_p;
-  double K_i;
-  double max_drift;
-
-  int lock_progress;
-  const int FRAMES_TO_FULL_LOCK = 60;
-
-  void updateGains() {
-	double progress_ratio = std::min(1.0, static_cast<double>(lock_progress) / FRAMES_TO_FULL_LOCK);
-
-	double fast_settle = 0.3;
-	double slow_settle = 1.5;
-	double current_settle_time = fast_settle + (slow_settle - fast_settle) * progress_ratio;
-	current_settle_time = 1.0; //cl causes oscillation???
-
-	double omega_n = 4.0 / (0.707 * current_settle_time);
-	double T_s = target_period / 1000000.0;
-
-	K_p = 2.0 * 0.707 * omega_n * T_s;
-	K_i = std::pow(omega_n * T_s, 2.0);
-
-	// Perceptual Jitter budget
-	double jitter_budget_percent = 0.04;
-	max_drift = target_period * jitter_budget_percent;
-  }
-
-  void reconfigure(double new_fps, double initial_pts) {
-	current_fps = new_fps;
-	target_period = 1000000.0 / current_fps;
-	current_freq = 0.0;
-	current_phase = initial_pts;
-	is_initialized = true;
-	lock_progress = 0;
-
-	updateGains();
-  }
-
-public:
-  FramePLL1()
-	: current_fps(0.0),
-	target_period(0.0),
-	current_phase(0.0),
-	current_freq(0.0),
-	is_initialized(false),
-	K_p(0.0),
-	K_i(0.0),
-	max_drift(0.0),
-	lock_progress(0) {
-  }
-
-  void forceReset() {
-	is_initialized = false;
-  }
-
-  double process(double target_fps, double input_pts) {
-	if(target_fps <= 0.0) return input_pts;
-
-	if(!is_initialized || target_fps != current_fps) {
-	  reconfigure(target_fps, input_pts);
-	  return current_phase;
-	}
-
-	// 1. DISCONTINUITY DETECTOR
-	double raw_deviation = std::abs(input_pts - (current_phase + target_period));
-	double discontinuity_threshold = target_period * 3.0;
-
-	if(raw_deviation > discontinuity_threshold) {
-	  reconfigure(target_fps, input_pts);
-	  return current_phase;
-	}
-
-	// 2. FIXED PHASE UNWRAPPING
-	// Calculate the error relative to the next expected timeline step
-	double expected_next_pts = current_phase + target_period;
-	double error = input_pts - expected_next_pts;
-
-	// Use modern remainder mapping instead of structural destructive loops
-	// This calculates how far the frame is from the closest multi-frame boundary step
-	error = error - target_period * std::round(error / target_period);
-
-	// 3. LOOP FILTER WITH INTEGRAL ANTI-WINDUP PROTECTION
-	// Increment frequency only by the current proportional error
-	current_freq += K_i * error;
-
-	// ANTI-WINDUP: Prevent the frequency memory from outgrowing our clamp limits
-	double max_freq_drift = target_period * 0.2;
-	current_freq = std::clamp(current_freq, -max_freq_drift, max_freq_drift);
-	//current_freq = std::clamp(current_freq, -max_drift, max_drift);
-
-	// Calculate raw adjustment step
-	lock_progress++;
-	updateGains();
-
-	double delta_t = target_period + current_freq + (K_p * error);
-
-	// 4. JITTER CLAMP
-	delta_t = std::clamp(delta_t, target_period - max_drift, target_period + max_drift);
-
-	current_phase += delta_t;
-	return current_phase;
-  }
-};
-
-
-class FramePLL {
-private:
-  double current_fps;
-  double target_period;
-  double current_phase;
-  double current_freq;
-  bool is_initialized;
-  double K_p;
-  double K_i;
-  double max_drift;
-
-  void updateGains() {
-	// Use a fixed settling time target to maintain loop stability 
-	// dynamically shifting gains mid-stream causes parametric oscillation.
-	double settle_time = 1.0;
-
-	double omega_n = 4.0 / (0.707 * settle_time);
-
-	// Normalise normalized digital frequency (radians/sample)
-	// Since process() runs exactly once per frame, sample period T = 1
-	double theta = omega_n * (target_period / 1000000.0);
-
-	// Standard discrete-time active PI loop filter design
-	K_p = 2.0 * 0.707 * theta;
-	K_i = std::pow(theta, 2.0);
-
-	double jitter_budget_percent = 0.04;
-	max_drift = target_period * jitter_budget_percent;
-  }
-
-  void reconfigure(double new_fps, double initial_pts) {
-	current_fps = new_fps;
-	target_period = 1000000.0 / current_fps;
-	current_freq = 0.0;
-	current_phase = initial_pts;
-	is_initialized = true;
-	updateGains(); // Calculated once per stream configuration
-  }
-
-public:
-  FramePLL() : current_fps(0.0), target_period(0.0), current_phase(0.0),
-	current_freq(0.0), is_initialized(false), K_p(0.0), K_i(0.0), max_drift(0.0) {
-  }
-
-  void forceReset() { is_initialized = false; }
-
-  double process(double target_fps, double input_pts) {
-	if(target_fps <= 0.0) return input_pts;
-
-	if(!is_initialized || target_fps != current_fps) {
-	  reconfigure(target_fps, input_pts);
-	  return current_phase;
-	}
-
-	// 1. DISCONTINUITY DETECTOR
-	double expected_next_pts = current_phase + target_period;
-	double raw_deviation = std::abs(input_pts - expected_next_pts);
-	double discontinuity_threshold = target_period * 3.0;
-
-	if(raw_deviation > discontinuity_threshold) {
-	  reconfigure(target_fps, input_pts);
-	  return current_phase;
-	}
-
-	// 2. PHASE UNWRAPPING (Normalized to target timeline)
-	double error = input_pts - expected_next_pts;
-	error = error - target_period * std::round(error / target_period);
-
-	// 3. LOOP FILTER WITH PROPER SCALING & ANTI-WINDUP
-	current_freq += K_i * error;
-
-	double max_freq_drift = target_period * 0.20;
-	current_freq = std::clamp(current_freq, -max_freq_drift, max_freq_drift);
-	//current_freq = std::clamp(current_freq, -max_drift, max_drift);
-
-	// Compute step delta using unified microsecond scaling
-	double delta_t = target_period + current_freq + (K_p * error);
-
-	// 4. JITTER CLAMP
-	delta_t = std::clamp(delta_t, target_period - max_drift, target_period + max_drift);
-
-	current_phase += delta_t;
-	return current_phase;
-  }
-};
 
 class FramePLL2 {
 private:
@@ -637,9 +370,8 @@ public:
 };
 
 FramePLL2 synchPLL;
-DeferredJitterMonitor jitterMonitor1(120);
-DeferredJitterMonitor jitterMonitor2(120);
-
+CPLHelper::CMonitor jitterMonitor1(120);
+CPLHelper::CMonitor jitterMonitor2(120);
 
 void CRenderManager::RecordFlipEndTime() 
 {
@@ -664,7 +396,7 @@ void CRenderManager::RecordFlipEndTime()
 	bInit = true;
   }
 
-  double realPts = m_dvdClock.GetClock();
+  double realPts = m_dvdClock.GetClock(DX::DeviceResources::Get()->GetLatestVsyncTime());
   ++frameCounter;
   currentPts += ticksPerFrame;
   CLog::LogFC(LOGDEBUG, LOGAVTIMING, "currentPts: {}, realPts: {}, diff: {} ms, frameCounterL {}, qpcDriftCorrection: {}", currentPts, realPts, (currentPts- realPts)/ (double)DVD_TIME_BASE*1000.0, frameCounter, qpcDriftCorrection);
@@ -1229,8 +961,9 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
 			info.vsync += StringUtils::Format("VSync: refresh:{:.3f} missed:{} speed:{:.3f}%",
 			  refreshrate, missedvblanks, clockspeed * 100);
 		  }
-		  info.jitter1 = StringUtils::Format("R jitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor1.calculatePeak() / 1000.0, std::sqrt(jitterMonitor1.calculateVariance()) / 1000.0, m_rawJitter / 1000.0);
-		  info.jitter2 = StringUtils::Format("F JitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor2.calculatePeak() / 1000.0, std::sqrt(jitterMonitor2.calculateVariance()) / 1000.0, m_rawJitter2 / 1000.0);
+		  double dummy;
+		  info.jitter1 = StringUtils::Format("R jitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor1.calculatePeak() / 1000.0, std::sqrt(jitterMonitor1.calculateVariance(dummy)) / 1000.0, m_rawJitter / 1000.0);
+		  info.jitter2 = StringUtils::Format("F JitterMax: {:4.2f}, JitterStdDev: {:4.2f}, Jitter: {:6.2f}", jitterMonitor2.calculatePeak() / 1000.0, std::sqrt(jitterMonitor2.calculateVariance(dummy)) / 1000.0, m_rawJitter2 / 1000.0);
 		  
 		  video = m_pRenderer->GetDebugInfo(m_presentsource);
 		  render = CServiceBroker::GetWinSystem()->GetDebugInfo();
