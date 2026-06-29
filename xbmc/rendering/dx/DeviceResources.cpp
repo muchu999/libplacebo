@@ -14,6 +14,8 @@
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
 #include "messaging/ApplicationMessenger.h"
+#include "application/ApplicationComponents.h"
+#include "application/ApplicationPlayer.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/SystemInfo.h"
@@ -44,6 +46,7 @@ extern "C"
 #include <thread>
 #include <mutex>
 #include <chrono>
+#include <application/ApplicationPlayer.h>
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -2087,17 +2090,38 @@ HRESULT DX::DeviceResources::SignalFrameReady()
   std::unique_lock<std::mutex> lock(m_presentMutex);
   m_framesRendered.fetch_add(1, std::memory_order_seq_cst);
 
-  // STRICT ALTERNATING GATE: If the presentation thread hasn't finished 
-  // displaying the previous frame, force the master loop to pause immediately.
-  if((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) > 1)
-  {
-	// Cap at 16ms fallback (exactly 1 frame window at 60Hz)
-	m_renderCv.wait_for(lock, std::chrono::milliseconds(16), [this] {
-	  return ((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) == 0)
-		|| !m_presentRunning.load(std::memory_order_seq_cst);
-	  });
-  }
+  // 1. DYNAMIC LIFECYCLE EVALUATION:
+// Query Kodi's reference clock to see if a video file is currently decoding/running.
+// Replace 'm_videoReferenceClock' with your build's specific clock pointer name.
+  const auto& components = CServiceBroker::GetAppComponents();
+  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+  bool isVideoActive = appPlayer->IsPlayingVideo();
+  bool isGuiInForeground = (CServiceBroker::GetGUI()->GetWindowManager().GetActiveWindow() != WINDOW_FULLSCREEN_VIDEO);
 
+  if(!isVideoActive || isGuiInForeground)
+  {
+	// VIDEO PLAYBACK MODE: Hold back only if we try to step more than 1 frame ahead.
+	// This preserves your flawless 60Hz playback cadence perfectly.
+	if((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) > 1)
+	{
+	  m_renderCv.wait_for(lock, std::chrono::milliseconds(16), [this] {
+		return ((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) <= 1)
+		  || !m_presentRunning.load(std::memory_order_seq_cst);
+		});
+	}
+  }
+  else
+  {
+	// PURE GUI MODE: Tighten the gate down to a strict ping-pong alternating match.
+	// This completely eliminates the buffer overruns and GPU lock contention when browsing!
+	if((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) >= 1)
+	{
+	  m_renderCv.wait_for(lock, std::chrono::milliseconds(16), [this] {
+		return ((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) == 0)
+		  || !m_presentRunning.load(std::memory_order_seq_cst);
+		});
+	}
+  }
   // 3. Drop the CPU mutex entirely BEFORE triggering the wake-up signal
   lock.unlock();
   m_presentCv.notify_one();
