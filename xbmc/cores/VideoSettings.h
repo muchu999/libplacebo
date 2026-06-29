@@ -220,13 +220,6 @@ enum ViewMode
   ViewModeZoom110Width
 };
 
-enum EPRESENTMODE
-{
-  VS_PRESENTMODE_WINDOWS_PRESENT1 = 0,
-  VS_PRESENTMODE_PACER
-};
-
-
 class CPlaceboShaders
 {
 public:
