@@ -1057,17 +1057,31 @@ void DX::DeviceResources::Unregister(ID3DResource* resource)
 void DX::DeviceResources::FinishCommandList(bool bExecute) const
 {
   if (m_d3dContext == m_deferrContext)
-    return;
+	return;
 
   ComPtr<ID3D11CommandList> pCommandList;
   if (FAILED(m_deferrContext->FinishCommandList(true, &pCommandList)))
   {
-    CLog::LogF(LOGERROR, "failed to finish command queue.");
-    return;
+	CLog::LogF(LOGERROR, "failed to finish command queue.");
+	return;
   }
 
   if (bExecute)
-    m_d3dContext->ExecuteCommandList(pCommandList.Get(), false);
+  {
+	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+	if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
+	{
+	  // Lock out the Present thread before touching the immediate hardware pipe
+	  pMultithread->Enter();
+	}
+
+	m_d3dContext->ExecuteCommandList(pCommandList.Get(), false);
+
+	if (pMultithread)
+	{
+	  pMultithread->Leave();
+	}
+  }
 }
 
 // This method is called in the event handler for the SizeChanged event.
@@ -2337,7 +2351,7 @@ void DX::DeviceResources::PresentThreadLoop()
 	if(m_latencyWaitableObject)
 	{
 	  // Cap at 50ms to allow smooth un-trappable background loop exits
-	  DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 200);
+	  DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 100);
 
 	  if(!m_presentRunning.load(std::memory_order_acquire)) break;
 
@@ -2442,7 +2456,7 @@ HRESULT DX::DeviceResources::SignalFrameReady()
   if((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) > 1)
   {
 	std::unique_lock<std::mutex> lock(m_presentMutex);
-	m_renderCv.wait(lock, [this] {
+	m_renderCv.wait_for(lock, std::chrono::milliseconds(100), [this] {
 	  return ((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) <= 1)
 		|| !m_presentRunning.load(std::memory_order_acquire);
 	  });
