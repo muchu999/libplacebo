@@ -2390,8 +2390,23 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	return lastPresentHr;
   }
 
-  if(m_d3dContext)
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
   {
+	// Explicitly lock the graphics driver context before flushing libplacebo commands.
+	// This ensures the graphic driver can never overlap Flush() with Present().
+	pMultithread->Enter();
+
+	if(m_d3dContext)
+	{
+	  m_d3dContext->Flush();
+	}
+
+	pMultithread->Leave();
+  }
+  else if(m_d3dContext)
+  {
+	// Fallback flush if the multithread interface fails to query
 	m_d3dContext->Flush();
   }
 
