@@ -69,14 +69,13 @@ bool CRendererSoftware::Configure(const VideoPicture& picture, float fps, unsign
       return false;
 
     m_format = picture.videoBuffer->GetFormat();
-	if(!DX::DeviceResources::Get()->SetMultithreadProtected(true)) //cl test for present model before
-	  m_restoreMultithreadProtectedOff = true;
-	//if (m_format == AV_PIX_FMT_D3D11VA_VLD)
-    //{
-    //  m_format = GetAVFormat(GetDXGIFormat(picture));
-    //  if (!DX::DeviceResources::Get()->SetMultithreadProtected(true))
-    //    m_restoreMultithreadProtectedOff = true;
-    //}
+
+    if (m_format == AV_PIX_FMT_D3D11VA_VLD)
+    {
+      m_format = GetAVFormat(GetDXGIFormat(picture));
+      if (!DX::DeviceResources::Get()->SetMultithreadProtected(true))
+        m_restoreMultithreadProtectedOff = true;
+    }
     return true;
   }
   return false;
