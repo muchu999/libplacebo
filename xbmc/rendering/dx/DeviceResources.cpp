@@ -2089,7 +2089,7 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 
   // STRICT ALTERNATING GATE: If the presentation thread hasn't finished 
   // displaying the previous frame, force the master loop to pause immediately.
-  if((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) >= 1)
+  if((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) > 1)
   {
 	// Cap at 16ms fallback (exactly 1 frame window at 60Hz)
 	m_renderCv.wait_for(lock, std::chrono::milliseconds(16), [this] {
