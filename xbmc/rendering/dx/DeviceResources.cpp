@@ -40,6 +40,10 @@ extern "C"
 #include "../../../project/BuildDependencies/msys64/usr/include/w32api/timeapi.h"
 #include <dwmapi.h>
 #include <cores/VideoSettings.h>
+#include <atomic>
+#include <thread>
+#include <mutex>
+#include <chrono>
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -1250,258 +1254,11 @@ bool DX::DeviceResources::Begin()
   return true;
 }
 
-class CPacer4
-{
-private:
-  LARGE_INTEGER m_frequency;
-  double m_countsPerSecond;
-
-  // Mode and state tracking
-  double m_lastRefreshRate = 0.0;
-  LONGLONG m_baseCountsPerFrame = 0;
-  LONGLONG m_targetCountsPerFrame = 0;
-  LONGLONG m_adaptiveStepCounts = 0;
-  LONGLONG m_minCountsClamp = 0;
-  LONGLONG m_maxCountsClamp = 0;
-  LONGLONG m_resetThresholdCounts = 0;
-
-  // Timeline anchors
-  LARGE_INTEGER m_frameStartTime;
-  LARGE_INTEGER m_nextFrameTime;
-
-  // Hardware telemetry baselines
-  UINT64 m_lastPresentCount = 0;
-  UINT64 m_lastRefreshCount = 0;
-  INT64  m_lastExpectedRefreshes = -1;
-  bool m_forceHistoryReset = true;
-  int m_settleFrameCounter = 0;
-  bool m_discardPendingQueueFrames = false;
-
-  // Hardware output handle
-  Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput;
-
-public:
-  CPacer4()
-  {
-	QueryPerformanceFrequency(&m_frequency);
-	m_countsPerSecond = static_cast<double>(m_frequency.QuadPart);
-	QueryPerformanceCounter(&m_frameStartTime);
-	m_nextFrameTime = m_frameStartTime;
-
-  }
-  bool ShouldDiscardQueue() { return m_discardPendingQueueFrames; }
-  void ClearDiscardFlag() { m_discardPendingQueueFrames = false; }
-  bool IsSettling() const { return m_settleFrameCounter > 0 || m_forceHistoryReset; }
-
-  HRESULT Update(Microsoft::WRL::ComPtr<IDXGISwapChain1> m_swapChain, Microsoft::WRL::ComPtr<IDXGIOutput> m_pActiveOutput, UINT64& cadenceDrop, UINT64& tokenBunching, UINT64& vramStall)
-  {
-	HRESULT hr = {};
-	LONGLONG vstart;
-	LONGLONG vend;
-	// Initialize or re-verify active display surface link dynamically
-	if(m_pActiveOutput == nullptr && m_swapChain != nullptr)
-	{
-	  hr = m_swapChain->GetContainingOutput(&m_pActiveOutput);
-	  if(!SUCCEEDED(hr))
-	  {
-		CLog::LogF(LOGERROR, "GetContainingOutput failed: {}", hr);
-	    return(hr);
-	  }
-	}
-
-	// ========================================================================
-	// 1. HARDWARE GRID LOCK
-	// ========================================================================
-	if(m_pActiveOutput != nullptr)
-	{
-	  vstart = CurrentHostCounter();
-	  m_pActiveOutput->WaitForVBlank();
-	  vend = CurrentHostCounter();
-	}
-
-	LARGE_INTEGER postWaitTime;
-	QueryPerformanceCounter(&postWaitTime);
-
-	// ========================================================================
-	// 2. DYNAMIC MODE RE-INDEX CHECK
-	// ========================================================================
-	double targetRefreshRate = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
-	if(targetRefreshRate != m_lastRefreshRate)
-	{
-	  double targetFrameDuration = 1.0 / targetRefreshRate;
-
-	  m_baseCountsPerFrame = static_cast<LONGLONG>(targetFrameDuration * m_countsPerSecond);
-	  m_targetCountsPerFrame = m_baseCountsPerFrame; // Reset oscillator to center
-
-	  m_adaptiveStepCounts = static_cast<LONGLONG>(targetFrameDuration * 0.005 * m_countsPerSecond);
-	  m_minCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 0.90) * m_countsPerSecond);
-	  m_maxCountsClamp = static_cast<LONGLONG>((targetFrameDuration * 1.10) * m_countsPerSecond);
-	  m_resetThresholdCounts = static_cast<LONGLONG>(targetFrameDuration * 1.5 * m_countsPerSecond);
-
-	  m_settleFrameCounter = 15;
-	  m_forceHistoryReset = true;
-	  m_lastExpectedRefreshes = -1;
-	  m_lastRefreshRate = targetRefreshRate;
-	}
-
-	// ========================================================================
-	// STEP 3: TELEMETRY RATIO TRACKING & JUDDER DETECTION
-	// ========================================================================
-	// Add a small delay after vblank for stats to settle
-	LARGE_INTEGER start, current;
-	LONGLONG targetTicks = (400 * m_frequency.QuadPart) / 1000000;
-	QueryPerformanceCounter(&start);
-	do 
-	{
-	  QueryPerformanceCounter(&current);
-    } while((current.QuadPart - start.QuadPart) < targetTicks);
-
-	DXGI_FRAME_STATISTICS stats;
-	hr = m_swapChain->GetFrameStatistics(&stats);
-	if(SUCCEEDED(hr))
-	{
-	  if(m_forceHistoryReset || m_settleFrameCounter > 0)
-	  {
-		m_lastExpectedRefreshes = -1; // Clear cadence memory during resets
-
-		if(m_settleFrameCounter > 0) 
-		  m_settleFrameCounter--;
-		else 
-		  m_forceHistoryReset = false;
-	  }
-	  else
-	  {
-		INT64 deltaPresent = static_cast<INT64>(stats.PresentCount) - static_cast<INT64>(m_lastPresentCount);
-		INT64 deltaRefresh = static_cast<INT64>(stats.PresentRefreshCount) - static_cast<INT64>(m_lastRefreshCount);
-
-		// SCENARIO A: Progressive Flow (Clean Frame Advancements)
-		if(deltaPresent > 0 && deltaRefresh > 0)
-		{
-		  INT64 framePhaseError = deltaRefresh - deltaPresent;
-
-		  if(framePhaseError > 1)       framePhaseError = 1;
-		  else if(framePhaseError < -1) framePhaseError = -1;
-
-		  // 1. Maintain the adaptive PLL clock oscillator loop
-		  if(framePhaseError > 0)       m_targetCountsPerFrame -= (m_adaptiveStepCounts * framePhaseError);
-		  else if(framePhaseError < 0)  m_targetCountsPerFrame += (m_adaptiveStepCounts * -framePhaseError);
-		  else
-		  {
-			if(m_targetCountsPerFrame > m_baseCountsPerFrame) m_targetCountsPerFrame--;
-			if(m_targetCountsPerFrame < m_baseCountsPerFrame) m_targetCountsPerFrame++;
-		  }
-
-		  if(m_targetCountsPerFrame < m_minCountsClamp) m_targetCountsPerFrame = m_minCountsClamp;
-		  if(m_targetCountsPerFrame > m_maxCountsClamp) m_targetCountsPerFrame = m_maxCountsClamp;
-
-		  // 2. Universal Cadence Judder Analyzer
-		  INT64 actualRefreshesPerFrame = deltaRefresh / deltaPresent;
-
-		  // Only compare cadence patterns if both this frame and the previous frame 
-		  // represent true progressive advancements (preventing 0-increment corruption)
-		  if(m_lastExpectedRefreshes != -1 && actualRefreshesPerFrame > 0)
-		  {
-			// Smoothly tolerates standard 3:2 pulldown transitions (1, 2, or 3 VBlanks)
-			// But increments the OSD counter instantly if a frame stalls (jumps to 4+ refreshes)
-			if(std::abs(actualRefreshesPerFrame - m_lastExpectedRefreshes) > 1)
-			{
-			  cadenceDrop++;
-			  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER REAL JUDDER: Cadence drop. Expected close to {}, Got {}",
-				m_lastExpectedRefreshes, actualRefreshesPerFrame);
-			}
-		  }
-
-		  if(actualRefreshesPerFrame > 0) 
-		  {
-			m_lastExpectedRefreshes = actualRefreshesPerFrame;
-		  }
-		}
-		// SCENARIO B: DXGI Token Bunching / Driver Edge Flushes
-		else if(deltaPresent == 0 && deltaRefresh > 0)
-		{
-		  m_targetCountsPerFrame += m_adaptiveStepCounts;
-		  tokenBunching++;
-		  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: DXGI token bunching event.");
-		  m_lastExpectedRefreshes = -1; // Invalidate history to prevent false flags on the next pass
-		}
-		// SCENARIO C: GENUINE VRAM COPY THREAD STALL
-		else if(deltaPresent == 0 && deltaRefresh == 0)
-		{
-		  if((postWaitTime.QuadPart - m_frameStartTime.QuadPart) > (m_baseCountsPerFrame * 3 / 2))
-		  {
-			vramStall++;
-			CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: True VRAM copy thread stall intercepted.");
-
-			m_forceHistoryReset = true;
-			m_settleFrameCounter = 4;
-			m_targetCountsPerFrame = m_baseCountsPerFrame;
-			m_discardPendingQueueFrames = true;
-		  }
-		  else
-		  {
-			// deltaPresent == 0 && deltaRefresh == 0 should always be wrong since we present on every frame, deltaPresent should always increase
-			tokenBunching++;
-			CLog::LogFC(LOGDEBUG, LOGAVTIMING, "PACER JUDDER: DXGI token bunching event.");
-			m_lastExpectedRefreshes = -1; // Invalidate history to prevent false flags on the next pass
-		  }
-		}
-	  }
-	  m_lastPresentCount = stats.PresentCount;
-	  m_lastRefreshCount = stats.PresentRefreshCount;
-	}
-	else
-	{
-      CLog::LogF(LOGERROR, "GetFrameStatistics failed: {}", hr);
-	  return(hr);
-	}
-
-	// ========================================================================
-	// 4. TIMELINE PHASE ALIGNMENT & RESET
-	// ========================================================================
-	m_nextFrameTime.QuadPart = m_frameStartTime.QuadPart + m_targetCountsPerFrame;
-	LONGLONG timelineDivergence = postWaitTime.QuadPart - m_nextFrameTime.QuadPart;
-
-	if(std::abs(timelineDivergence) > m_resetThresholdCounts * 9.0 / 10.0)  //cl * 1.0 new?
-	{
-	  m_forceHistoryReset = true;
-	  m_settleFrameCounter = 15;
-	  m_targetCountsPerFrame = m_baseCountsPerFrame;
-
-	  m_nextFrameTime.QuadPart = postWaitTime.QuadPart;
-	  m_frameStartTime.QuadPart = postWaitTime.QuadPart - m_baseCountsPerFrame;
-	  timelineDivergence = 0;
-	  
-	  // THE FLUSH TRIGGER: Flag that our DXGI queue is backed up and needs clearing
-	  m_discardPendingQueueFrames = true;
-	}
-
-	// ========================================================================
-	// 5. TIMING TELEMETRY LOGGER
-	// ========================================================================
-	double currentMs = postWaitTime.QuadPart / m_countsPerSecond * 1000.0;
-	double targetMs = m_nextFrameTime.QuadPart / m_countsPerSecond * 1000.0;
-	double actualPeriod = (postWaitTime.QuadPart - m_frameStartTime.QuadPart) / m_countsPerSecond * 1000.0;
-	double finalDivergence = timelineDivergence / m_countsPerSecond * 1000.0;
-
-	CLog::LogFC(LOGDEBUG, LOGAVTIMING,
-	  "time: {:.3f}, target: {:.3f}, period: {:.3f} ms, divergence: {:.3f} ms, targetCounts: {}, PresentCount: {}, PresentRefreshCount: {}, cadenceDrop: {}, tokenBunching: {}, vramStall: {}, vblankwait: {:3f}",
-	  currentMs, targetMs, actualPeriod, finalDivergence, m_targetCountsPerFrame, stats.PresentCount, stats.PresentRefreshCount, cadenceDrop, tokenBunching, vramStall, (vend-vstart)/ m_countsPerSecond*1000.0);
-
-	// Commit baseline state securely using the clean post-VBlank edge anchor
-	m_frameStartTime = postWaitTime;
-	return(hr);
-  }
-};
-CPacer4 Pacer;
-
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
 {
   HRESULT hr = {};
-  EPRESENTMODE mode = (EPRESENTMODE) CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_PRESENTMODE);
-  if(mode == VS_PRESENTMODE_WINDOWS_PRESENT1)
-  {
-	static UINT64 freq = CurrentHostFrequency();
+  static UINT64 freq = CurrentHostFrequency();
 
 	//FinishCommandList();
 	Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandList;
@@ -1535,75 +1292,8 @@ void DX::DeviceResources::Present()
 	lastEnd = end;
 	// Log
 	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0);
-  }
-  else
-  {
-	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Enter");
-	static UINT64 freq = CurrentHostFrequency();
-	static UINT64 lastEnd = 0;
-	UINT presentFlags = 0;
-	UINT syncInterval = 0;
-	DXGI_PRESENT_PARAMETERS presentParams = {0};
-
-	// Finish render before present step
-	UINT64 start = CurrentHostCounter();
-	FinishCommandList();
-	UINT64 end = CurrentHostCounter();
-	UINT64 finishDuration = end - start;
-
-	// Detect if we need blocking call for present1
-	BOOL isFullscreen = FALSE;
-	Microsoft::WRL::ComPtr<IDXGIOutput> targetOutput;
-	if(SUCCEEDED(m_swapChain->GetFullscreenState(&isFullscreen, &targetOutput)))
-	{
-	  if(isFullscreen)
-	  {
-		// Force the graphics driver to wait for the physical hardware VSync edge 
-		// because we are in exclusive fullscreen mode and don't have the DWM protecting us.
-		syncInterval = 1;
-	  }
-	}
-	else
-	{
-	  CLog::LogF(LOGERROR, "GetFullscreenState failed");
-	}
-
-	// Clear present queue if requested
-	if(Pacer.ShouldDiscardQueue())
-	{
-	  presentFlags |= DXGI_PRESENT_RESTART;
-	  Pacer.ClearDiscardFlag();
-	}
-
-	// Present frame
-	start = CurrentHostCounter();
-	HRESULT hr = m_swapChain->Present1(syncInterval, presentFlags, &presentParams);
-	end = CurrentHostCounter();
-	UINT64 presentDuration = end - start;
-	UINT64 period = end - lastEnd;
-	lastEnd = end;
 
 
-	// Pacer
-	Pacer.Update(m_swapChain, m_pActiveOutput, m_JudderCadenceDrop, m_JudderTokenBunching, m_JudderVramStall);
-
-	// Stats
-	DXGI_FRAME_STATISTICS stats1;
-	UINT64 PresentCount = 0;
-	UINT64 PresentRefreshCount = 0;
-	if(SUCCEEDED(m_swapChain->GetFrameStatistics(&stats1)))
-	{
-	  PresentCount = stats1.PresentCount;
-	  PresentRefreshCount = stats1.PresentRefreshCount;
-	}
-
-	// Log
-	static UINT64 oldPresentCount = 0;
-	static UINT64 oldPresentRefreshCount = 0;
-	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms, PresentCount = {}, diff: {}, PresentRefreshCount: {}, diff: {}, FinishCommandList: {:.3f}", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0, PresentCount, PresentCount - oldPresentCount, PresentRefreshCount, PresentRefreshCount - oldPresentRefreshCount, (double) finishDuration / freq * 1000.0);
-	oldPresentCount = PresentCount;
-	oldPresentRefreshCount = PresentRefreshCount;
-  }
 
   // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
@@ -2323,7 +2013,7 @@ void DX::DeviceResources::PresentThreadLoop()
 
   while(m_presentRunning.load(std::memory_order_acquire))
   {
-	// 1. CPU Synchronization Check
+	// CPU Synchronization Check
 	std::unique_lock<std::mutex> lock(m_presentMutex);
 	m_presentCv.wait(lock, [this] {
 	  return (m_framesRendered.load(std::memory_order_acquire) > m_framesPresented.load(std::memory_order_acquire))
@@ -2378,7 +2068,6 @@ void DX::DeviceResources::PresentThreadLoop()
 
 	if(!m_presentRunning.load(std::memory_order_acquire)) break;
 
-	// 3. Thread Safety Shield for libplacebo
 	pMultithread->Enter();
 	m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), FALSE);
 	if(m_swapChain)
@@ -2448,10 +2137,8 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	}
   }
 
-  // 1. Advance our absolute rendered frame count locklessly
   m_framesRendered.fetch_add(1, std::memory_order_release);
 
-  // 2. LOCK-FREE BACKPRESSURE CHECK:
   // If the rendering loop gets more than 1 frame ahead of display, sleep.
   if((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) > 1)
   {

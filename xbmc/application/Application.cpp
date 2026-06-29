@@ -2354,24 +2354,6 @@ void CApplication::ProcessSlow()
   static bool bInit = false;
   static int priority = 0;
 
-  if(!bInit)
-  {
-	priority = GetThreadPriority(GetCurrentThread());
-	bInit = true;
-  }
-  int prio = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_MAINTHREADPRIORITY);
-  if(prio != priority)
-  {
-	if(!SetThreadPriority(GetCurrentThread(), prio))
-	{
-	  CLog::LogF(LOGERROR, "SetThreadPriority failed");
-	}
-	else
-	{
-	  priority = prio;
-	}
-  }
-
   const auto appPlayer = GetComponent<CApplicationPlayer>();
   appPlayer->UpdateSlow();
 
