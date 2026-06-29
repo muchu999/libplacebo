@@ -1976,95 +1976,53 @@ void DX::DeviceResources::StopPresentThread()
 
 void DX::DeviceResources::PresentThreadLoop()
 {
-  // Set native Windows scheduling thread priority to Real-Time
   ::SetThreadPriority(::GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
   Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
   if(FAILED(m_d3dContext.As(&pMultithread))) return;
 
-  while(m_presentRunning.load(std::memory_order_acquire))
+  while(m_presentRunning.load(std::memory_order_seq_cst))
   {
-	// CPU Synchronization Check
+	// 1. Wait for the master thread to flag a completed frame pass
 	std::unique_lock<std::mutex> lock(m_presentMutex);
 	m_presentCv.wait(lock, [this] {
-	  return (m_framesRendered.load(std::memory_order_acquire) > m_framesPresented.load(std::memory_order_acquire))
-		|| !m_presentRunning.load(std::memory_order_acquire);
+	  return (m_framesRendered.load(std::memory_order_seq_cst) > m_framesPresented.load(std::memory_order_seq_cst))
+		|| !m_presentRunning.load(std::memory_order_seq_cst);
 	  });
 
-	if(!m_presentRunning.load(std::memory_order_acquire)) break;
+	if(!m_presentRunning.load(std::memory_order_seq_cst)) break;
 	lock.unlock(); // Release CPU lock immediately
 
-	// Hardware Slot Wait (Pacing Block)
-	if(m_latencyWaitableObject)
-	{
-	  // Cap at 100ms to allow smooth un-trappable background loop exits
-	  DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 100);
-
-	  if(!m_presentRunning.load(std::memory_order_acquire)) break;
-
-	  if(waitResult == WAIT_FAILED || waitResult == WAIT_ABANDONED)
-	  {
-		// Hot-Reload Recovery Module if the handle gets broken mid-playback
-		pMultithread->Enter();
-		Microsoft::WRL::ComPtr<IDXGISwapChain2> swapChain2;
-		if(m_swapChain && SUCCEEDED(m_swapChain.As(&swapChain2)))
-		{
-		  m_latencyWaitableObject = swapChain2->GetFrameLatencyWaitableObject();
-		}
-		pMultithread->Leave();
-
-		std::this_thread::sleep_for(std::chrono::milliseconds(5));
-		continue;
-	  }
-
-	  if(waitResult == WAIT_TIMEOUT)
-	  {
-		continue;
-	  }
-	}
-
-	if(!m_presentRunning.load(std::memory_order_acquire)) break;
-
+	// 2. Secure Hardware Presentation
 	pMultithread->Enter();
 	if(m_swapChain)
 	{
-	  // Hardware test valve to catch occlusion properties without trapping context locks
-	  HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
-	  if(testHr == DXGI_STATUS_OCCLUDED || testHr == DXGI_ERROR_WAS_STILL_DRAWING)
-	  {
-		pMultithread->Leave();
-		std::this_thread::sleep_for(std::chrono::milliseconds(5));
-		continue;
-	  }
-
-	  // Safe to present natively on high priority thread context
-	  HRESULT hr = m_swapChain->Present(1, 0);
-	  m_presentResult.store(hr, std::memory_order_release);
+	  // CRUCIAL: Use Present(0, 0) because the Master thread has already 
+	  // handled the hardware V-Sync timing block. This forces DXGI to flip 
+	  // the buffer instantly with zero driver stalls or context collisions!
+	  HRESULT hr = m_swapChain->Present(0, 0);
+	  m_presentResult.store(hr, std::memory_order_seq_cst);
 
 	  if(hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
 	  {
 		pMultithread->Leave();
-		m_renderCv.notify_all();
 		continue;
 	  }
 
-	  // Capture hyper-precise lock-free timeline timestamp
 	  LARGE_INTEGER qpc;
 	  ::QueryPerformanceCounter(&qpc);
-	  m_lastVsyncTimestamp.store(qpc.QuadPart, std::memory_order_release);
+	  m_lastVsyncTimestamp.store(qpc.QuadPart, std::memory_order_seq_cst);
 	}
 	pMultithread->Leave();
 
-	// 4. Atomically advance presentation indexes and notify the renderer thread
-	m_framesPresented.fetch_add(1, std::memory_order_release);
-	m_renderCv.notify_all();
+	// 3. Atomically advance the metrics to clear the loop path
+	m_framesPresented.fetch_add(1, std::memory_order_seq_cst);
   }
 
-  // Unwind Cleanup Sequence
-  m_framesRendered.store(0, std::memory_order_release);
-  m_framesPresented.store(0, std::memory_order_release);
-  m_renderCv.notify_all();
+  m_framesRendered.store(0, std::memory_order_seq_cst);
+  m_framesPresented.store(0, std::memory_order_seq_cst);
 }
+
 
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
@@ -2080,50 +2038,69 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	return lastPresentHr;
   }
 
-  // 1. Force the driver to push all shaders down to the hardware
+  // ========================================================================
+  // SELF-RESETTING HIGH-PRECISION SPACER
+  // ========================================================================
+  static int64_t lastFrameQpc = 0;
+  const int64_t qpcFrequency = CurrentHostFrequency();
+  int64_t currentQpc = CurrentHostCounter();
+
+  double m_fps = CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS();
+  double targetFps = (m_fps > 0.0) ? m_fps : 60.0;
+  int64_t targetFrameTicks = static_cast<int64_t>((double) qpcFrequency / targetFps);
+
+  // Primary Hardware Wait Token
+  if(m_latencyWaitableObject && m_presentRunning.load(std::memory_order_seq_cst))
+  {
+	::WaitForSingleObject(m_latencyWaitableObject, 50);
+  }
+
+  currentQpc = CurrentHostCounter();
+
+  if(lastFrameQpc > 0)
+  {
+	// SELF-RESETTING GATE (The Fix): 
+	// If the elapsed time since the last frame is greater than 1.5 frame widths,
+	// it means Kodi went idle, skipped a cycle, or handled a heavy window load.
+	// We instantly wipe the stale history and establish a fresh 0-drift baseline!
+	if((currentQpc - lastFrameQpc) > (targetFrameTicks * 3 / 2))
+	{
+	  lastFrameQpc = currentQpc;
+	}
+
+	int64_t targetQpc = lastFrameQpc + targetFrameTicks;
+	int64_t ticksAhead = targetQpc - currentQpc;
+
+	if(ticksAhead > 0)
+	{
+	  int64_t msAhead = (ticksAhead * 1000) / qpcFrequency;
+
+	  CLog::LogF(LOGERROR, "msAhead: {}", msAhead);
+	  if(msAhead > 2)
+	  {
+		std::this_thread::sleep_for(std::chrono::milliseconds(msAhead - 1));
+	  }
+
+	  while(CurrentHostCounter() < targetQpc)
+	  {
+#if defined(_M_X64) || defined(_M_IX86)
+		_mm_pause();
+#else
+		std::this_thread::yield();
+#endif
+	  }
+	}
+  }
+
+  // Lock our fresh, real-time counter block for the next pass
+  lastFrameQpc = CurrentHostCounter();
+
   if(m_d3dContext)
   {
 	m_d3dContext->Flush();
   }
 
-  // 2. Lock the mutex AFTER the flush is committed to RAM
-  std::unique_lock<std::mutex> lock(m_presentMutex);
   m_framesRendered.fetch_add(1, std::memory_order_seq_cst);
-
-  // 1. DYNAMIC LIFECYCLE EVALUATION:
-// Query Kodi's reference clock to see if a video file is currently decoding/running.
-// Replace 'm_videoReferenceClock' with your build's specific clock pointer name.
-  const auto& components = CServiceBroker::GetAppComponents();
-  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
-  bool isVideoActive = appPlayer->IsPlayingVideo();
-  bool isGuiInForeground = (CServiceBroker::GetGUI()->GetWindowManager().GetActiveWindow() != WINDOW_FULLSCREEN_VIDEO);
-
-  if(!isVideoActive || isGuiInForeground)
-  {
-	// VIDEO PLAYBACK MODE: Hold back only if we try to step more than 1 frame ahead.
-	// This preserves your flawless 60Hz playback cadence perfectly.
-	if((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) > 1)
-	{
-	  m_renderCv.wait_for(lock, std::chrono::milliseconds(16), [this] {
-		return ((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) <= 1)
-		  || !m_presentRunning.load(std::memory_order_seq_cst);
-		});
-	}
-  }
-  else
-  {
-	// PURE GUI MODE: Tighten the gate down to a strict ping-pong alternating match.
-	// This completely eliminates the buffer overruns and GPU lock contention when browsing!
-	if((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) >= 1)
-	{
-	  m_renderCv.wait_for(lock, std::chrono::milliseconds(16), [this] {
-		return ((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) == 0)
-		  || !m_presentRunning.load(std::memory_order_seq_cst);
-		});
-	}
-  }
-  // 3. Drop the CPU mutex entirely BEFORE triggering the wake-up signal
-  lock.unlock();
   m_presentCv.notify_one();
 
   return S_OK;
