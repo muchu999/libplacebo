@@ -871,7 +871,7 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.Stereo = bHWStereoEnabled;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 #ifdef TARGET_WINDOWS_DESKTOP
-    swapChainDesc.BufferCount = 3; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
+    swapChainDesc.BufferCount = 6; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
 #else
     swapChainDesc.BufferCount = 3; // Xbox don't like 6 backbuffers (3 is fine even for 4K 60 fps)
 #endif
@@ -975,9 +975,6 @@ void DX::DeviceResources::ResizeBuffers()
 // These resources need to be recreated every time the window size is changed.
 void DX::DeviceResources::CreateWindowSizeDependentResources()
 {
-  // STEP 1: FORCE SHUTDOWN BEFORE DESTRUCTING HANDLES
-  // Ensure the background presentation loop is joined and dead 
-  // before any swapchains are dropped to null.
   StopPresentThread();
 
   ReleaseBackBuffer();
@@ -993,12 +990,6 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
   CreateBackBuffer();
 
   NotifySwapchainListeners("CreateSwapChain");
-  // STEP 2: CONFIGURE THE FRESH FULLSCREEN SWAPCHAIN METRICS
-  Microsoft::WRL::ComPtr<IDXGISwapChain2> swapChain2;
-  if(SUCCEEDED(m_swapChain.As(&swapChain2)))
-  {
-	swapChain2->SetMaximumFrameLatency(1);
-  }
 
   Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
   if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
@@ -1006,11 +997,7 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
 	pMultithread->SetMultithreadProtected(TRUE);
   }
 
-  // STEP 3: DEFINITIVE THREAD SPIN-UP (The Fix)
-  // We only spawn the thread here because every resource allocation is finished,
-  // the back-buffers are allocated, and the swapchain handle is guaranteed stable!
   StartPresentThread();
-
 }
 
 // Determine the dimensions of the render target and whether it will be scaled down.
@@ -2004,7 +1991,7 @@ void DX::DeviceResources::PresentThreadLoop()
 	if(!m_presentRunning.load(std::memory_order_acquire)) break;
 	lock.unlock(); // Release CPU lock immediately
 
-	// 2. Hardware Slot Wait (Pacing Block)
+	// Hardware Slot Wait (Pacing Block)
 	if(m_latencyWaitableObject)
 	{
 	  // Cap at 50ms to allow smooth un-trappable background loop exits
