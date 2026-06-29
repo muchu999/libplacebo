@@ -2065,52 +2065,41 @@ void DX::DeviceResources::PresentThreadLoop()
 
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
-  // Auto-recovery valve remains active
-  if(!m_presentRunning.load(std::memory_order_acquire) && m_swapChain)
+  if(!m_presentRunning.load(std::memory_order_seq_cst) && m_swapChain)
   {
 	StartPresentThread();
   }
 
-  HRESULT lastPresentHr = m_presentResult.load(std::memory_order_acquire);
+  HRESULT lastPresentHr = m_presentResult.load(std::memory_order_seq_cst);
   if(lastPresentHr == DXGI_ERROR_DEVICE_REMOVED || lastPresentHr == DXGI_ERROR_DEVICE_RESET || lastPresentHr == DXGI_ERROR_INVALID_CALL)
   {
-	m_presentResult.store(S_OK, std::memory_order_release);
+	m_presentResult.store(S_OK, std::memory_order_seq_cst);
 	return lastPresentHr;
   }
 
-  // 1. Check the frame delta locklessly BEFORE acquiring any mutexes.
-  uint64_t rendered = m_framesRendered.load(std::memory_order_acquire);
-  uint64_t presented = m_framesPresented.load(std::memory_order_acquire);
-
-  // 2. THE BURST VALVE FILTER:
-  // If the GUI is bursting frames faster than the Present thread can display them 
-  // (delta >= 2), DO NOT SLEEP. Sleeping stalls Kodi's main window thread and creates 
-  // the glitches. Instead, instantly drop this frame and exit cleanly!
-  if((rendered - presented) >= 2)
-  {
-	return S_OK;
-  }
-
-  std::unique_lock<std::mutex> lock(m_presentMutex);
+  // 1. Force the driver to push all shaders down to the hardware
   if(m_d3dContext)
   {
-	// Forces commands out safely. The Present thread cannot be inside its 
-	// Present() call right now because it is locked out by this exact mutex.
 	m_d3dContext->Flush();
   }
 
-  m_framesRendered.fetch_add(1, std::memory_order_release);
+  // 2. Lock the mutex AFTER the flush is committed to RAM
+  std::unique_lock<std::mutex> lock(m_presentMutex);
+  m_framesRendered.fetch_add(1, std::memory_order_seq_cst);
 
-  // If the rendering loop gets more than 1 frame ahead of display, sleep.
-  if((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) > 1)
+  // STRICT ALTERNATING GATE: If the presentation thread hasn't finished 
+  // displaying the previous frame, force the master loop to pause immediately.
+  if((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) >= 1)
   {
-	m_renderCv.wait_for(lock, std::chrono::milliseconds(100), [this] {
-	  return ((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) <= 1)
-		|| !m_presentRunning.load(std::memory_order_acquire);
+	// Cap at 16ms fallback (exactly 1 frame window at 60Hz)
+	m_renderCv.wait_for(lock, std::chrono::milliseconds(16), [this] {
+	  return ((m_framesRendered.load(std::memory_order_seq_cst) - m_framesPresented.load(std::memory_order_seq_cst)) == 0)
+		|| !m_presentRunning.load(std::memory_order_seq_cst);
 	  });
   }
 
-  lock.unlock(); // Release the mutex cleanly before firing notifications
+  // 3. Drop the CPU mutex entirely BEFORE triggering the wake-up signal
+  lock.unlock();
   m_presentCv.notify_one();
 
   return S_OK;
