@@ -2390,24 +2390,14 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	return lastPresentHr;
   }
 
-  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-  if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
   {
-	// Explicitly lock the graphics driver context before flushing libplacebo commands.
-	// This ensures the graphic driver can never overlap Flush() with Present().
-	pMultithread->Enter();
-
+	std::lock_guard<std::mutex> lock(m_presentMutex);
 	if(m_d3dContext)
 	{
+	  // Forces commands out safely. The Present thread cannot be inside its 
+	  // Present() call right now because it is locked out by this exact mutex.
 	  m_d3dContext->Flush();
 	}
-
-	pMultithread->Leave();
-  }
-  else if(m_d3dContext)
-  {
-	// Fallback flush if the multithread interface fails to query
-	m_d3dContext->Flush();
   }
 
   // 1. Advance our absolute rendered frame count locklessly

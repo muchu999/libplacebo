@@ -390,13 +390,13 @@ void CRenderManager::RecordFlipEndTime()
   static double qpcDriftCorrection = 0.0; 
   if(!bInit)
   {
-	currentPts = m_dvdClock.GetClock(DX::DeviceResources::Get()->GetLatestVsyncTime());
+	currentPts = m_dvdClock.SystemToPlaying(DX::DeviceResources::Get()->GetLatestVsyncTime());
 	frameCounter = 0;
 	qpcDriftCorrection = 0.0;
 	bInit = true;
   }
 
-  double realPts = m_dvdClock.GetClock(DX::DeviceResources::Get()->GetLatestVsyncTime());
+  double realPts = m_dvdClock.SystemToPlaying(DX::DeviceResources::Get()->GetLatestVsyncTime());
   ++frameCounter;
   currentPts += ticksPerFrame;
   CLog::LogFC(LOGDEBUG, LOGAVTIMING, "currentPts: {}, realPts: {}, diff: {} ms, frameCounterL {}, qpcDriftCorrection: {}", currentPts, realPts, (currentPts- realPts)/ (double)DVD_TIME_BASE*1000.0, frameCounter, qpcDriftCorrection);

@@ -24,7 +24,6 @@ public:
 
   double GetClock(bool interpolated = true);
   double GetClock(double& absolute, bool interpolated = true);
-  double GetClock(int64_t timestamp);
 
   double ErrorAdjust(double error, const char* log);
   void Discontinuity(double clock, double absolute);
@@ -55,11 +54,11 @@ public:
 
   void Pause(bool pause);
   void Advance(double time);
+  double SystemToPlaying(int64_t system);
 
 protected:
   double SystemToAbsolute(int64_t system);
   int64_t AbsoluteToSystem(double absolute);
-  double SystemToPlaying(int64_t system);
 
   CCriticalSection m_critSection;
   int64_t m_systemUsed;
