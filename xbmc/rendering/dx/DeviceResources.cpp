@@ -871,7 +871,7 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.Stereo = bHWStereoEnabled;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 #ifdef TARGET_WINDOWS_DESKTOP
-    swapChainDesc.BufferCount = 6; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
+    swapChainDesc.BufferCount = 3; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
 #else
     swapChainDesc.BufferCount = 3; // Xbox don't like 6 backbuffers (3 is fine even for 4K 60 fps)
 #endif
@@ -1994,7 +1994,7 @@ void DX::DeviceResources::PresentThreadLoop()
 	// Hardware Slot Wait (Pacing Block)
 	if(m_latencyWaitableObject)
 	{
-	  // Cap at 50ms to allow smooth un-trappable background loop exits
+	  // Cap at 100ms to allow smooth un-trappable background loop exits
 	  DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 100);
 
 	  if(!m_presentRunning.load(std::memory_order_acquire)) break;
@@ -2078,14 +2078,25 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	return lastPresentHr;
   }
 
+  // 1. Check the frame delta locklessly BEFORE acquiring any mutexes.
+  uint64_t rendered = m_framesRendered.load(std::memory_order_acquire);
+  uint64_t presented = m_framesPresented.load(std::memory_order_acquire);
+
+  // 2. THE BURST VALVE FILTER:
+  // If the GUI is bursting frames faster than the Present thread can display them 
+  // (delta >= 2), DO NOT SLEEP. Sleeping stalls Kodi's main window thread and creates 
+  // the glitches. Instead, instantly drop this frame and exit cleanly!
+  if((rendered - presented) >= 2)
   {
-	std::lock_guard<std::mutex> lock(m_presentMutex);
-	if(m_d3dContext)
-	{
-	  // Forces commands out safely. The Present thread cannot be inside its 
-	  // Present() call right now because it is locked out by this exact mutex.
-	  m_d3dContext->Flush();
-	}
+	return S_OK;
+  }
+
+  std::unique_lock<std::mutex> lock(m_presentMutex);
+  if(m_d3dContext)
+  {
+	// Forces commands out safely. The Present thread cannot be inside its 
+	// Present() call right now because it is locked out by this exact mutex.
+	m_d3dContext->Flush();
   }
 
   m_framesRendered.fetch_add(1, std::memory_order_release);
@@ -2093,13 +2104,13 @@ HRESULT DX::DeviceResources::SignalFrameReady()
   // If the rendering loop gets more than 1 frame ahead of display, sleep.
   if((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) > 1)
   {
-	std::unique_lock<std::mutex> lock(m_presentMutex);
 	m_renderCv.wait_for(lock, std::chrono::milliseconds(100), [this] {
 	  return ((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) <= 1)
 		|| !m_presentRunning.load(std::memory_order_acquire);
 	  });
   }
 
+  lock.unlock(); // Release the mutex cleanly before firing notifications
   m_presentCv.notify_one();
 
   return S_OK;

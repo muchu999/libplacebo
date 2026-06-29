@@ -84,60 +84,68 @@ void CVideoSyncD3D::Run(CEvent& stopEvent)
   while (!stopEvent.Signaled() && !m_displayLost && !m_displayReset)
   {
     // sleep until vblank
-    Microsoft::WRL::ComPtr<IDXGIOutput> pOutput;
-    DX::DeviceResources::Get()->GetCachedOutputAndDesc(pOutput.ReleaseAndGetAddressOf(),
-                                                       &m_outputDesc);
+	Microsoft::WRL::ComPtr<IDXGIOutput> pOutput;
+	DX::DeviceResources::Get()->GetCachedOutputAndDesc(pOutput.ReleaseAndGetAddressOf(),
+	  &m_outputDesc);
 
-    const int64_t WaitForVBlankStartTime = CurrentHostCounter();
-    const HRESULT hr = pOutput ? pOutput->WaitForVBlank() : E_INVALIDARG;
-    const int64_t WaitForVBlankElapsedTime = CurrentHostCounter() - WaitForVBlankStartTime;
+	const int64_t WaitForVBlankStartTime = CurrentHostCounter();
+	const HRESULT hr = pOutput ? pOutput->WaitForVBlank() : E_INVALIDARG;
+	const int64_t WaitForVBlankElapsedTime = CurrentHostCounter() - WaitForVBlankStartTime;
 
     // WaitForVBlank() can return very quickly due to errors or screen sleeping
     if (!SUCCEEDED(hr) || WaitForVBlankElapsedTime - (systemFrequency / 1000) <= 0)
-    {
+	{
       if (SUCCEEDED(hr) && validVBlank)
-        CLog::LogF(LOGWARNING, "failed to detect vblank - screen asleep?");
+		CLog::LogF(LOGWARNING, "failed to detect vblank - screen asleep?");
 
       if (!SUCCEEDED(hr))
-        CLog::LogF(LOGERROR, "error waiting for vblank, {}", CWIN32Util::FormatHRESULT(hr));
+		CLog::LogF(LOGERROR, "error waiting for vblank, {}", CWIN32Util::FormatHRESULT(hr));
 
-      validVBlank = false;
+	  validVBlank = false;
 
       // Wait a while, until vblank may have come back. No need for accurate sleep.
-      ::Sleep(250);
-      continue;
-    }
+	  ::Sleep(250);
+	  continue;
+	}
     else if (!validVBlank)
-    {
-      CLog::LogF(LOGWARNING, "vblank detected - resuming reference clock updates");
-      validVBlank = true;
-    }
+	{
+	  CLog::LogF(LOGWARNING, "vblank detected - resuming reference clock updates");
+	  validVBlank = true;
+	}
 
     // calculate how many vblanks happened
-    Now = CurrentHostCounter();
+	Now = CurrentHostCounter();
     VBlankTime = (double)(Now - LastVBlankTime) / (double)systemFrequency;
-    NrVBlanks = MathUtils::round_int(VBlankTime * m_fps);
+	NrVBlanks = MathUtils::round_int(VBlankTime * m_fps);
 
-    // update the vblank timestamp, update the clock and send a signal that we got a vblank
-    m_refClock->UpdateClock(NrVBlanks, Now);
+	// If OS thread scheduling latency caused the thread to wake up a microsecond 
+	// too late or too early, force NrVBlanks to remain structurally linear.
+	// At a stable refresh rate, exactly 1 interval passes per loop iteration.
+	if(NrVBlanks <= 0)
+	{
+	  NrVBlanks = 1;
+	}
+
+	// Update the native reference clock variables using the true continuous timeline
+	m_refClock->UpdateClock(NrVBlanks, Now);
 
     // save the timestamp of this vblank so we can calculate how many vblanks happened next time
-    LastVBlankTime = Now;
+	LastVBlankTime = Now;
 
     if (!m_factory->IsCurrent())
-    {
-      CreateDXGIFactory1(IID_PPV_ARGS(m_factory.ReleaseAndGetAddressOf()));
+	{
+	  CreateDXGIFactory1(IID_PPV_ARGS(m_factory.ReleaseAndGetAddressOf()));
 
-      float fps = m_fps;
+	  float fps = m_fps;
       if (fps != GetFps())
-        break;
-    }
+		break;
+	}
   }
 
   m_lostEvent.Set();
   while (!stopEvent.Signaled() && m_displayLost && !m_displayReset)
   {
-    KODI::TIME::Sleep(10ms);
+	KODI::TIME::Sleep(10ms);
   }
 }
 
