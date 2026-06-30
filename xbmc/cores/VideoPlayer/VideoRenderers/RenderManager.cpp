@@ -984,7 +984,9 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
   const SPresent& m = m_Queue[m_presentsource];
 
   {
-    std::unique_lock lock(m_presentlock);
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "BEFORE LOCK");
+	std::unique_lock lock(m_presentlock);
+	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "AFTER LOCK");
 
     if (m_presentstep == PRESENT_FRAME)
     {
