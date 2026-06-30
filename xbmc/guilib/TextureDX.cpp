@@ -12,6 +12,9 @@
 #include "utils/log.h"
 
 #include <memory>
+#include <d3d11_4.h>
+#include <rendering/dx/DeviceResources.h>
+#include <strsafe.h>
 
 std::unique_ptr<CTexture> CTexture::CreateTexture(unsigned int width,
                                                   unsigned int height,
@@ -126,6 +129,12 @@ void CDXTexture::LoadToGPU()
     }
   }
 
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(needUpdate && SUCCEEDED(DX::DeviceResources::Get()->GetD3DContext()->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+  {
+	pMultithread->Enter();
+  }
+
   if (needUpdate)
   {
     D3D11_MAP mapType = (usage == D3D11_USAGE_STAGING) ? D3D11_MAP_WRITE : D3D11_MAP_WRITE_DISCARD;
@@ -177,6 +186,11 @@ void CDXTexture::LoadToGPU()
     m_texture.UnlockRect(0);
     if (usage != D3D11_USAGE_STAGING && IsMipmapped())
       m_texture.GenerateMipmaps();
+  }
+  
+  if(pMultithread)
+  {
+	pMultithread->Leave();
   }
 
   if (!m_bCacheMemory)
