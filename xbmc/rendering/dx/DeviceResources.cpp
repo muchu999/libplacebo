@@ -1489,15 +1489,32 @@ void DX::DeviceResources::Present()
   {
 	static UINT64 freq = CurrentHostFrequency();
 
-	// Finish render before present step
-	FinishCommandList();
+	//FinishCommandList();
+	Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandList;
+	if(m_d3dContext != m_deferrContext)
+	{
+	  hr = m_deferrContext->FinishCommandList(true, &pCommandList);
+	  if(FAILED(hr))
+	  {
+		CLog::LogF(LOGERROR, "failed to finish command queue.");
+		return;
+	  }
+
+	}
 
 	// Present frame
 	UINT64 start = CurrentHostCounter();
 	static UINT64 lastEnd = 0;
-	DXGI_PRESENT_PARAMETERS presentParams = {0};
-	//hr = m_swapChain->Present1(1, 0, &presentParams);
-	hr = SignalFrameReady();
+	if(SUCCEEDED(hr))
+	{
+	  {
+		std::lock_guard<std::mutex> lock(m_queueMutex);
+		m_frameQueue.push(pCommandList); // Push cleanly to the back of the queue
+	  }
+	  SignalFrameReady(); // Wake up the presentation thread loop
+	}
+
+	//hr = SignalFrameReady();
 	UINT64 end = CurrentHostCounter();
 	UINT64 presentDuration = end - start;
 	UINT64 period = end - lastEnd;
@@ -2295,6 +2312,20 @@ void DX::DeviceResources::PresentThreadLoop()
 	m_frameReady = false;
 	lock.unlock();
 
+	// 1. Extract the next command list cleanly from the FIFO queue
+	Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandListToExecute;
+	{
+	  std::lock_guard<std::mutex> qLock(m_queueMutex);
+	  if(!m_frameQueue.empty())
+	  {
+		pCommandListToExecute = m_frameQueue.front();
+		m_frameQueue.pop(); // Clear it from tracking
+	  }
+	}
+
+	if(!pCommandListToExecute) continue; // Skip pass if queue was drained
+
+
 	// 2. Hardware Slot Wait: Ensure the GPU driver context queue has a free back buffer
 	if(m_latencyWaitableObject)
 	{
@@ -2312,7 +2343,7 @@ void DX::DeviceResources::PresentThreadLoop()
 
 	// 3. Thread Safety Shield: Lock out context conflicts with libplacebo
 	pMultithread->Enter();
-
+	m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), FALSE);
 	if(m_swapChain)
 	{
 	  // 4. Hardware Presentation: This thread freezes cleanly right here on V-Sync
@@ -2320,6 +2351,7 @@ void DX::DeviceResources::PresentThreadLoop()
 
 	  if(hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
 	  {
+		m_presentResult.store(hr, std::memory_order_release);
 		// If a seek triggers a device reset, do not execute timestamp tracking
 		pMultithread->Leave();
 

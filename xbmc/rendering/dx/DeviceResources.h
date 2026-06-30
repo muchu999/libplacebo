@@ -21,6 +21,7 @@
 #include <wrl.h>
 #include <wrl/client.h>
 #include <settings/lib/SettingDefinitions.h>
+#include <queue>
 
 struct RESOLUTION_INFO;
 struct DEBUG_INFO_RENDER;
@@ -273,6 +274,9 @@ private:
 	std::atomic<int> m_pendingFrames {0};
 	// Atomic status tracking for the asynchronous DXGI engine
 	std::atomic<HRESULT> m_presentResult {S_OK};
+	std::mutex m_queueMutex;
+	std::queue<Microsoft::WRL::ComPtr<ID3D11CommandList>> m_frameQueue;
+
 
 
 public:
