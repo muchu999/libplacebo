@@ -248,35 +248,37 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
   //{
   //  return nullptr;
   //}
-  Microsoft::WRL::ComPtr<ID3D11Texture2D> newSpeedupTexture;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> newSpeedupSRV;
-  
   D3D11_TEXTURE2D_DESC desc = {};
   desc.Width = m_textureWidth;
   desc.Height = newHeight;
   desc.MipLevels = 1;
   desc.ArraySize = 1;
-  desc.Format = DXGI_FORMAT_R8_UNORM;
+
+  // FIX 1: Change R8_UNORM to A8_UNORM to restore the Alpha channel channel kodi's text shaders expect!
+  desc.Format = DXGI_FORMAT_A8_UNORM;
   desc.SampleDesc.Count = 1;
-  desc.Usage = D3D11_USAGE_DEFAULT; // Keep dynamic
+  desc.SampleDesc.Quality = 0;
+
+  // FIX 2: Set usage to DEFAULT to perfectly match the non-blocking deferred UpdateSubresource pipeline
+  desc.Usage = D3D11_USAGE_DEFAULT;
   desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
   desc.CPUAccessFlags = 0;
-  desc.MiscFlags = 0; // Ensure no incompatible flags are set
+  desc.MiscFlags = 0;
 
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> newSpeedupTexture;
   HRESULT hr = DX::DeviceResources::Get()->GetD3DDevice()->CreateTexture2D(&desc, nullptr, &newSpeedupTexture);
   if(FAILED(hr)) return nullptr;
 
-  // Create the matching Shader Resource View for the new font canvas
   D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-  srvDesc.Format = DXGI_FORMAT_R8_UNORM;
+  // FIX 3: Match the SRV format to the core Alpha texture canvas
+  srvDesc.Format = DXGI_FORMAT_A8_UNORM;
   srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
   srvDesc.Texture2D.MipLevels = 1;
 
   HRESULT srvHr = DX::DeviceResources::Get()->GetD3DDevice()->CreateShaderResourceView(
-	newSpeedupTexture.Get(), &srvDesc, &m_speedupSRV);
-
+	newSpeedupTexture.Get(), &srvDesc, &newSpeedupSRV);
   if(FAILED(srvHr)) return nullptr;
-
 
   ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetImmediateContext();
   ComPtr<ID3D11Multithread> pMultithread;
