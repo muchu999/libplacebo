@@ -83,6 +83,8 @@ public:
   static DXGI_FORMAT GetDXGIFormat(AVPixelFormat format, DXGI_FORMAT default_fmt);
   static bool InitializeFrame(pl_swapchain sw, pl_frame& frameOut);
   static int getColorDepth(void);
+  static bool isHdrIn() { return m_bHdrIn; }
+  static bool isHdrOut() { return m_bHdrOut; }
 protected:
   explicit CRendererPL(CVideoSettings& videoSettings);
 
@@ -98,6 +100,8 @@ protected:
 
 private:
   // Color space info
+  static inline bool m_bHdrIn;
+  static inline bool m_bHdrOut;
   pl_color_space m_colorSpace;
   pl_color_space hint = {};
   uint64_t m_signatureCounter=1;

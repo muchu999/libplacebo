@@ -5465,10 +5465,14 @@ bool CVideoDatabase::AddLibplaceboColumnsToSettingsTable(int idFile, const CVide
 		if (list[i] == "PlaceboFrameMixerRadiusFactor") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboFrameMixerRadiusFactor      float NOT NULL DEFAULT %f", vs.m_PlaceboFrameMixerRadiusFactor); m_pDS->exec(strSQL2); }
 		if(list [i] == "PlaceboFrameMixerBypassQueue") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboFrameMixerBypassQueue        bool NOT NULL DEFAULT %i", vs.m_PlaceboFrameMixerBypassQueue); m_pDS->exec(strSQL2); }
 		if(list [i] == "PlaceboCropBottom") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboCropBottom                              integer NOT NULL DEFAULT %i", vs.m_PlaceboCropBottom); m_pDS->exec(strSQL2); }
-		if(list [i] == "PlaceboBrightnessSdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboBrightnessSdr                        float NOT NULL DEFAULT %f", vs.m_PlaceboBrightnessSdr); m_pDS->exec(strSQL2); }
-		if(list [i] == "PlaceboContrastSdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboContrastSdr                            float NOT NULL DEFAULT %f", vs.m_PlaceboContrastSdr); m_pDS->exec(strSQL2); }
-		if(list [i] == "PlaceboBrightnessHdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboBrightnessHdr                        float NOT NULL DEFAULT %f", vs.m_PlaceboBrightnessHdr); m_pDS->exec(strSQL2); }
-		if(list [i] == "PlaceboContrastHdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboContrastHdr                            float NOT NULL DEFAULT %f", vs.m_PlaceboContrastHdr); m_pDS->exec(strSQL2); }
+		if(list [i] == "PlaceboBrightnessSdrSdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboBrightnessSdrSdr                        float NOT NULL DEFAULT %f", vs.m_PlaceboBrightnessSdrSdr); m_pDS->exec(strSQL2); }
+		if(list [i] == "PlaceboContrastSdrSdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboContrastSdrSdr                            float NOT NULL DEFAULT %f", vs.m_PlaceboContrastSdrSdr); m_pDS->exec(strSQL2); }
+		if(list [i] == "PlaceboBrightnessHdrHdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboBrightnessHdrHdr                        float NOT NULL DEFAULT %f", vs.m_PlaceboBrightnessHdrHdr); m_pDS->exec(strSQL2); }
+		if(list [i] == "PlaceboContrastHdrHdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboContrastHdrHdr                            float NOT NULL DEFAULT %f", vs.m_PlaceboContrastHdrHdr); m_pDS->exec(strSQL2); }
+		if(list [i] == "PlaceboBrightnessHdrSdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboBrightnessHdrSdr                        float NOT NULL DEFAULT %f", vs.m_PlaceboBrightnessHdrSdr); m_pDS->exec(strSQL2); }
+		if(list [i] == "PlaceboContrastHdrSdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboContrastHdrSdr                            float NOT NULL DEFAULT %f", vs.m_PlaceboContrastHdrSdr); m_pDS->exec(strSQL2); }
+		if(list [i] == "PlaceboBrightnessSdrHdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboBrightnessSdrHdr                        float NOT NULL DEFAULT %f", vs.m_PlaceboBrightnessSdrHdr); m_pDS->exec(strSQL2); }
+		if(list [i] == "PlaceboContrastSdrHdr") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboContrastSdrHdr                            float NOT NULL DEFAULT %f", vs.m_PlaceboContrastSdrHdr); m_pDS->exec(strSQL2); }
 
         if (list[i] == "PlaceboSdrSaturation") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrSaturation                        float NOT NULL DEFAULT %f", vs.m_PlaceboSdrSaturation); m_pDS->exec(strSQL2); }
 		if (list[i] == "PlaceboSdrColorMapInverseToneMapping") { strSQL2 = PrepareSQL("ALTER TABLE settings ADD COLUMN PlaceboSdrColorMapInverseToneMapping integer NOT NULL DEFAULT %i", vs.m_PlaceboSdrColorMapInverseToneMapping); m_pDS->exec(strSQL2); }
@@ -5698,10 +5702,14 @@ bool CVideoDatabase::GetVideoSettings(int idFile, CVideoSettings &settings)
 		settings.m_PlaceboFrameMixerRadiusFactor = m_pDS->fv("PlaceboFrameMixerRadiusFactor").get_asFloat();
 		settings.m_PlaceboFrameMixerBypassQueue = m_pDS->fv("PlaceboFrameMixerBypassQueue").get_asBool();
 		settings.m_PlaceboCropBottom = m_pDS->fv("PlaceboCropBottom").get_asInt();
-		settings.m_PlaceboBrightnessSdr = m_pDS->fv("PlaceboBrightnessSdr").get_asFloat();
-		settings.m_PlaceboContrastSdr = m_pDS->fv("PlaceboContrastSdr").get_asFloat();
-		settings.m_PlaceboBrightnessHdr = m_pDS->fv("PlaceboBrightnessHdr").get_asFloat();
-		settings.m_PlaceboContrastHdr = m_pDS->fv("PlaceboContrastHdr").get_asFloat();
+		settings.m_PlaceboBrightnessSdrSdr = m_pDS->fv("PlaceboBrightnessSdrSdr").get_asFloat();
+		settings.m_PlaceboContrastSdrSdr = m_pDS->fv("PlaceboContrastSdrSdr").get_asFloat();
+		settings.m_PlaceboBrightnessHdrHdr = m_pDS->fv("PlaceboBrightnessHdrHdr").get_asFloat();
+		settings.m_PlaceboContrastHdrHdr = m_pDS->fv("PlaceboContrastHdrHdr").get_asFloat();
+		settings.m_PlaceboBrightnessHdrSdr = m_pDS->fv("PlaceboBrightnessHdrSdr").get_asFloat();
+		settings.m_PlaceboContrastHdrSdr = m_pDS->fv("PlaceboContrastHdrSdr").get_asFloat();
+		settings.m_PlaceboBrightnessSdrHdr = m_pDS->fv("PlaceboBrightnessSdrHdr").get_asFloat();
+		settings.m_PlaceboContrastSdrHdr = m_pDS->fv("PlaceboContrastSdrHdr").get_asFloat();
 
 		settings.m_PlaceboSdrSaturation = m_pDS->fv("PlaceboSdrSaturation").get_asFloat();
 		settings.m_PlaceboSdrColorMapInverseToneMapping = m_pDS->fv("PlaceboSdrColorMapInverseToneMapping").get_asBool();
@@ -5917,7 +5925,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
         strSQL = PrepareSQL(
           "update settings set "
           "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboSkinZoomPosition=%i,PlaceboLutFilename='%s',PlaceboDisplayHdrPeakLuminance=%f,PlaceboDisplaySdrPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
-		  "PlaceboFrameMixerRadiusFactor=%f,PlaceboFrameMixerBypassQueue=%i,PlaceboCropBottom=%i,PlaceboBrightnessSdr=%f,PlaceboContrastSdr=%f,PlaceboBrightnessHdr=%f,PlaceboContrastHdr=%f,"
+		  "PlaceboFrameMixerRadiusFactor=%f,PlaceboFrameMixerBypassQueue=%i,PlaceboCropBottom=%i,PlaceboBrightnessSdrSdr=%f,PlaceboContrastSdrSdr=%f,PlaceboBrightnessHdrHdr=%f,PlaceboContrastHdrHdr=%f,PlaceboBrightnessHdrSdr=%f,PlaceboContrastHdrSdr=%f,PlaceboBrightnessSdrHdr=%f,PlaceboContrastSdrHdr=%f,"
           "PlaceboDitherDepth=%i,PlaceboShaderApply=%i,PlaceboUseHdrForSdr=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboSdrSaturation=%f,PlaceboSdrColorMapInverseToneMapping=%i,PlaceboSdrColorMapGamutExpansion=%i,"
 		  "PlaceboSdrColorMapIntent='%s',PlaceboSdrColorMapGamutMapping='%s',PlaceboSdrColorMapToneMapping='%s',PlaceboSdrToneConstantExposure=%f,PlaceboSdrToneConstantKneeAdaptation=%f,PlaceboSdrToneConstantKneeDefault=%f,PlaceboSdrToneConstantKneeMaximum=%f,"
 		  "PlaceboSdrToneConstantKneeMinimum=%f,PlaceboSdrToneConstantKneeOffset=%f,PlaceboSdrToneConstantLinearKnee=%f,PlaceboSdrToneConstantReinhardContrast=%f,PlaceboSdrToneConstantSlopeOffset=%f,"
@@ -5958,10 +5966,14 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
 		  static_cast<double>(settings.m_PlaceboFrameMixerRadiusFactor),
 		  settings.m_PlaceboFrameMixerBypassQueue,
 		  settings.m_PlaceboCropBottom,
-		  settings.m_PlaceboBrightnessSdr,
-		  settings.m_PlaceboContrastSdr,
-		  settings.m_PlaceboBrightnessHdr,
-		  settings.m_PlaceboContrastHdr,
+		  settings.m_PlaceboBrightnessSdrSdr,
+		  settings.m_PlaceboContrastSdrSdr,
+		  settings.m_PlaceboBrightnessHdrHdr,
+		  settings.m_PlaceboContrastHdrHdr,
+		  settings.m_PlaceboBrightnessHdrSdr,
+		  settings.m_PlaceboContrastHdrSdr,
+		  settings.m_PlaceboBrightnessSdrHdr,
+		  settings.m_PlaceboContrastSdrHdr,
 		  settings.m_PlaceboDitherDepth,
 		  settings.m_PlaceboShaderApply,
 		  settings.m_PlaceboUseHdrForSdr,
@@ -6122,7 +6134,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
         strSQL = PrepareSQL(
 		  "update settings set "
 		  "SubtitleVerticalPosition=%i,PlaceboSkinZoom=%i,PlaceboSkinZoomPosition=%i,PlaceboLutFilename='%s',PlaceboDisplayHdrPeakLuminance=%f,PlaceboDisplaySdrPeakLuminance=%f,PlaceboTargetColorspaceHint=%i,PlaceboTargetColorspaceHintMode=%i,"
-		  "PlaceboFrameMixerRadiusFactor=%f,PlaceboFrameMixerBypassQueue=%i,PlaceboCropBottom=%i,PlaceboBrightnessSdr=%f,PlaceboContrastSdr=%f,PlaceboBrightnessHdr=%f,PlaceboContrastHdr=%f,"
+		  "PlaceboFrameMixerRadiusFactor=%f,PlaceboFrameMixerBypassQueue=%i,PlaceboCropBottom=%i,PlaceboBrightnessSdrSdr=%f,PlaceboContrastSdrSdr=%f,PlaceboBrightnessHdrHdr=%f,PlaceboContrastHdrHdr=%f,PlaceboBrightnessHdrSdr=%f,PlaceboContrastHdrSdr=%f,PlaceboBrightnessSdrHdr=%f,PlaceboContrastSdrHdr=%f,"
 		  "PlaceboDitherDepth=%i,PlaceboShaderApply=%i,PlaceboUseHdrForSdr=%i,PlaceboColorAdjustmentEnabled=%i,PlaceboSaturation=%f,PlaceboSdrSaturation=%f,PlaceboSdrColorMapInverseToneMapping=%i,PlaceboSdrColorMapGamutExpansion=%i,"
 		  "PlaceboSdrColorMapIntent='%s',PlaceboSdrColorMapGamutMapping='%s',PlaceboSdrColorMapToneMapping='%s',PlaceboSdrToneConstantExposure=%f,PlaceboSdrToneConstantKneeAdaptation=%f,PlaceboSdrToneConstantKneeDefault=%f,PlaceboSdrToneConstantKneeMaximum=%f,"
 		  "PlaceboSdrToneConstantKneeMinimum=%f,PlaceboSdrToneConstantKneeOffset=%f,PlaceboSdrToneConstantLinearKnee=%f,PlaceboSdrToneConstantReinhardContrast=%f,PlaceboSdrToneConstantSlopeOffset=%f,"
@@ -6163,10 +6175,14 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
 		  static_cast<double>(settings.m_PlaceboFrameMixerRadiusFactor),
 		  settings.m_PlaceboFrameMixerBypassQueue,
 		  settings.m_PlaceboCropBottom,
-		  settings.m_PlaceboBrightnessSdr,
-		  settings.m_PlaceboContrastSdr,
-		  settings.m_PlaceboBrightnessHdr,
-		  settings.m_PlaceboContrastHdr,
+		  settings.m_PlaceboBrightnessSdrSdr,
+		  settings.m_PlaceboContrastSdrSdr,
+		  settings.m_PlaceboBrightnessHdrHdr,
+		  settings.m_PlaceboContrastHdrHdr,
+		  settings.m_PlaceboBrightnessHdrSdr,
+		  settings.m_PlaceboContrastHdrSdr,
+		  settings.m_PlaceboBrightnessSdrHdr,
+		  settings.m_PlaceboContrastSdrHdr,
 		  settings.m_PlaceboDitherDepth,
 		  settings.m_PlaceboShaderApply,
 		  settings.m_PlaceboUseHdrForSdr,
@@ -6286,8 +6302,7 @@ void CVideoDatabase::SetVideoSettings(int idFile, const CVideoSettings &settings
 		  settings.m_PlaceboSkipCachingSingleFrame,
 		  settings.m_PlaceboSkipTargetClearing,
 		  idFile);
-
-		  m_pDS->exec(strSQL);
+		m_pDS->exec(strSQL);
           m_pDS->close();
 
           std::string serializedShadersData;

@@ -931,7 +931,7 @@ void DX::DeviceResources::ResizeBuffers()
 	{
 	  ComPtr<IDXGIDevice1> dxgiDevice;
 	  hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
-      HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
+      HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
 	  swapChain2->GetContainingOutput(&m_pActiveOutput);
 	  swapChain2->Release();
 	}
@@ -2115,14 +2115,29 @@ HRESULT DX::DeviceResources::SignalFrameReady()
   }
 
   {
-	std::lock_guard<std::mutex> lock(m_presentMutex);
+	//std::lock_guard<std::mutex> lock(m_presentMutex);  //cl one or the other???
+	
+	// 1. Thread Safety Shield: Lock out context conflicts BEFORE flushing
+	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+	if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
+	{
+	  pMultithread->Enter();
+	}
+
+	//std::lock_guard<std::mutex> lock(m_presentMutex);
 	if(m_d3dContext)
 	{
 	  // Forces commands out safely. The Present thread cannot be inside its 
 	  // Present() call right now because it is locked out by this exact mutex.
 	  m_d3dContext->Flush();
 	}
+	if(pMultithread)
+	{
+	  pMultithread->Leave();
+	}
+
   }
+
 
   m_framesRendered.fetch_add(1, std::memory_order_release);
 

@@ -711,10 +711,14 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetFloat(pNode, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
   XMLUtils::SetBoolean(pNode, "placebomixerbypassqueue", vs.m_PlaceboFrameMixerBypassQueue);
   XMLUtils::SetInt(pNode, "placebocropbottom", vs.m_PlaceboCropBottom);
-  XMLUtils::SetFloat(pNode, "placebobrightnesssdr", vs.m_PlaceboBrightnessSdr);
-  XMLUtils::SetFloat(pNode, "placebocontrastsdr", vs.m_PlaceboContrastSdr);
-  XMLUtils::SetFloat(pNode, "placebobrightnesshdr", vs.m_PlaceboBrightnessHdr);
-  XMLUtils::SetFloat(pNode, "placebocontrasthdr", vs.m_PlaceboContrastHdr);
+  XMLUtils::SetFloat(pNode, "placebobrightnesssdrsdr", vs.m_PlaceboBrightnessSdrSdr);
+  XMLUtils::SetFloat(pNode, "placebocontrastsdrsdr", vs.m_PlaceboContrastSdrSdr);
+  XMLUtils::SetFloat(pNode, "placebobrightnesshdrhdr", vs.m_PlaceboBrightnessHdrHdr);
+  XMLUtils::SetFloat(pNode, "placebocontrasthdrhdr", vs.m_PlaceboContrastHdrHdr);
+  XMLUtils::SetFloat(pNode, "placebobrightnesshdrsdr", vs.m_PlaceboBrightnessHdrSdr);
+  XMLUtils::SetFloat(pNode, "placebocontrasthdrsdr", vs.m_PlaceboContrastHdrSdr);
+  XMLUtils::SetFloat(pNode, "placebobrightnesssdrhdr", vs.m_PlaceboBrightnessSdrHdr);
+  XMLUtils::SetFloat(pNode, "placebocontrastsdrhdr", vs.m_PlaceboContrastSdrHdr);
 
   XMLUtils::SetFloat(pNode, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::SetBoolean(pNode, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
@@ -890,10 +894,14 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement, "placeboframemixerradiusfactor", vs.m_PlaceboFrameMixerRadiusFactor);
   XMLUtils::GetBoolean(pElement, "placebomixerbypassqueue", vs.m_PlaceboFrameMixerBypassQueue);
   XMLUtils::GetInt(pElement, "placebocropbottom", vs.m_PlaceboCropBottom);
-  XMLUtils::GetFloat(pElement, "placebobrightnesssdr", vs.m_PlaceboBrightnessSdr);
-  XMLUtils::GetFloat(pElement, "placebocontrastsdr", vs.m_PlaceboContrastSdr);
-  XMLUtils::GetFloat(pElement, "placebobrightnesshdr", vs.m_PlaceboBrightnessHdr);
-  XMLUtils::GetFloat(pElement, "placebocontrasthdr", vs.m_PlaceboContrastHdr);
+  XMLUtils::GetFloat(pElement, "placebobrightnesssdrsdr", vs.m_PlaceboBrightnessSdrSdr);
+  XMLUtils::GetFloat(pElement, "placebocontrastsdrsdr", vs.m_PlaceboContrastSdrSdr);
+  XMLUtils::GetFloat(pElement, "placebobrightnesshdrhdr", vs.m_PlaceboBrightnessHdrHdr);
+  XMLUtils::GetFloat(pElement, "placebocontrasthdrhdr", vs.m_PlaceboContrastHdrHdr);
+  XMLUtils::GetFloat(pElement, "placebobrightnesssdrhdr", vs.m_PlaceboBrightnessSdrHdr);
+  XMLUtils::GetFloat(pElement, "placebocontrastsdrhdr", vs.m_PlaceboContrastSdrHdr);
+  XMLUtils::GetFloat(pElement, "placebobrightnesshdrsdr", vs.m_PlaceboBrightnessHdrSdr);
+  XMLUtils::GetFloat(pElement, "placebocontrasthdrsdr", vs.m_PlaceboContrastHdrSdr);
 
   XMLUtils::GetFloat(pElement, "placebosdrsaturation", vs.m_PlaceboSdrSaturation);
   XMLUtils::GetBoolean(pElement, "placebosdrcolormapinversetonemapping", vs.m_PlaceboSdrColorMapInverseToneMapping);
