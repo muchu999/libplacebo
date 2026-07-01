@@ -1168,7 +1168,17 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //----------------
   if((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue)
   {
+	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+	if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+	{
+	  pMultithread->Enter(); // Block if Present Thread is currently processing the GUI list
+	}
 	bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
+	if(pMultithread)
+	{
+	  pMultithread->Leave(); // Safely unlock context for the Present thread
+	}
+
 	int64_t end = CurrentHostCounter();
 	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
 	buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
@@ -1180,6 +1190,12 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   }
   else
   {
+	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+	if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+	{
+	  pMultithread->Enter(); // Block if Present Thread is currently processing the GUI list
+	}
+
 	static double oldRenderPts = 0.0;
 	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f}, renderPtsDiff: {:.3f}",
 	  m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
@@ -1249,6 +1265,10 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  // Render
 	  m_FrameMixerNumFrames = mix.num_frames;
 	  bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
+	  if(pMultithread)
+	  {
+		pMultithread->Leave(); // Safely unlock context for the Present thread
+	  }
 
 	  if(!res2)
 	  {
@@ -1280,15 +1300,53 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   pDeviceContext->End(current_frame.disjoint);
   current_frame.is_active = true;
   current_write_slot = (current_write_slot + 1) % QUERY_LATENCY;
+
+  if(pDeviceContext)
+  {
+	// Reset all input slots, render targets, unordered access views, and shaders to nullptr
+	pDeviceContext->ClearState();
+
+	// Force the driver to immediately push this unbind command straight to the GPU
+	pDeviceContext->Flush();
+
+	// Release the raw context pointer to prevent COM leaks
+	pDeviceContext->Release();
+  }
+  /*
+  if(pDeviceContext)
+  {
+	// Create an array of null pointers to clear the first 4 shader resource slots
+	ID3D11ShaderResourceView* nullSRVs [4] = {nullptr, nullptr, nullptr, nullptr};
+
+	// Clear slots from both Vertex and Pixel shader pipelines
+	pDeviceContext->VSSetShaderResources(0, 4, nullSRVs);
+	pDeviceContext->PSSetShaderResources(0, 4, nullSRVs);
+
+	// Release the context handle to prevent COM memory leaks
+	//pDeviceContext->Release();
+  }
+
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(pDeviceContext && SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+  {
+	pMultithread->Enter();
+
+	// Unbind all SRVs, RTVs, and UAVs from the pipeline 
+	// so the subsequent GUI recording pass cannot capture them
+	pDeviceContext->ClearState();
+	pDeviceContext->Flush();
+
+	pMultithread->Leave();
+  }
   pDeviceContext->Release();
 
-  
   //pl_render_error err = pl_renderer_get_errors(PL::PLInstance::Get()->GetRenderer()).errors;
   // cl unclear, libplacebo disabled peak detection for dolby vision in renderer.c
   //if (vo->params) {
   //  // Augment metadata with peak detection max_pq_y / avg_pq_y
   //  vo->has_peak_detect_values = pl_renderer_get_hdr_metadata(p->rr, &vo->params->color.hdr);
   //}
+  */
   sourceRect = dst; //cl Pass dst to next render stage...
   //pDeviceContext->Flush();
 }

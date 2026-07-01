@@ -471,7 +471,7 @@ void DX::DeviceResources::CreateDecoderDeviceResources()
   // Check shared textures support
   CheckNV12SharedTexturesSupport(); //cl 
 
-#if 0 //cl def _DEBUG
+#if 1 //cl def _DEBUG
   if(SUCCEEDED(m_d3dDevice.As(&m_d3dDebug)))
   {
 	ComPtr<ID3D11InfoQueue> d3dInfoQueue;
@@ -624,7 +624,7 @@ void DX::DeviceResources::CreateDeviceResources()
       filter.DenyList.NumIDs = hide.size();
       filter.DenyList.pIDList = hide.data();
       d3dInfoQueue->AddStorageFilterEntries(&filter);
-	  d3dInfoQueue->SetMuteDebugOutput(TRUE); //cl 
+	  d3dInfoQueue->SetMuteDebugOutput(FALSE); //cl 
     }
   }
 #endif
@@ -2075,11 +2075,20 @@ void DX::DeviceResources::PresentThreadLoop()
 	if(!m_presentRunning.load(std::memory_order_acquire)) break;
 
 	pMultithread->Enter();
-	m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), FALSE);
+	if(pCommandListToExecute)
+	{
+	  m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), TRUE);
+	  pCommandListToExecute.Reset();
+	}
 	if(m_swapChain)
 	{
 	  // Hardware test valve to catch occlusion properties without trapping context locks
 	  HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
+
+	  // Explicitly unbind all pipeline hooks from the presentation thread pass
+	  m_d3dContext->ClearState();
+	  m_d3dContext->Flush();
+
 	  if(testHr == DXGI_STATUS_OCCLUDED || testHr == DXGI_ERROR_WAS_STILL_DRAWING)
 	  {
 		pMultithread->Leave();
@@ -2090,6 +2099,12 @@ void DX::DeviceResources::PresentThreadLoop()
 	  // Safe to present natively on high priority thread context
 	  HRESULT hr = m_swapChain->Present(1, 0);
 	  m_presentResult.store(hr, std::memory_order_release);
+	  // FIX A: Unbind all active resource views from the immediate context pipeline
+	  m_d3dContext->ClearState();
+
+	  // FIX B: Force an immediate hardware execution pass so the GPU driver 
+	  // processes the draw commands and officially releases the lock on tex_p->srv!
+	  m_d3dContext->Flush();
 
 	  if(hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
 	  {

@@ -258,8 +258,10 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
   desc.ArraySize = 1;
   desc.Format = DXGI_FORMAT_R8_UNORM;
   desc.SampleDesc.Count = 1;
-  desc.Usage = D3D11_USAGE_DYNAMIC;
+  desc.Usage = D3D11_USAGE_DEFAULT; // Keep dynamic
   desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+  desc.CPUAccessFlags = 0;
+  desc.MiscFlags = 0; // Ensure no incompatible flags are set
 
   HRESULT hr = DX::DeviceResources::Get()->GetD3DDevice()->CreateTexture2D(&desc, nullptr, &newSpeedupTexture);
   if(FAILED(hr)) return nullptr;
@@ -325,40 +327,17 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
 }
 
 bool CGUIFontTTFDX::CopyCharToTexture(
-    FT_BitmapGlyph bitGlyph, unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2)
+  FT_BitmapGlyph bitGlyph, unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2)
 {
   FT_Bitmap bitmap = bitGlyph->bitmap;
 
-  ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetImmediateContext();
-  ComPtr<ID3D11Multithread> pMultithread;
-  bool isLocked = false;
-
-  if(pContext && SUCCEEDED(pContext.As(&pMultithread)))
+  ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetD3DContext();
+  if(m_speedupTexture && pContext && bitmap.buffer)
   {
-	// Force the Application Thread to freeze right here if the Present Thread
-	// is in the middle of drawing UI text with the current m_speedupTexture.
-	pMultithread->Enter();
-	isLocked = true;
-  }
-  if (m_speedupTexture && m_speedupTexture.Get() && pContext && bitmap.buffer)
-  {
-    CD3D11_BOX dstBox(x1, y1, 0, x2, y2, 1);
-    pContext->UpdateSubresource(m_speedupTexture.Get(), 0, &dstBox, bitmap.buffer, bitmap.pitch,
-                                0);
-	pContext->Map(m_speedupTexture.Get(), 0, &dstBox, bitmap.buffer, bitmap.pitch,	  0);
-
-	// 2. Safely release the lock after pointers are fully updated and swapped
-	if(isLocked && pMultithread)
-	{
-	  pMultithread->Leave();
-	}
-
-    return true;
-  }
-  // 2. Safely release the lock after pointers are fully updated and swapped
-  if(isLocked && pMultithread)
-  {
-	pMultithread->Leave();
+	CD3D11_BOX dstBox(x1, y1, 0, x2, y2, 1);
+	pContext->UpdateSubresource(m_speedupTexture.Get(), 0, &dstBox, bitmap.buffer, bitmap.pitch,
+	  0);
+	return true;
   }
 
   return false;
