@@ -94,7 +94,7 @@ void CGUIFontTTFDX::LastEnd()
   pGUIShader->SetDepth(CServiceBroker::GetWinSystem()->GetGfxContext().GetTransformDepth());
 
   // Set font texture as shader resource
-  pGUIShader->SetShaderViews(1, m_speedupTexture->GetAddressOfSRV());
+  pGUIShader->SetShaderViews(1, m_speedupSRV.GetAddressOf());
   // Enable alpha blend
   DX::Windowing()->SetAlphaBlendEnable(true);
   // Set our static index buffer
@@ -235,18 +235,57 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
   if (m_textureHeight == 0)
   {
     m_texture.reset();
-    m_speedupTexture.reset();
+    m_speedupTexture.Reset();
   }
   m_staticCache.Flush();
   m_dynamicCache.Flush();
 
-  std::unique_ptr<CDXTexture> pNewTexture =
-      std::make_unique<CDXTexture>(m_textureWidth, newHeight, XB_FMT_A8);
-  std::unique_ptr<CD3DTexture> newSpeedupTexture = std::make_unique<CD3DTexture>();
-  if (!newSpeedupTexture->Create(m_textureWidth, newHeight, 1, D3D11_USAGE_DEFAULT,
-                                 DXGI_FORMAT_R8_UNORM))
+  std::unique_ptr<CDXTexture> pNewTexture = std::make_unique<CDXTexture>(m_textureWidth, newHeight, XB_FMT_A8);
+
+  //std::unique_ptr<CD3DTexture> newSpeedupTexture = std::make_unique<CD3DTexture>();
+  //if (!newSpeedupTexture->Create(m_textureWidth, newHeight, 1, D3D11_USAGE_DEFAULT,
+  //                               DXGI_FORMAT_R8_UNORM))
+  //{
+  //  return nullptr;
+  //}
+  Microsoft::WRL::ComPtr<ID3D11Texture2D> newSpeedupTexture;
+  Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> newSpeedupSRV;
+  
+  D3D11_TEXTURE2D_DESC desc = {};
+  desc.Width = m_textureWidth;
+  desc.Height = newHeight;
+  desc.MipLevels = 1;
+  desc.ArraySize = 1;
+  desc.Format = DXGI_FORMAT_R8_UNORM;
+  desc.SampleDesc.Count = 1;
+  desc.Usage = D3D11_USAGE_DYNAMIC;
+  desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+  HRESULT hr = DX::DeviceResources::Get()->GetD3DDevice()->CreateTexture2D(&desc, nullptr, &newSpeedupTexture);
+  if(FAILED(hr)) return nullptr;
+
+  // Create the matching Shader Resource View for the new font canvas
+  D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+  srvDesc.Format = DXGI_FORMAT_R8_UNORM;
+  srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+  srvDesc.Texture2D.MipLevels = 1;
+
+  HRESULT srvHr = DX::DeviceResources::Get()->GetD3DDevice()->CreateShaderResourceView(
+	newSpeedupTexture.Get(), &srvDesc, &m_speedupSRV);
+
+  if(FAILED(srvHr)) return nullptr;
+
+
+  ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetImmediateContext();
+  ComPtr<ID3D11Multithread> pMultithread;
+  bool isLocked = false;
+
+  if(pContext && SUCCEEDED(pContext.As(&pMultithread)))
   {
-    return nullptr;
+	// Force the Application Thread to freeze right here if the Present Thread
+	// is in the middle of drawing UI text with the current m_speedupTexture.
+	pMultithread->Enter();
+	isLocked = true;
   }
 
   // There might be data to copy from the previous texture
@@ -254,7 +293,7 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
   {
     CD3D11_BOX rect(0, 0, 0, m_textureWidth, m_textureHeight, 1);
     ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetImmediateContext();
-    pContext->CopySubresourceRegion(newSpeedupTexture->Get(), 0, 0, 0, 0, m_speedupTexture->Get(),
+    pContext->CopySubresourceRegion(newSpeedupTexture.Get(), 0, 0, 0, 0, m_speedupTexture.Get(),
                                     0, &rect);
   }
 
@@ -262,7 +301,25 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
 
   m_textureHeight = newHeight;
   m_textureScaleY = 1.0f / m_textureHeight;
-  m_speedupTexture = std::move(newSpeedupTexture);
+  if(m_speedupTexture)
+  {
+	// Upcast the pointer safely to IUnknown and store it in the current frame container
+	Microsoft::WRL::ComPtr<IUnknown> oldAssetLifeline;
+	if(SUCCEEDED(m_speedupTexture.As(&oldAssetLifeline)))
+	{
+	  DX::DeviceResources::Get()->KeepResourceAliveThisFrame(oldAssetLifeline);
+	}
+  }
+
+  // Now you can safely replace the handle without destroying the VRAM allocation!
+  m_speedupTexture = newSpeedupTexture;
+  m_speedupSRV = newSpeedupSRV;
+
+  // 2. Safely release the lock after pointers are fully updated and swapped
+  if(isLocked && pMultithread)
+  {
+	pMultithread->Leave();
+  }
 
   return pNewTexture;
 }
@@ -273,12 +330,35 @@ bool CGUIFontTTFDX::CopyCharToTexture(
   FT_Bitmap bitmap = bitGlyph->bitmap;
 
   ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetImmediateContext();
-  if (m_speedupTexture && m_speedupTexture->Get() && pContext && bitmap.buffer)
+  ComPtr<ID3D11Multithread> pMultithread;
+  bool isLocked = false;
+
+  if(pContext && SUCCEEDED(pContext.As(&pMultithread)))
+  {
+	// Force the Application Thread to freeze right here if the Present Thread
+	// is in the middle of drawing UI text with the current m_speedupTexture.
+	pMultithread->Enter();
+	isLocked = true;
+  }
+  if (m_speedupTexture && m_speedupTexture.Get() && pContext && bitmap.buffer)
   {
     CD3D11_BOX dstBox(x1, y1, 0, x2, y2, 1);
-    pContext->UpdateSubresource(m_speedupTexture->Get(), 0, &dstBox, bitmap.buffer, bitmap.pitch,
+    pContext->UpdateSubresource(m_speedupTexture.Get(), 0, &dstBox, bitmap.buffer, bitmap.pitch,
                                 0);
+	pContext->Map(m_speedupTexture.Get(), 0, &dstBox, bitmap.buffer, bitmap.pitch,	  0);
+
+	// 2. Safely release the lock after pointers are fully updated and swapped
+	if(isLocked && pMultithread)
+	{
+	  pMultithread->Leave();
+	}
+
     return true;
+  }
+  // 2. Safely release the lock after pointers are fully updated and swapped
+  if(isLocked && pMultithread)
+  {
+	pMultithread->Leave();
   }
 
   return false;

@@ -673,7 +673,7 @@ bool CGUIWindow::OnMessage(CGUIMessage& message)
 
         // and focus it
         if (pFocusedControl)
-          return pFocusedControl->OnMessage(message);
+          return pFocusedControl->OnMessage(message); 
       }
       return true;
     }

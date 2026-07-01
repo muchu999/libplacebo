@@ -871,7 +871,7 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.Stereo = bHWStereoEnabled;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 #ifdef TARGET_WINDOWS_DESKTOP
-    swapChainDesc.BufferCount = 6; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
+    swapChainDesc.BufferCount = 3; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
 #else
     swapChainDesc.BufferCount = 3; // Xbox don't like 6 backbuffers (3 is fine even for 4K 60 fps)
 #endif
@@ -1255,7 +1255,7 @@ void DX::DeviceResources::Present()
 	  if(FAILED(hr))
 	  {
 		CLog::LogF(LOGERROR, "failed to finish command queue.");
-		return;
+		return; //cl 
 	  }
 
 	}
@@ -1265,14 +1265,30 @@ void DX::DeviceResources::Present()
 	static UINT64 lastEnd = 0;
 	if(SUCCEEDED(hr))
 	{
+	  FramePackage package;
+	  package.CommandList = pCommandList;
+
+	  // Track the primary GUI context views to prevent out-of-order destruction
+	  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> currentRTV;
+	  m_deferrContext->OMGetRenderTargets(1, &currentRTV, nullptr);
+	  if(currentRTV)
+	  {
+		package.ResourceLifelines.push_back(currentRTV);
+	  }
+	  {
+		std::lock_guard<std::mutex> lock(m_lifelineMutex);
+		package.ResourceLifelines = std::move(m_currentFrameLifelines);
+		m_currentFrameLifelines.clear(); // Clear for Frame N+1 recording pass
+	  }
+
+	  // Push the complete package to your FIFO queue
 	  {
 		std::lock_guard<std::mutex> lock(m_queueMutex);
-		m_frameQueue.push(pCommandList); // Push cleanly to the back of the queue
+		m_frameQueue.push(package);
 	  }
 	  SignalFrameReady(); // Wake up the presentation thread loop
 	}
 
-	//hr = SignalFrameReady();
 	UINT64 end = CurrentHostCounter();
 	UINT64 presentDuration = end - start;
 	UINT64 period = end - lastEnd;
@@ -2010,14 +2026,17 @@ void DX::DeviceResources::PresentThreadLoop()
 	if(!m_presentRunning.load(std::memory_order_acquire)) break;
 	lock.unlock(); // Release CPU lock immediately
 
-	// 1. Extract the next command list cleanly from the FIFO queue
+// 1. Extract the next package cleanly from the FIFO queue
 	Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandListToExecute;
+	FramePackage currentPackage; // Temporary container to hold resources alive during this loop pass
 	{
 	  std::lock_guard<std::mutex> qLock(m_queueMutex);
 	  if(!m_frameQueue.empty())
 	  {
-		pCommandListToExecute = m_frameQueue.front();
-		m_frameQueue.pop(); // Clear it from tracking
+		// Fix: Grab the full package containing the list and the texture lifelines
+		currentPackage = m_frameQueue.front();
+		pCommandListToExecute = currentPackage.CommandList;
+		m_frameQueue.pop();
 	  }
 	}
 
@@ -2101,7 +2120,6 @@ void DX::DeviceResources::PresentThreadLoop()
 
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
-  // Auto-recovery valve remains active
   if(!m_presentRunning.load(std::memory_order_acquire) && m_swapChain)
   {
 	StartPresentThread();
@@ -2114,44 +2132,40 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	return lastPresentHr;
   }
 
+  // 1. Flush instructions safely under the hardware context lock
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
   {
-	//std::lock_guard<std::mutex> lock(m_presentMutex);  //cl one or the other???
-	
-	// 1. Thread Safety Shield: Lock out context conflicts BEFORE flushing
-	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-	if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
-	{
-	  pMultithread->Enter();
-	}
-
-	//std::lock_guard<std::mutex> lock(m_presentMutex);
-	if(m_d3dContext)
-	{
-	  // Forces commands out safely. The Present thread cannot be inside its 
-	  // Present() call right now because it is locked out by this exact mutex.
-	  m_d3dContext->Flush();
-	}
-	if(pMultithread)
-	{
-	  pMultithread->Leave();
-	}
-
+	pMultithread->Enter();
   }
 
+  if(m_d3dContext)
+  {
+	m_d3dContext->Flush();
+  }
 
+  if(pMultithread)
+  {
+	pMultithread->Leave();
+  }
+
+  // 2. Queue Increment Passage
+  // Increment rendered frames AFTER the flush to ensure instructions are in the driver
   m_framesRendered.fetch_add(1, std::memory_order_release);
+  m_presentCv.notify_one(); // Wake up presentation loop if it is sleeping
 
-  // If the rendering loop gets more than 1 frame ahead of display, sleep.
-  if((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) > 1)
-  {
-	std::unique_lock<std::mutex> lock(m_presentMutex);
-	m_renderCv.wait_for(lock, std::chrono::milliseconds(100), [this] {
-	  return ((m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire)) <= 1)
-		|| !m_presentRunning.load(std::memory_order_acquire);
-	  });
-  }
+  // 3. The Backpressure Throttling Valve
+  // This is the missing piece that prevents resource destruction crashes
+  std::unique_lock<std::mutex> lock(m_presentMutex);
 
-  m_presentCv.notify_one();
+  // Set your maximum pipeline smoothing depth here.
+  // For BufferCount = 3, use 1 or 2. For BufferCount = 6, use 4 or 5.
+  const size_t maxAllowedQueueDepth = 1;  // 0 = no throttling, 1 = one frame in queue, 2 = two frames in queue, etc.
+
+  m_renderCv.wait(lock, [this, maxAllowedQueueDepth] {
+	size_t pendingInQueue = m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire);
+	return (pendingInQueue <= maxAllowedQueueDepth) || !m_presentRunning.load(std::memory_order_acquire);
+	});
 
   return S_OK;
 }
@@ -2166,4 +2180,12 @@ void DX::DeviceResources::DrainPresentationQueue()
 
   m_renderCv.notify_all();
   m_presentCv.notify_all();
+}
+
+void DX::DeviceResources::KeepResourceAliveThisFrame(const Microsoft::WRL::ComPtr<IUnknown>& resource)
+{
+  if(!resource) return;
+
+  std::lock_guard<std::mutex> lock(m_lifelineMutex);
+  m_currentFrameLifelines.push_back(resource); // Locks the reference count up by +1
 }
