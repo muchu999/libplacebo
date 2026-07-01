@@ -5128,10 +5128,14 @@ bool CVideoDatabase::RemoveLibplaceboColumnsFromSettingsTable(int idFile)
 		if ((str = a->records[i]->at(col).get_asString()) == "PlaceboFrameMixerRadiusFactor") { list.push_back(str); continue; }
 		if((str = a->records [i]->at(col).get_asString()) == "PlaceboFrameMixerBypassQueue") { list.push_back(str); continue; }
 		if((str = a->records [i]->at(col).get_asString()) == "PlaceboCropBottom") { list.push_back(str); continue; }
-		if((str = a->records [i]->at(col).get_asString()) == "PlaceboBrightnessSdr") { list.push_back(str); continue; }
-		if((str = a->records [i]->at(col).get_asString()) == "PlaceboContrastSdr") { list.push_back(str); continue; }
-		if((str = a->records [i]->at(col).get_asString()) == "PlaceboBrightnessHdr") { list.push_back(str); continue; }
-		if((str = a->records [i]->at(col).get_asString()) == "PlaceboContrastHdr") { list.push_back(str); continue; }
+		if((str = a->records [i]->at(col).get_asString()) == "PlaceboBrightnessSdrSdr") { list.push_back(str); continue; }
+		if((str = a->records [i]->at(col).get_asString()) == "PlaceboContrastSdrSdr") { list.push_back(str); continue; }
+		if((str = a->records [i]->at(col).get_asString()) == "PlaceboBrightnessHdrHdr") { list.push_back(str); continue; }
+		if((str = a->records [i]->at(col).get_asString()) == "PlaceboContrastHdrHdr") { list.push_back(str); continue; }
+		if((str = a->records [i]->at(col).get_asString()) == "PlaceboBrightnessHdrSdr") { list.push_back(str); continue; }
+		if((str = a->records [i]->at(col).get_asString()) == "PlaceboContrastHdrSdr") { list.push_back(str); continue; }
+		if((str = a->records [i]->at(col).get_asString()) == "PlaceboBrightnessSdrHdr") { list.push_back(str); continue; }
+		if((str = a->records [i]->at(col).get_asString()) == "PlaceboContrastSdrHdr") { list.push_back(str); continue; }
 
 		if ((str = a->records [i]->at(col).get_asString()) == "PlaceboSaturation") { list.push_back(str); continue; }
 		if ((str = a->records [i]->at(col).get_asString()) == "PlaceboSdrSaturation") { list.push_back(str); continue; }
@@ -5286,10 +5290,15 @@ static std::vector<std::string> LibplaceboColumnslist = {
 								   "PlaceboFrameMixerRadiusFactor",
 								   "PlaceboFrameMixerBypassQueue",
 								   "PlaceboCropBottom",
-								   "PlaceboBrightnessSdr",
-								   "PlaceboContrastSdr",
-								   "PlaceboBrightnessHdr",
-								   "PlaceboContrastHdr",
+								   "PlaceboBrightnessSdrSdr",
+								   "PlaceboContrastSdrSdr",
+								   "PlaceboBrightnessHdrHdr",
+								   "PlaceboContrastHdrHdr",
+								   "PlaceboBrightnessHdrSdr",
+								   "PlaceboContrastHdrSdr",
+								   "PlaceboBrightnessSdrHdr",
+								   "PlaceboContrastSdrHdr",
+
 
                                    "PlaceboColorAdjustmentEnabled",
                                    "PlaceboSaturation",
