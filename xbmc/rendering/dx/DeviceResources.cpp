@@ -14,6 +14,8 @@
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
 #include "messaging/ApplicationMessenger.h"
+#include "application/ApplicationComponents.h"
+#include "application/ApplicationPlayer.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "utils/SystemInfo.h"
@@ -40,10 +42,6 @@ extern "C"
 #include "../../../project/BuildDependencies/msys64/usr/include/w32api/timeapi.h"
 #include <dwmapi.h>
 #include <cores/VideoSettings.h>
-#include <atomic>
-#include <thread>
-#include <mutex>
-#include <chrono>
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -471,7 +469,7 @@ void DX::DeviceResources::CreateDecoderDeviceResources()
   // Check shared textures support
   CheckNV12SharedTexturesSupport(); //cl 
 
-#if 1 //cl def _DEBUG
+#if 0 //cl def _DEBUG
   if(SUCCEEDED(m_d3dDevice.As(&m_d3dDebug)))
   {
 	ComPtr<ID3D11InfoQueue> d3dInfoQueue;
@@ -624,7 +622,7 @@ void DX::DeviceResources::CreateDeviceResources()
       filter.DenyList.NumIDs = hide.size();
       filter.DenyList.pIDList = hide.data();
       d3dInfoQueue->AddStorageFilterEntries(&filter);
-	  d3dInfoQueue->SetMuteDebugOutput(FALSE); //cl 
+	  d3dInfoQueue->SetMuteDebugOutput(TRUE); //cl 
     }
   }
 #endif
@@ -931,7 +929,7 @@ void DX::DeviceResources::ResizeBuffers()
 	{
 	  ComPtr<IDXGIDevice1> dxgiDevice;
 	  hr = m_d3dDevice.As(&dxgiDevice); CHECK_ERR();
-      HRESULT hr = swapChain2->SetMaximumFrameLatency(2);
+      HRESULT hr = swapChain2->SetMaximumFrameLatency(1);
 	  swapChain2->GetContainingOutput(&m_pActiveOutput);
 	  swapChain2->Release();
 	}
@@ -1295,8 +1293,6 @@ void DX::DeviceResources::Present()
 	lastEnd = end;
 	// Log
 	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0);
-
-
 
   // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
