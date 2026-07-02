@@ -804,13 +804,13 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   {
 	float val = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	if(CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
-	  vs.m_PlaceboBrightnessHdrHdr = std::round(val * 20.0) * 0.05;
+	  vs.m_PlaceboContrastHdrHdr = std::round(val * 20.0) * 0.05;
 	else if (CRendererPL::isHdrIn() && !CRendererPL::isHdrOut())
-	  vs.m_PlaceboBrightnessHdrSdr = std::round(val * 20.0) * 0.05;
+	  vs.m_PlaceboContrastHdrSdr = std::round(val * 20.0) * 0.05;
 	else if(!CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
-	  vs.m_PlaceboBrightnessSdrHdr = std::round(val * 20.0) * 0.05;
+	  vs.m_PlaceboContrastSdrHdr = std::round(val * 20.0) * 0.05;
 	else
-	  vs.m_PlaceboBrightnessSdrSdr = std::round(val * 20.0) * 0.05;
+	  vs.m_PlaceboContrastSdrSdr = std::round(val * 20.0) * 0.05;
 	appPlayer->SetVideoSettings(vs);
 	}
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED)

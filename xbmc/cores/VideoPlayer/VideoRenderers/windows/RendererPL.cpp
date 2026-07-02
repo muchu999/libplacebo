@@ -1303,11 +1303,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   if(pDeviceContext)
   {
-	// Reset all input slots, render targets, unordered access views, and shaders to nullptr
-	pDeviceContext->ClearState();
-
-	// Force the driver to immediately push this unbind command straight to the GPU
-	pDeviceContext->Flush();
 
 	// Release the raw context pointer to prevent COM leaks
 	pDeviceContext->Release();

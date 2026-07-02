@@ -2082,8 +2082,8 @@ void DX::DeviceResources::PresentThreadLoop()
 	  HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
 
 	  // Explicitly unbind all pipeline hooks from the presentation thread pass
-	  m_d3dContext->ClearState();
-	  m_d3dContext->Flush();
+	  //m_d3dContext->ClearState();
+	  //m_d3dContext->Flush();
 
 	  if(testHr == DXGI_STATUS_OCCLUDED || testHr == DXGI_ERROR_WAS_STILL_DRAWING)
 	  {
@@ -2096,11 +2096,11 @@ void DX::DeviceResources::PresentThreadLoop()
 	  HRESULT hr = m_swapChain->Present(1, 0);
 	  m_presentResult.store(hr, std::memory_order_release);
 	  // FIX A: Unbind all active resource views from the immediate context pipeline
-	  m_d3dContext->ClearState();
+	  //m_d3dContext->ClearState();
 
 	  // FIX B: Force an immediate hardware execution pass so the GPU driver 
 	  // processes the draw commands and officially releases the lock on tex_p->srv!
-	  m_d3dContext->Flush();
+	  //m_d3dContext->Flush();
 
 	  if(hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
 	  {
