@@ -254,17 +254,12 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
   desc.Height = newHeight;
   desc.MipLevels = 1;
   desc.ArraySize = 1;
-
-  // FIX 1: Change R8_UNORM to A8_UNORM to restore the Alpha channel channel kodi's text shaders expect!
-  desc.Format = DXGI_FORMAT_A8_UNORM;
+  desc.Format = DXGI_FORMAT_R8_UNORM;
   desc.SampleDesc.Count = 1;
   desc.SampleDesc.Quality = 0;
-
-  // FIX 2: Set usage to DEFAULT to perfectly match the non-blocking deferred UpdateSubresource pipeline
-  desc.Usage = D3D11_USAGE_DEFAULT;
+  desc.Usage = D3D11_USAGE_DYNAMIC;
   desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-  desc.CPUAccessFlags = 0;
-  desc.MiscFlags = 0;
+  desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE; // Essential for Map locks!
 
   Microsoft::WRL::ComPtr<ID3D11Texture2D> newSpeedupTexture;
   HRESULT hr = DX::DeviceResources::Get()->GetD3DDevice()->CreateTexture2D(&desc, nullptr, &newSpeedupTexture);
@@ -272,7 +267,7 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
 
   D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
   // FIX 3: Match the SRV format to the core Alpha texture canvas
-  srvDesc.Format = DXGI_FORMAT_A8_UNORM;
+  srvDesc.Format = DXGI_FORMAT_R8_UNORM;
   srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
   srvDesc.Texture2D.MipLevels = 1;
 
@@ -333,18 +328,52 @@ bool CGUIFontTTFDX::CopyCharToTexture(
 {
   FT_Bitmap bitmap = bitGlyph->bitmap;
 
-  ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetD3DContext();
-  if(m_speedupTexture && pContext && bitmap.buffer)
+  // 1. Fetch the protected Immediate Context path
+  ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetImmediateContext();
+  ComPtr<ID3D11Multithread> pMultithread;
+
+  if(m_speedupTexture && pContext && bitmap.buffer && SUCCEEDED(pContext.As(&pMultithread)))
   {
-	CD3D11_BOX dstBox(x1, y1, 0, x2, y2, 1);
-	pContext->UpdateSubresource(m_speedupTexture.Get(), 0, &dstBox, bitmap.buffer, bitmap.pitch,
-	  0);
-	return true;
+	if(x2 <= x1 || y2 <= y1) return false;
+
+	unsigned int glyphWidth = x2 - x1;
+	unsigned int glyphHeight = y2 - y1;
+	unsigned int copyWidth = std::min(glyphWidth, (unsigned int) bitmap.width);
+	unsigned int copyHeight = std::min(glyphHeight, (unsigned int) bitmap.rows);
+
+	if(copyWidth == 0 || copyHeight == 0) return false;
+
+	// 2. Hardware Synchronization Guard: Wait if the Present Thread is mid-Present()
+	pMultithread->Enter();
+
+	D3D11_MAPPED_SUBRESOURCE mappedResource = {};
+	// Lock-step map with NO_OVERWRITE to avoid blocking video playback loops entirely
+	HRESULT hr = pContext->Map(m_speedupTexture.Get(), 0, D3D11_MAP_WRITE_NO_OVERWRITE, 0, &mappedResource);
+
+	if(SUCCEEDED(hr))
+	{
+	  unsigned char* dstData = reinterpret_cast<unsigned char*>(mappedResource.pData);
+	  unsigned char* srcData = bitmap.buffer;
+	  unsigned int srcPitch = std::abs(bitmap.pitch);
+
+	  // 3. Directly map row elements straight to the GPU buffer via RowPitch offsets
+	  for(unsigned int row = 0; row < copyHeight; ++row)
+	  {
+		unsigned int dstOffset = (y1 + row) * mappedResource.RowPitch + x1;
+		unsigned int srcOffset = row * srcPitch;
+		memcpy(dstData + dstOffset, srcData + srcOffset, copyWidth);
+	  }
+
+	  pContext->Unmap(m_speedupTexture.Get(), 0);
+	  pMultithread->Leave();
+	  return true;
+	}
+
+	pMultithread->Leave();
   }
 
   return false;
 }
-
 void CGUIFontTTFDX::DeleteHardwareTexture()
 {
 }
