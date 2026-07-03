@@ -790,11 +790,15 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   else if(settingId == SETTING_LIB_PLACEBO_BRIGHTNESS)
   {
 	float val = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-	if(CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
+
+	bool bHdrIn = true;;
+	bool bHdrOut = true;
+	appPlayer->GetRendererIOFormat(bHdrIn, bHdrOut);
+	if(bHdrIn && bHdrOut)
 	  vs.m_PlaceboBrightnessHdrHdr = std::round(val * 20.0) * 0.05;
-	else if (CRendererPL::isHdrIn() && !CRendererPL::isHdrOut())
+	else if (bHdrIn && !bHdrOut)
 	  vs.m_PlaceboBrightnessHdrSdr = std::round(val * 20.0) * 0.05;
-	else if(!CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
+	else if(!bHdrIn && bHdrOut)
 	  vs.m_PlaceboBrightnessSdrHdr = std::round(val * 20.0) * 0.05;
 	else
 	  vs.m_PlaceboBrightnessSdrSdr = std::round(val * 20.0) * 0.05;
@@ -803,11 +807,15 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   else if(settingId == SETTING_LIB_PLACEBO_CONTRAST)
   {
 	float val = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
-	if(CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
+
+	bool bHdrIn = true;;
+	bool bHdrOut = true;
+	appPlayer->GetRendererIOFormat(bHdrIn, bHdrOut);
+	if(bHdrIn && bHdrOut)
 	  vs.m_PlaceboContrastHdrHdr = std::round(val * 50.0) * 0.02;
-	else if (CRendererPL::isHdrIn() && !CRendererPL::isHdrOut())
+	else if (bHdrIn && !bHdrOut)
 	  vs.m_PlaceboContrastHdrSdr = std::round(val * 50.0) * 0.02;
-	else if(!CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
+	else if(!bHdrIn && bHdrOut)
 	  vs.m_PlaceboContrastSdrHdr = std::round(val * 50.0) * 0.02;
 	else
 	  vs.m_PlaceboContrastSdrSdr = std::round(val * 50.0) * 0.02;
@@ -1865,8 +1873,9 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
 	float brightness;
 	float contrast;
-	bool bHdrIn = CRendererPL::isHdrIn();
-	bool bHdrOut = CRendererPL::isHdrOut();
+	bool bHdrIn = true;;
+	bool bHdrOut = true;
+	appPlayer->GetRendererIOFormat(bHdrIn, bHdrOut);
 	if(!bHdrIn && !bHdrOut)
 	{
 	  brightness = videoSettings.m_PlaceboBrightnessSdrSdr;

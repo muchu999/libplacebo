@@ -94,6 +94,7 @@ public:
   // Functions called from GUI
   bool Supports(ERENDERFEATURE feature) const;
   bool Supports(ESCALINGMETHOD method) const;
+  void GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR);
 
   int GetSkippedFrames()  { return m_QueueSkip; }
 

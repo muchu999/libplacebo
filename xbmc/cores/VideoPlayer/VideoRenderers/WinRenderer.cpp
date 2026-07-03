@@ -295,6 +295,13 @@ bool CWinRenderer::Supports(ESCALINGMETHOD method) const
 
   return m_renderer->Supports(method);
 }
+void CWinRenderer::GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR)
+{
+  if(!m_bConfigured)
+	return;
+
+  m_renderer->GetRendererIOFormat(isInputHDR, isOutputHDR);
+}
 
 bool CWinRenderer::WantsDoublePass()
 {

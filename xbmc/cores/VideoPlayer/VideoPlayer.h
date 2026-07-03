@@ -368,6 +368,7 @@ public:
   void TriggerUpdateResolution() override;
   bool IsRenderingVideo() const override;
   void RecordFlipEndTime() override;
+  void GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR) override;
   bool IsLiveStream() const override;
   bool Supports(EINTERLACEMETHOD method) const override;
   EINTERLACEMETHOD GetDeinterlacingMethodDefault() const override;

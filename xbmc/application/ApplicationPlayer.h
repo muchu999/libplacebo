@@ -66,6 +66,7 @@ public:
   bool IsRenderingVideoLayer() const;
   void RecordFlipEndTime();
   bool Supports(EINTERLACEMETHOD method) const;
+  void GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR);
   EINTERLACEMETHOD GetDeinterlacingMethodDefault() const;
   bool Supports(ESCALINGMETHOD method) const;
   bool Supports(ERENDERFEATURE feature) const;

@@ -75,6 +75,7 @@ public:
   virtual bool SupportsMultiPassRendering() = 0;
   virtual bool Supports(ERENDERFEATURE feature) const { return false; }
   virtual bool Supports(ESCALINGMETHOD method) const = 0;
+  virtual void GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR) {};
 
   virtual bool WantsDoublePass() { return false; }
 

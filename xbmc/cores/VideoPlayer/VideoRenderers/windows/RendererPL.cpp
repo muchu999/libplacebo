@@ -1380,6 +1380,13 @@ bool CRendererPL::Supports(ESCALINGMETHOD method) const
   // return __super::Supports(method);
 }
 
+void CRendererPL::GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR)
+{
+  isInputHDR = m_bHdrIn;
+  isOutputHDR = m_bHdrOut;
+}
+
+
 CRenderBuffer* CRendererPL::CreateBuffer()
 {
   //can we get the dxva format at this moment?

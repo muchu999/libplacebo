@@ -42,6 +42,7 @@ public:
   bool SupportsMultiPassRendering() override { return false; }
   bool Supports(ERENDERFEATURE feature) const override;
   bool Supports(ESCALINGMETHOD method) const override;
+  void GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR);
 
   bool WantsDoublePass() override;
   bool ConfigChanged(const VideoPicture& picture) override;

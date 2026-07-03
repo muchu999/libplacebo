@@ -5664,7 +5664,10 @@ void CVideoPlayer::RecordFlipEndTime()
 {
   m_renderManager.RecordFlipEndTime();
 }
-
+void CVideoPlayer::GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR)
+{
+  m_renderManager.GetRendererIOFormat(isInputHDR, isOutputHDR);
+}
 bool CVideoPlayer::IsRenderingVideo() const
 {
   return m_renderManager.IsConfigured();

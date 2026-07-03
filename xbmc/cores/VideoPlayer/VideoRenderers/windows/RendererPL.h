@@ -67,6 +67,7 @@ public:
   CRenderInfo GetRenderInfo() override;
   bool Supports(ESCALINGMETHOD method) const override;
   bool Supports(ERENDERFEATURE feature) const override;
+  void GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR);
   bool WantsDoublePass() override { return true; }
   bool Configure(const VideoPicture& picture, float fps, unsigned orientation) override;
 
@@ -83,8 +84,6 @@ public:
   static DXGI_FORMAT GetDXGIFormat(AVPixelFormat format, DXGI_FORMAT default_fmt);
   static bool InitializeFrame(pl_swapchain sw, pl_frame& frameOut);
   static int getColorDepth(void);
-  static bool isHdrIn() { return m_bHdrIn; }
-  static bool isHdrOut() { return m_bHdrOut; }
 protected:
   explicit CRendererPL(CVideoSettings& videoSettings);
 

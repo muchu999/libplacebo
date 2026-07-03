@@ -120,6 +120,7 @@ public:
   virtual bool Configure(const VideoPicture &picture, float fps, unsigned int orientation);
   virtual bool Supports(ESCALINGMETHOD method) const = 0;
   virtual bool Supports(ERENDERFEATURE feature) const;
+  virtual void GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR) {};
 
   virtual bool WantsDoublePass() { return false; }
   virtual bool NeedBuffer(int idx) { return false; }

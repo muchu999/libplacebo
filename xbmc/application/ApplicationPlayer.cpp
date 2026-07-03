@@ -976,6 +976,14 @@ bool CApplicationPlayer::Supports(EINTERLACEMETHOD method) const
     return false;
 }
 
+void CApplicationPlayer::GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR)
+{
+  std::shared_ptr<IPlayer> player = GetInternal();
+  if(player)
+	player->GetRendererIOFormat(isInputHDR, isOutputHDR);
+}
+
+
 EINTERLACEMETHOD CApplicationPlayer::GetDeinterlacingMethodDefault() const
 {
   const std::shared_ptr<const IPlayer> player = GetInternal();

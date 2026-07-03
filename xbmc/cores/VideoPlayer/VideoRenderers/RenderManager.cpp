@@ -1316,6 +1316,12 @@ bool CRenderManager::Supports(ESCALINGMETHOD method) const
   else
     return false;
 }
+void CRenderManager::GetRendererIOFormat(bool& isInputHDR, bool& isOutputHDR)
+{
+  std::unique_lock lock(m_statelock);
+  if(m_pRenderer)
+	m_pRenderer->GetRendererIOFormat(isInputHDR, isOutputHDR);
+}
 
 int CRenderManager::WaitForBuffer(volatile std::atomic_bool& bStop,
                                   std::chrono::milliseconds timeout)
