@@ -601,6 +601,9 @@ void DX::DeviceResources::CreateDeviceResources()
 
   // Store pointers to the Direct3D 11.1 API device and immediate context.
   hr = device.As(&m_d3dDevice); CHECK_ERR();
+  ReleaseProfilingQueries();
+  InitProfiling();
+
 
   // Check shared textures support
   CheckNV12SharedTexturesSupport();
@@ -923,6 +926,10 @@ void DX::DeviceResources::ResizeBuffers()
       return;
     }
 
+	//cl best place for this?
+	StartPresentThread();
+	StartWatchdog();
+
 	IDXGISwapChain2* swapChain2 = nullptr;
 	HRESULT hr = swapChain->QueryInterface(__uuidof(IDXGISwapChain2), (void**) &swapChain2);
 	if(SUCCEEDED(hr) && swapChain2)
@@ -933,7 +940,7 @@ void DX::DeviceResources::ResizeBuffers()
 	  swapChain2->GetContainingOutput(&m_pActiveOutput);
 	  swapChain2->Release();
 	}
-	
+
 	m_IsHDROutput = (swapChainDesc.Format == DXGI_FORMAT_R10G10B10A2_UNORM) && isHdrEnabled;
 
     CLog::LogF(
@@ -994,10 +1001,6 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
   {
 	pMultithread->SetMultithreadProtected(TRUE);
   }
-
-  StartPresentThread();
-  StartWatchdog();
-
 }
 
 // Determine the dimensions of the render target and whether it will be scaled down.
@@ -1247,6 +1250,21 @@ void DX::DeviceResources::Present()
   HRESULT hr = {};
   static UINT64 freq = CurrentHostFrequency();
 
+  DX::DeviceResources::FrameQuery& current_frame = getCurrentFrame();
+  if(m_deferrContext && !current_frame.is_active && current_frame.start && current_frame.end)
+  {
+	// Record start at the beginning of the deferred block
+	m_deferrContext->End(current_frame.start);
+
+	// ... Any final GUI blits or presentation prep if needed ...
+
+	// Record end right after it
+	m_deferrContext->End(current_frame.end);
+
+	// Advance slots safely
+	m_currentWriteSlot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
+  }
+  
 	//FinishCommandList();
 	Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandList;
 	if(m_d3dContext != m_deferrContext)
@@ -2075,14 +2093,35 @@ void DX::DeviceResources::PresentThreadLoop()
 	pMultithread->Enter();
 	if(pCommandListToExecute)
 	{
+	  // 1. Get the current active write slot from your query ring
+	  FrameQuery& current_frame = query_ring [m_presentWriteSlot];
+
+	  if(current_frame.disjoint)
+	  {
+		m_d3dContext->Begin(current_frame.disjoint);
+		m_d3dContext->End(current_frame.start); // Start unified measurement
+	  }
+
+	  // 3. Process the complete compiled video and GUI list parameters
 	  m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), TRUE);
-	  pCommandListToExecute.Reset();
+	  pCommandListToExecute.Reset(); // Clear tokens immediately
+
+	  // 4. Stop the GPU hardware timer the exact microsecond execution completes
+	  if(current_frame.disjoint)
+	  {
+		m_d3dContext->End(current_frame.end);  // End unified measurement
+		m_d3dContext->End(current_frame.disjoint);
+
+		current_frame.is_active = true;
+		m_presentWriteSlot = (m_presentWriteSlot + 1) % QUERY_LATENCY;
+	  }
+	  // 5. Atomic advancement flags
 	}
 	if(m_swapChain)
 	{
 	  // Hardware test valve to catch occlusion properties without trapping context locks
 	  HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
-
+ 
 	  HRESULT hr = S_OK;
 	  if(testHr == DXGI_STATUS_OCCLUDED)
 	  {
@@ -2162,6 +2201,18 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	return (pendingInQueue <= maxAllowedQueueDepth) || !m_presentRunning.load(std::memory_order_acquire);
 	});
 
+  // 4. Post-Deadlock Cleanup Protection:
+  // If we broke out of the wait because the presenter thread died, 
+  // clear out the stale rendered count so subsequent frames don't get trapped immediately.
+  if(!m_presentRunning.load(std::memory_order_acquire))
+  {
+	m_framesRendered.store(0, std::memory_order_release);
+	m_framesPresented.store(0, std::memory_order_release);
+
+	// Safely clear the stale FIFO queue memory packets under lock
+	std::lock_guard<std::mutex> qLock(m_queueMutex);
+	while(!m_frameQueue.empty()) m_frameQueue.pop();
+  }
   return S_OK;
 }
 
@@ -2184,6 +2235,34 @@ void DX::DeviceResources::KeepResourceAliveThisFrame(const Microsoft::WRL::ComPt
   std::lock_guard<std::mutex> lock(m_lifelineMutex);
   m_currentFrameLifelines.push_back(resource); // Locks the reference count up by +1
 }
+
+void DX::DeviceResources::InitProfiling() {
+  D3D11_QUERY_DESC desc_disjoint = {D3D11_QUERY_TIMESTAMP_DISJOINT, 0};
+  D3D11_QUERY_DESC desc_timestamp = {D3D11_QUERY_TIMESTAMP, 0};
+
+  for(int i = 0; i < QUERY_LATENCY; i++) {
+	m_d3dDevice->CreateQuery(&desc_disjoint, &query_ring [i].disjoint);
+	m_d3dDevice->CreateQuery(&desc_timestamp, &query_ring [i].start);
+	m_d3dDevice->CreateQuery(&desc_timestamp, &query_ring [i].end);
+	query_ring [i].is_active = false;
+  }
+}
+
+void DX::DeviceResources::ReleaseProfilingQueries()
+{
+  // Forcefully discard the dead query allocation handles
+  for(int i = 0; i < QUERY_LATENCY; ++i)
+  {
+	query_ring [i].disjoint = nullptr; // Automatically decrements and frees the interface link
+	query_ring [i].start = nullptr;
+	query_ring [i].end = nullptr;
+	query_ring [i].is_active = false;  // Reset state flags
+  }
+
+  // Reset the active ring indexers back to the starting gate
+  m_currentWriteSlot = 0;
+}
+
 bool DX::DeviceResources::IsHDROutput1() const 
 {
   DXGI_SWAP_CHAIN_DESC1 desc;
@@ -2250,27 +2329,31 @@ void DX::DeviceResources::WatchdogThreadLoop()
 	  if(m_stallCount >= 8) // 4 full seconds of absolute zero movement
 	  {
 		CLog::Log(LOGERROR, "dx-watchdog: DETECTED HARD FREEZE! Triggering emergency recovery sequence...");
-		LogThreadState("Watchdog Trigger Activation");
 
-		// EMERGENCY RECOVERY SEQUENCE:
-		// 1. Forcefully break the Application Thread out of its wait lock block
+		// 1. SIGNAL INVERSION BREAK: Forcefully flag the loop to stop
+		m_presentRunning.store(false, std::memory_order_release);
+
+		// 2. UNBLOCK HOOKS: Clear the synchronization metrics under a hard lock
 		{
 		  std::unique_lock<std::mutex> lock(m_presentMutex);
 		  m_framesRendered.store(0, std::memory_order_release);
 		  m_framesPresented.store(0, std::memory_order_release);
 
-		  // Clear any stale packets out of the queue
+		  // Clear out any stale command lists holding references
 		  std::lock_guard<std::mutex> qLock(m_queueMutex);
 		  while(!m_frameQueue.empty()) m_frameQueue.pop();
 		}
 
-		// 2. Notify the condition variables to wake up any sleeping threads
-		m_renderCv.notify_all();
+		// 3. FORCE WAKEUP: Wake up BOTH condition variables instantly!
+		// This forces the old Present Thread to wake up, read m_presentRunning == false, 
+		// break out of its loop, and terminate cleanly on its own timeline!
 		m_presentCv.notify_all();
+		m_renderCv.notify_all();
 
-		// 3. Restart the Present Thread cleanly from scratch
-		m_presentRunning.store(false, std::memory_order_release);
-		StartPresentThread();
+		// 4. DETACHED RECYCLING:
+		// Instead of calling StartPresentThread() which blocks on join(), 
+		// let's call a safe, non-blocking asynchronous thread update method!
+		RestartPresentThreadAsynchronously();
 
 		m_stallCount = 0;
 	  }
@@ -2282,4 +2365,20 @@ void DX::DeviceResources::WatchdogThreadLoop()
 	  m_stallCount = 0;
 	}
   }
+}
+
+void DX::DeviceResources::RestartPresentThreadAsynchronously()
+{
+  // If the old thread handle is active but trapped, detach it so the OS 
+  // can harvest its memory resources independently when it finally finishes winding down!
+  if(m_presentThread.joinable())
+  {
+	m_presentThread.detach(); // Severs the blocking link completely
+  }
+
+  // Clear state flags for a fresh start
+  m_presentRunning.store(true, std::memory_order_release);
+
+  // Re-spawn the high-priority presentation loop on a fresh kernel execution slice
+  m_presentThread = std::thread(&DeviceResources::PresentThreadLoop, this);
 }

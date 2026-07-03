@@ -714,29 +714,6 @@ frameOut.crop.y1 = dst.y2;
 frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
 }
 
-// Latency matching DXGI default max frame latency
-const int QUERY_LATENCY = 3;
-
-struct FrameQuery {
-  ID3D11Query* disjoint = nullptr;
-  ID3D11Query* start = nullptr;
-  ID3D11Query* end = nullptr;
-  bool is_active = false;
-};
-std::vector<FrameQuery> query_ring(QUERY_LATENCY);
-int current_write_slot = 0;
-
-void InitProfiling(pl_d3d11 d3d) {
-  D3D11_QUERY_DESC desc_disjoint = {D3D11_QUERY_TIMESTAMP_DISJOINT, 0};
-  D3D11_QUERY_DESC desc_timestamp = {D3D11_QUERY_TIMESTAMP, 0};
-
-  for(int i = 0; i < QUERY_LATENCY; i++) {
-	d3d->device->CreateQuery(&desc_disjoint, &query_ring [i].disjoint);
-	d3d->device->CreateQuery(&desc_timestamp, &query_ring [i].start);
-	d3d->device->CreateQuery(&desc_timestamp, &query_ring [i].end);
-	query_ring [i].is_active = false;
-  }
-}
 //---------------------------------------------------
 //
 //
@@ -1118,13 +1095,60 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	opt->color_adjustment.contrast = CPLHelper::ContrastKodi2Pl(videoSettings.m_PlaceboContrastSdrSdr);
   }
 
-  static bool bProfilingInit = false;
-  if(!bProfilingInit)
+  pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
+  ID3D11DeviceContext* pDeviceContext = nullptr;
+  d3d11->device->GetImmediateContext(&pDeviceContext);
+#if 1 //cl profiling in deferred context always result in 0 execution time, need to move to presentThreadLoop
+
+#if 1
+  // GPU profiling
+  if(!pDeviceContext) return;
+  DX::DeviceResources::FrameQuery& old_frame = DX::DeviceResources::Get()->getOldFrame();
+
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
   {
-	InitProfiling(PL::PLInstance::Get()->GetD3d11());
-	bProfilingInit = true;
+	pMultithread->Enter();
   }
 
+  if(old_frame.is_active) //cl && old_frame.disjoint && old_frame.start && old_frame.end)
+  {
+	D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
+
+	HRESULT hr = pDeviceContext->GetData(old_frame.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+
+	if(hr == S_OK) {
+	  UINT64 start_time = 0;
+	  UINT64 end_time = 0;
+	  pDeviceContext->GetData(old_frame.start, &start_time, sizeof(UINT64), 0);
+	  pDeviceContext->GetData(old_frame.end, &end_time, sizeof(UINT64), 0);
+
+	  if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
+	  {
+		double freq = static_cast<double>(disjoint_data.Frequency);
+		buffer->m_RenderDurationGpu = (static_cast<float>(end_time - start_time) / freq);
+		renderTimeMonitorGpu.update(buffer->m_RenderDurationGpu);
+	  }
+	  old_frame.is_active = false;
+	}
+  }
+
+  ID3D11DeviceContext* pDeferredContext = DX::DeviceResources::Get()->GetD3DContext();
+  DX::DeviceResources::FrameQuery& current_frame = DX::DeviceResources::Get()->getCurrentFrame();
+
+  if(pDeferredContext && !current_frame.is_active && current_frame.start)
+  {
+	// Record the start timestamp token inside the deferred command list stream
+	pDeferredContext->End(current_frame.start);
+  }
+
+
+  if(pMultithread)
+  {
+	pMultithread->Leave(); // Release the immediate context lock
+  }
+
+#else
   // GPU profiling
   pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
   ID3D11DeviceContext* pDeviceContext = nullptr;
@@ -1158,6 +1182,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   FrameQuery& current_frame = query_ring [current_write_slot];
   pDeviceContext->Begin(current_frame.disjoint);
   pDeviceContext->End(current_frame.start);
+#endif
+#endif
   LARGE_INTEGER frequency;
   static double oldRenderPts = 0.0;
   QueryPerformanceFrequency(&frequency);
@@ -1296,53 +1322,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	}
   }
   pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
-  // Stop gpu timer
-  pDeviceContext->End(current_frame.end);
-  pDeviceContext->End(current_frame.disjoint);
-  current_frame.is_active = true;
-  current_write_slot = (current_write_slot + 1) % QUERY_LATENCY;
 
-  if(pDeviceContext)
-  {
-
-	// Release the raw context pointer to prevent COM leaks
-	pDeviceContext->Release();
-  }
-  /*
-  if(pDeviceContext)
-  {
-	// Create an array of null pointers to clear the first 4 shader resource slots
-	ID3D11ShaderResourceView* nullSRVs [4] = {nullptr, nullptr, nullptr, nullptr};
-
-	// Clear slots from both Vertex and Pixel shader pipelines
-	pDeviceContext->VSSetShaderResources(0, 4, nullSRVs);
-	pDeviceContext->PSSetShaderResources(0, 4, nullSRVs);
-
-	// Release the context handle to prevent COM memory leaks
-	//pDeviceContext->Release();
-  }
-
-  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-  if(pDeviceContext && SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
-  {
-	pMultithread->Enter();
-
-	// Unbind all SRVs, RTVs, and UAVs from the pipeline 
-	// so the subsequent GUI recording pass cannot capture them
-	pDeviceContext->ClearState();
-	pDeviceContext->Flush();
-
-	pMultithread->Leave();
-  }
-  pDeviceContext->Release();
-
-  //pl_render_error err = pl_renderer_get_errors(PL::PLInstance::Get()->GetRenderer()).errors;
-  // cl unclear, libplacebo disabled peak detection for dolby vision in renderer.c
-  //if (vo->params) {
-  //  // Augment metadata with peak detection max_pq_y / avg_pq_y
-  //  vo->has_peak_detect_values = pl_renderer_get_hdr_metadata(p->rr, &vo->params->color.hdr);
-  //}
-  */
   sourceRect = dst; //cl Pass dst to next render stage...
   //pDeviceContext->Flush();
 }

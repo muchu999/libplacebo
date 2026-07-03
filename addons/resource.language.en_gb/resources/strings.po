@@ -25650,11 +25650,35 @@ msgid "Disable on screen basic debug info"
 msgstr ""
 
 msgctxt "#55371"
-msgid "Brightness"
+msgid "Brightness (SDR->SDR)"
 msgstr ""
 
 msgctxt "#55372"
-msgid "Contrast"
+msgid "Contrast (SDR->SDR)"
+msgstr ""
+
+msgctxt "#55373"
+msgid "Brightness (HDR->HDR)"
+msgstr ""
+
+msgctxt "#55374"
+msgid "Contrast (HDR->HDR)"
+msgstr ""
+
+msgctxt "#55375"
+msgid "Brightness (HDR->SDR)"
+msgstr ""
+
+msgctxt "#55376"
+msgid "Contrast (HDR->SDR)"
+msgstr ""
+
+msgctxt "#55377"
+msgid "Brightness (SDR->HDR)"
+msgstr ""
+
+msgctxt "#55378"
+msgid "Contrast (SDR->HDR)"
 msgstr ""
 
 

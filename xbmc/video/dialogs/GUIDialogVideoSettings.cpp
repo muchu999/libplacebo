@@ -1864,25 +1864,37 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	//AddPercentageSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, static_cast<int>(videoSettings.m_Gamma), 14047, 1, 466, usePopup);
 
 	float brightness;
-	if(CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
-	  brightness = videoSettings.m_PlaceboBrightnessHdrHdr;
-	else if(CRendererPL::isHdrIn() && !CRendererPL::isHdrOut())
-	  brightness = videoSettings.m_PlaceboBrightnessHdrSdr;
-	else if(!CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
-	  brightness = videoSettings.m_PlaceboBrightnessSdrHdr;
-	else
-	  brightness = videoSettings.m_PlaceboBrightnessSdrSdr;
 	float contrast;
-	if(CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
-	  contrast = videoSettings.m_PlaceboContrastHdrHdr;
-	else if(CRendererPL::isHdrIn() && !CRendererPL::isHdrOut())
-	  contrast = videoSettings.m_PlaceboContrastHdrSdr;
-	else if(!CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
-	  contrast = videoSettings.m_PlaceboContrastSdrHdr;
-	else
+	bool bHdrIn = CRendererPL::isHdrIn();
+	bool bHdrOut = CRendererPL::isHdrOut();
+	if(!bHdrIn && !bHdrOut)
+	{
+	  brightness = videoSettings.m_PlaceboBrightnessSdrSdr;
 	  contrast = videoSettings.m_PlaceboContrastSdrSdr;
-	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_BRIGHTNESS, 55371, SettingLevel::Basic, brightness, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55371, usePopup);
-	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_CONTRAST, 55372, SettingLevel::Basic, contrast, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55372, usePopup);
+	  AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_BRIGHTNESS, 55371, SettingLevel::Basic, brightness, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55371, usePopup);
+	  AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_CONTRAST, 55372, SettingLevel::Basic, contrast, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55372, usePopup);
+	}
+	else if(bHdrIn && bHdrOut)
+	{
+	  brightness = videoSettings.m_PlaceboBrightnessHdrHdr;
+	  contrast = videoSettings.m_PlaceboContrastHdrHdr;
+	  AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_BRIGHTNESS, 55373, SettingLevel::Basic, brightness, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55373, usePopup);
+	  AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_CONTRAST, 55374, SettingLevel::Basic, contrast, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55374, usePopup);
+	}
+	else if(bHdrIn && !bHdrOut)
+	{
+	  brightness = videoSettings.m_PlaceboBrightnessHdrSdr;
+	  contrast = videoSettings.m_PlaceboContrastHdrSdr;
+	  AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_BRIGHTNESS, 55375, SettingLevel::Basic, brightness, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55375, usePopup);
+	  AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_CONTRAST, 55376, SettingLevel::Basic, contrast, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55376, usePopup);
+	}
+	else if(!bHdrIn && bHdrOut)
+	{
+	  brightness = videoSettings.m_PlaceboBrightnessSdrHdr;
+	  contrast = videoSettings.m_PlaceboContrastSdrHdr;
+	  AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_BRIGHTNESS, 55377, SettingLevel::Basic, brightness, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55377, usePopup);
+	  AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_CONTRAST, 55378, SettingLevel::Basic, contrast, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55378, usePopup);
+	}
 	AddSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, videoSettings.m_Gamma, "{:5.1f}", 0.0f, 0.1f, 100.0f, 466, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_HUE, 55222, SettingLevel::Basic, videoSettings.m_PlaceboHue, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55222, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSaturation, "{0:4.1f}", (float)0.0, (float)0.5, (float)100.0, 55210, usePopup);
