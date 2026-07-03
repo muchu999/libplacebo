@@ -20,6 +20,7 @@
 #include "settings/SettingsComponent.h"
 #include "utils/SystemInfo.h"
 #include "utils/log.h"
+#include "VideoRenderers/LibPlacebo/PlHelper.h"
 #include "windowing/GraphicContext.h"
 
 #include "platform/win32/CharsetConverter.h"
@@ -61,6 +62,8 @@ namespace winrt
              CWIN32Util::FormatHRESULT(hr));
 #define CHECK_ERR() if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return; }
 #define RETURN_ERR(ret) if (FAILED(hr)) { LOG_HR(hr); breakOnDebug; return (##ret); }
+
+CPLHelper::CMonitor m_queueDepthTracker (120);
 
 bool DX::DeviceResources::CBackBuffer::Acquire(ID3D11Texture2D* pTexture)
 {
@@ -872,7 +875,7 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.Stereo = bHWStereoEnabled;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 #ifdef TARGET_WINDOWS_DESKTOP
-    swapChainDesc.BufferCount = 3; // HDR 60 fps needs 6 buffers to avoid frame drops  //cl 
+    swapChainDesc.BufferCount = 3; //cl 3 for presenter thread. 
 #else
     swapChainDesc.BufferCount = 3; // Xbox don't like 6 backbuffers (3 is fine even for 4K 60 fps)
 #endif
@@ -1908,7 +1911,12 @@ DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo() const
       DXGIFormatToShortString(desc.Format), bits,
       DX::Windowing()->UseLimitedColor() ? "limited" : "full", range_min, range_max);
 
-  info.judder = StringUtils::Format("Judder TokenBunching: {}, CadenceDRop: {}, VramStall: {}", m_JudderTokenBunching, m_JudderCadenceDrop, m_JudderVramStall);
+  uint64_t displayBunchingCount = m_JudderTokenBunching.load(std::memory_order_relaxed);
+  uint64_t cadenceDropCount = m_JudderCadenceDrop.load(std::memory_order_relaxed);
+  //uint64_t vramStallCount = m_JudderVramStall.load(std::memory_order_relaxed);
+  double mean;
+  double var = m_queueDepthTracker.calculateVariance(mean);
+  info.judder = StringUtils::Format("Queue Depth Min/Max: {:2.0f} / {:2.0f}, mean: {:4.1f}, cadence drop: {}", m_queueDepthTracker.calculateMin(), m_queueDepthTracker.calculatePeak(), mean, cadenceDropCount);
 
   return info;
 }
@@ -2202,7 +2210,23 @@ HRESULT DX::DeviceResources::SignalFrameReady()
   m_framesRendered.fetch_add(1, std::memory_order_seq_cst); // Force strict global ordering
   m_presentCv.notify_one();
 
-  const size_t maxAllowedQueueDepth = 1;
+  const size_t maxAllowedQueueDepth = 6;
+
+  size_t rendered = m_framesRendered.load(std::memory_order_seq_cst);
+  size_t presented = m_framesPresented.load(std::memory_order_seq_cst);
+
+  float currentDepth = static_cast<float>(rendered - presented);
+
+  m_queueDepthTracker.update(currentDepth);
+
+  if(currentDepth >= maxAllowedQueueDepth+1)
+  {
+	m_JudderTokenBunching.fetch_add(1, std::memory_order_relaxed);
+  }
+  else if(currentDepth <= 2.0f && m_presentRunning.load(std::memory_order_acquire))
+  {
+	m_JudderCadenceDrop.fetch_add(1, std::memory_order_relaxed);
+  }
 
   m_renderCv.wait(lock, [this, maxAllowedQueueDepth] {
 	size_t rendered = m_framesRendered.load(std::memory_order_seq_cst);

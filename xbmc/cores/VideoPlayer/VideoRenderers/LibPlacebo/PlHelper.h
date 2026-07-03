@@ -221,6 +221,20 @@ public:
 	  return maxVal;
 	}
 
+	double calculateMin() const {
+	  size_t count = getActiveCount();
+	  if(count == 0) return 0.0;
+
+	  double minVal = history [0];
+	  for(size_t i = 1; i < count; ++i) {
+		if(history [i] < minVal) {
+		  minVal = history [i];
+		}
+	  }
+	  return minVal;
+	}
+
+
 	void reset(void) {
 	  writeIndex = 0;
 	  skipCount = 0;

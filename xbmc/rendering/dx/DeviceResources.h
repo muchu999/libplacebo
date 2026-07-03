@@ -7,7 +7,6 @@
  */
 
 #pragma once
-
 #include "DirectXHelper.h"
 #include "HDRStatus.h"
 #include "guilib/D3DResource.h"
@@ -179,9 +178,9 @@ namespace DX
 	bool InitializeDecoderResources(int dxva2Adapter);
 
   private:
-	UINT64 m_JudderVramStall = 0;
-	UINT64 m_JudderTokenBunching = 0;
-	UINT64 m_JudderCadenceDrop = 0;
+	std::atomic<uint64_t> m_JudderVramStall = 0;
+	std::atomic<uint64_t> m_JudderTokenBunching = 0;
+	std::atomic<uint64_t> m_JudderCadenceDrop = 0;
 	UINT64 m_lastTrackedPresent = 0;
 	UINT64 m_lastTrackedRefresh = 0;
 	INT64  m_lastExpectedRefreshes = -1;
@@ -331,5 +330,7 @@ public:
   void StartWatchdog();
   void StopWatchdog();
   void RestartPresentThreadAsynchronously();
+  
+
   };
 }
