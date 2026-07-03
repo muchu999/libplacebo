@@ -2183,38 +2183,49 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	return lastPresentHr;
   }
 
-  // 3. The Backpressure Throttling Valve
-  // This is the missing piece that prevents resource destruction crashes
+  // 1. HARDWARE PIPELINE SYNCHRONIZATION:
+  // We lock out context conflicts and FORCE the immediate context to flush 
+  // its font atlas texture updates straight to the GPU hardware timeline!
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(SUCCEEDED(m_d3dContext.As(&pMultithread))) pMultithread->Enter();
+
+  if(m_d3dContext)
+  {
+	m_d3dContext->Flush(); // CRITICAL: Submits the text pixels before the Present thread draws them!
+  }
+
+  if(pMultithread) pMultithread->Leave();
+
+  // 2. THE AIRTIGHT HANDSHAKE LOCK:
   std::unique_lock<std::mutex> lock(m_presentMutex);
 
-  // 2. Queue Increment Passage
-  // Increment rendered frames AFTER the flush to ensure instructions are in the driver
-  m_framesRendered.fetch_add(1, std::memory_order_release);
-  m_presentCv.notify_one(); // Wake up presentation loop if it is sleeping
+  m_framesRendered.fetch_add(1, std::memory_order_seq_cst); // Force strict global ordering
+  m_presentCv.notify_one();
 
-  // Set your maximum pipeline smoothing depth here.
-  // For BufferCount = 3, use 1 or 2. For BufferCount = 6, use 4 or 5.
-  const size_t maxAllowedQueueDepth = 1;  // 0 = no throttling, 1 = one frame in queue, 2 = two frames in queue, etc.
+  const size_t maxAllowedQueueDepth = 1;
 
   m_renderCv.wait(lock, [this, maxAllowedQueueDepth] {
-	size_t pendingInQueue = m_framesRendered.load(std::memory_order_acquire) - m_framesPresented.load(std::memory_order_acquire);
-	return (pendingInQueue <= maxAllowedQueueDepth) || !m_presentRunning.load(std::memory_order_acquire);
+	size_t rendered = m_framesRendered.load(std::memory_order_seq_cst);
+	size_t presented = m_framesPresented.load(std::memory_order_seq_cst);
+
+	if(!m_presentRunning.load(std::memory_order_acquire))
+	  return true;
+
+	// Strict throttle evaluation condition
+	return (rendered <= presented + maxAllowedQueueDepth);
 	});
 
-  // 4. Post-Deadlock Cleanup Protection:
-  // If we broke out of the wait because the presenter thread died, 
-  // clear out the stale rendered count so subsequent frames don't get trapped immediately.
   if(!m_presentRunning.load(std::memory_order_acquire))
   {
 	m_framesRendered.store(0, std::memory_order_release);
 	m_framesPresented.store(0, std::memory_order_release);
-
-	// Safely clear the stale FIFO queue memory packets under lock
 	std::lock_guard<std::mutex> qLock(m_queueMutex);
 	while(!m_frameQueue.empty()) m_frameQueue.pop();
   }
+
   return S_OK;
 }
+
 
 void DX::DeviceResources::DrainPresentationQueue()
 {
