@@ -996,6 +996,8 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
   }
 
   StartPresentThread();
+  StartWatchdog();
+
 }
 
 // Determine the dimensions of the render target and whether it will be scaled down.
@@ -2081,19 +2083,17 @@ void DX::DeviceResources::PresentThreadLoop()
 	  // Hardware test valve to catch occlusion properties without trapping context locks
 	  HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
 
-	  // Explicitly unbind all pipeline hooks from the presentation thread pass
-	  //m_d3dContext->ClearState();
-	  //m_d3dContext->Flush();
-
-	  if(testHr == DXGI_STATUS_OCCLUDED || testHr == DXGI_ERROR_WAS_STILL_DRAWING)
+	  HRESULT hr = S_OK;
+	  if(testHr == DXGI_STATUS_OCCLUDED)
 	  {
-		pMultithread->Leave();
-		std::this_thread::sleep_for(std::chrono::milliseconds(5));
-		continue;
+		hr = m_swapChain->Present(1, DXGI_PRESENT_DO_NOT_SEQUENCE);
+	  }
+	  else
+	  {
+		hr = m_swapChain->Present(1, 0);
 	  }
 
 	  // Safe to present natively on high priority thread context
-	  HRESULT hr = m_swapChain->Present(1, 0);
 	  m_presentResult.store(hr, std::memory_order_release);
 	  // FIX A: Unbind all active resource views from the immediate context pipeline
 	  //m_d3dContext->ClearState();
@@ -2134,6 +2134,7 @@ HRESULT DX::DeviceResources::SignalFrameReady()
   if(!m_presentRunning.load(std::memory_order_acquire) && m_swapChain)
   {
 	StartPresentThread();
+	std::this_thread::yield();
   }
 
   HRESULT lastPresentHr = m_presentResult.load(std::memory_order_acquire);
@@ -2143,31 +2144,14 @@ HRESULT DX::DeviceResources::SignalFrameReady()
 	return lastPresentHr;
   }
 
-  // 1. Flush instructions safely under the hardware context lock
-  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-  if(SUCCEEDED(m_d3dContext.As(&pMultithread)))
-  {
-	pMultithread->Enter();
-  }
-
-  if(m_d3dContext)
-  {
-	m_d3dContext->Flush();
-  }
-
-  if(pMultithread)
-  {
-	pMultithread->Leave();
-  }
+  // 3. The Backpressure Throttling Valve
+  // This is the missing piece that prevents resource destruction crashes
+  std::unique_lock<std::mutex> lock(m_presentMutex);
 
   // 2. Queue Increment Passage
   // Increment rendered frames AFTER the flush to ensure instructions are in the driver
   m_framesRendered.fetch_add(1, std::memory_order_release);
   m_presentCv.notify_one(); // Wake up presentation loop if it is sleeping
-
-  // 3. The Backpressure Throttling Valve
-  // This is the missing piece that prevents resource destruction crashes
-  std::unique_lock<std::mutex> lock(m_presentMutex);
 
   // Set your maximum pipeline smoothing depth here.
   // For BufferCount = 3, use 1 or 2. For BufferCount = 6, use 4 or 5.
@@ -2199,4 +2183,103 @@ void DX::DeviceResources::KeepResourceAliveThisFrame(const Microsoft::WRL::ComPt
 
   std::lock_guard<std::mutex> lock(m_lifelineMutex);
   m_currentFrameLifelines.push_back(resource); // Locks the reference count up by +1
+}
+bool DX::DeviceResources::IsHDROutput1() const 
+{
+  DXGI_SWAP_CHAIN_DESC1 desc;
+  HRESULT hr = DX::DeviceResources::Get()->GetSwapChain()->GetDesc1(&desc);
+  HDR_STATUS hdrStatus = CWIN32Util::GetWindowsHDRStatus();
+  const bool isHdrEnabled = (hdrStatus == HDR_STATUS::HDR_ON);
+
+  return (desc.Format == DXGI_FORMAT_R10G10B10A2_UNORM) && isHdrEnabled;
+}
+
+void DX::DeviceResources::LogThreadState(const std::string& location)
+{
+  size_t rendered = m_framesRendered.load(std::memory_order_acquire);
+  size_t presented = m_framesPresented.load(std::memory_order_acquire);
+  bool running = m_presentRunning.load(std::memory_order_acquire);
+
+  size_t qSize = 0;
+  {
+	std::lock_guard<std::mutex> qLock(m_queueMutex);
+	qSize = m_frameQueue.size();
+  }
+
+  CLog::Log(LOGERROR, "dx-watchdog: Location: {} | Rendered: {} | Presented: {} | QueueSize: {} | Running: {}",
+	location, rendered, presented, qSize, running ? "YES" : "NO");
+}
+
+void DX::DeviceResources::StartWatchdog()
+{
+  if(m_watchdogRunning.load()) return;
+  m_watchdogRunning.store(true);
+  m_watchdogThread = std::thread(&DeviceResources::WatchdogThreadLoop, this);
+}
+
+void DX::DeviceResources::StopWatchdog()
+{
+  m_watchdogRunning.store(false);
+  if(m_watchdogThread.joinable())
+  {
+	m_watchdogThread.join();
+  }
+}
+
+void DX::DeviceResources::WatchdogThreadLoop()
+{
+  ::SetThreadPriority(::GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); // Keep it low overhead
+
+  while(m_watchdogRunning.load(std::memory_order_acquire))
+  {
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+	if(!m_presentRunning.load(std::memory_order_acquire))
+	{
+	  m_stallCount = 0;
+	  continue; // Skip if presentation isn't supposed to be running
+	}
+
+	uint64_t currentPresented = m_framesPresented.load(std::memory_order_acquire);
+
+	if(currentPresented == m_lastCheckPresented)
+	{
+	  // The presentation counter has stopped moving!
+	  m_stallCount++;
+
+	  if(m_stallCount >= 8) // 4 full seconds of absolute zero movement
+	  {
+		CLog::Log(LOGERROR, "dx-watchdog: DETECTED HARD FREEZE! Triggering emergency recovery sequence...");
+		LogThreadState("Watchdog Trigger Activation");
+
+		// EMERGENCY RECOVERY SEQUENCE:
+		// 1. Forcefully break the Application Thread out of its wait lock block
+		{
+		  std::unique_lock<std::mutex> lock(m_presentMutex);
+		  m_framesRendered.store(0, std::memory_order_release);
+		  m_framesPresented.store(0, std::memory_order_release);
+
+		  // Clear any stale packets out of the queue
+		  std::lock_guard<std::mutex> qLock(m_queueMutex);
+		  while(!m_frameQueue.empty()) m_frameQueue.pop();
+		}
+
+		// 2. Notify the condition variables to wake up any sleeping threads
+		m_renderCv.notify_all();
+		m_presentCv.notify_all();
+
+		// 3. Restart the Present Thread cleanly from scratch
+		m_presentRunning.store(false, std::memory_order_release);
+		StartPresentThread();
+
+		m_stallCount = 0;
+	  }
+	}
+	else
+	{
+	  // Pipeline is running beautifully! Update the tracking marker.
+	  m_lastCheckPresented = currentPresented;
+	  m_stallCount = 0;
+	}
+  }
 }

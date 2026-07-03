@@ -1094,7 +1094,8 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   }
 
   m_bHdrIn = pl_color_transfer_is_hdr(frameIn.color.transfer);
-  m_bHdrOut = pl_color_transfer_is_hdr(frameOut.color.transfer);
+  //m_bHdrOut = DX::Windowing()->IsHDROutput(); //cl manually toggling HDR will not update this value...
+  m_bHdrOut = DX::DeviceResources::Get()->IsHDROutput1();
   if(m_bHdrIn && m_bHdrOut)
   {
 	opt->color_adjustment.brightness = CPLHelper::BrightnessKodi2Pl(videoSettings.m_PlaceboBrightnessHdrHdr);

@@ -25650,34 +25650,12 @@ msgid "Disable on screen basic debug info"
 msgstr ""
 
 msgctxt "#55371"
-msgid "Application thread priority"
+msgid "Brightness"
 msgstr ""
 
 msgctxt "#55372"
-msgid "Defaults to 0 in original Kodi, increasing to 15 will help reduce judder"
+msgid "Contrast"
 msgstr ""
 
-msgctxt "#55373"
-msgid "Display Brightness SDR"
-msgstr ""
 
-msgctxt "#55374"
-msgid "Display Contrast SDR"
-msgstr ""
-
-msgctxt "#55375"
-msgid "Display Brightness HDR"
-msgstr ""
-
-msgctxt "#55376"
-msgid "Display Contrast HDR"
-msgstr ""
-
-msgctxt "#55377"
-msgid "Presentation mode"
-msgstr ""
-
-msgctxt "#55378"
-msgstr "Windows present1 mode is Kodi's default, pacer mode might help judder in some cases"
-msgstr ""
 

@@ -132,6 +132,8 @@ namespace DX
     void SetHdrMetaData(DXGI_HDR_METADATA_HDR10& hdr10) const;
     void SetHdrColorSpace(const DXGI_COLOR_SPACE_TYPE colorSpace);
     bool IsHDROutput() const { return m_IsHDROutput; }
+	bool IsHDROutput1() const;
+
     bool IsTransferPQ() const { return m_IsTransferPQ; }
 
     // DX resources registration
@@ -283,13 +285,21 @@ private:
 
 	// Change your queue to use this wrapper
 	std::queue<FramePackage> m_frameQueue;
-
 	std::mutex m_queueMutex;
-
 
 	void PresentThreadLoop();
 	void StartPresentThread();
 	void StopPresentThread();
+	void LogThreadState(const std::string& location);
+	std::thread             m_watchdogThread;
+	std::atomic<bool>       m_watchdogRunning {false};
+	uint64_t                m_lastCheckPresented {0};
+	int                     m_stallCount {0};
+
+	void WatchdogThreadLoop();
+
+
+
 public:
   void KeepResourceAliveThisFrame(const Microsoft::WRL::ComPtr<IUnknown>& resource);
   HRESULT SignalFrameReady();
@@ -299,5 +309,7 @@ public:
   // Public check so the rendering loop can audit the device state
   HRESULT GetLastPresentResult() const { return m_presentResult.load(std::memory_order_acquire); }
   void ResetPresentResult() { m_presentResult.store(S_OK, std::memory_order_release); }
+  void StartWatchdog();
+  void StopWatchdog();
   };
 }

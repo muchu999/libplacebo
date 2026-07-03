@@ -804,13 +804,13 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   {
 	float val = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	if(CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
-	  vs.m_PlaceboContrastHdrHdr = std::round(val * 20.0) * 0.05;
+	  vs.m_PlaceboContrastHdrHdr = std::round(val * 50.0) * 0.02;
 	else if (CRendererPL::isHdrIn() && !CRendererPL::isHdrOut())
-	  vs.m_PlaceboContrastHdrSdr = std::round(val * 20.0) * 0.05;
+	  vs.m_PlaceboContrastHdrSdr = std::round(val * 50.0) * 0.02;
 	else if(!CRendererPL::isHdrIn() && CRendererPL::isHdrOut())
-	  vs.m_PlaceboContrastSdrHdr = std::round(val * 20.0) * 0.05;
+	  vs.m_PlaceboContrastSdrHdr = std::round(val * 50.0) * 0.02;
 	else
-	  vs.m_PlaceboContrastSdrSdr = std::round(val * 20.0) * 0.05;
+	  vs.m_PlaceboContrastSdrSdr = std::round(val * 50.0) * 0.02;
 	appPlayer->SetVideoSettings(vs);
 	}
   else if (settingId == SETTING_LIB_PLACEBO_DEINTERLACE_ENABLED)
@@ -1881,8 +1881,8 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	  contrast = videoSettings.m_PlaceboContrastSdrHdr;
 	else
 	  contrast = videoSettings.m_PlaceboContrastSdrSdr;
-	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_BRIGHTNESS, 55373, SettingLevel::Basic, brightness, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55373, usePopup);
-	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_CONTRAST, 55374, SettingLevel::Basic, contrast, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55374, usePopup);
+	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_BRIGHTNESS, 55371, SettingLevel::Basic, brightness, "{:6.2f}", 0.0f, 0.05f, 100.0f, 55371, usePopup);
+	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_CONTRAST, 55372, SettingLevel::Basic, contrast, "{:6.2f}", 0.0f, 0.02f, 100.0f, 55372, usePopup);
 	AddSlider(groupColorAjustment, SETTING_VIDEO_GAMMA, 466, SettingLevel::Basic, videoSettings.m_Gamma, "{:5.1f}", 0.0f, 0.1f, 100.0f, 466, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_HUE, 55222, SettingLevel::Basic, videoSettings.m_PlaceboHue, "{0:3.0f}", (float)0.0, (float)1.0, (float)360.0, 55222, usePopup);
 	AddSlider(groupColorAjustment, SETTING_LIB_PLACEBO_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSaturation, "{0:4.1f}", (float)0.0, (float)0.5, (float)100.0, 55210, usePopup);
