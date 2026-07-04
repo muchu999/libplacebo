@@ -242,12 +242,6 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
 
   std::unique_ptr<CDXTexture> pNewTexture = std::make_unique<CDXTexture>(m_textureWidth, newHeight, XB_FMT_A8);
 
-  //std::unique_ptr<CD3DTexture> newSpeedupTexture = std::make_unique<CD3DTexture>();
-  //if (!newSpeedupTexture->Create(m_textureWidth, newHeight, 1, D3D11_USAGE_DEFAULT,
-  //                               DXGI_FORMAT_R8_UNORM))
-  //{
-  //  return nullptr;
-  //}
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> newSpeedupSRV;
   D3D11_TEXTURE2D_DESC desc = {};
   desc.Width = m_textureWidth;
@@ -267,7 +261,6 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
   if(FAILED(hr)) return nullptr;
 
   D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-  // FIX 3: Match the SRV format to the core Alpha texture canvas
   srvDesc.Format = DXGI_FORMAT_R8_UNORM;
   srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
   srvDesc.Texture2D.MipLevels = 1;
@@ -282,8 +275,6 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
 
   if(pContext && SUCCEEDED(pContext.As(&pMultithread)))
   {
-	// Force the Application Thread to freeze right here if the Present Thread
-	// is in the middle of drawing UI text with the current m_speedupTexture.
 	pMultithread->Enter();
 	isLocked = true;
   }
@@ -311,11 +302,9 @@ std::unique_ptr<CTexture> CGUIFontTTFDX::ReallocTexture(unsigned int& newHeight)
 	}
   }
 
-  // Now you can safely replace the handle without destroying the VRAM allocation!
   m_speedupTexture = newSpeedupTexture;
   m_speedupSRV = newSpeedupSRV;
 
-  // 2. Safely release the lock after pointers are fully updated and swapped
   if(isLocked && pMultithread)
   {
 	pMultithread->Leave();
@@ -329,14 +318,12 @@ bool CGUIFontTTFDX::CopyCharToTexture(
 {
   FT_Bitmap bitmap = bitGlyph->bitmap;
 
-  // ComPtr handles reference counting automatically, so NO MANUAL RELEASE IS ALLOWED
   ComPtr<ID3D11DeviceContext> pContext = DX::DeviceResources::Get()->GetImmediateContext();
   ComPtr<ID3D11Multithread> pMultithread;
 
   if(m_speedupTexture && pContext && bitmap.buffer && SUCCEEDED(pContext.As(&pMultithread)))
   {
 	if(x2 <= x1 || y2 <= y1) {
-	  // FIX: Remove manual pContext->Release() here
 	  return false;
 	}
 
@@ -346,11 +333,9 @@ bool CGUIFontTTFDX::CopyCharToTexture(
 	unsigned int copyHeight = std::min(glyphHeight, (unsigned int) bitmap.rows);
 
 	if(copyWidth == 0 || copyHeight == 0) {
-	  // FIX: Remove manual pContext->Release() here
 	  return false;
 	}
 
-	// A. Strip Freetype's alignment padding
 	std::vector<unsigned char> cleanBuffer(copyWidth * copyHeight, 0);
 	unsigned int srcPitch = std::abs(bitmap.pitch);
 	unsigned char* srcData = bitmap.buffer;
@@ -361,22 +346,14 @@ bool CGUIFontTTFDX::CopyCharToTexture(
 	  memcpy(dstData + (row * copyWidth), srcData + (row * srcPitch), copyWidth);
 	}
 
-	// B. Thread-Lock Shield
 	pMultithread->Enter();
-
 	CD3D11_BOX dstBox(x1, y1, 0, x1 + copyWidth, y1 + copyHeight, 1);
-
-	// C. Upload to the GPU
 	pContext->UpdateSubresource(m_speedupTexture.Get(), 0, &dstBox, cleanBuffer.data(), copyWidth, 0);
-
 	pMultithread->Leave();
 
-	// FIX: Remove manual pContext->Release() here. 
-	// ComPtr's destructor will clean this up safely on return!
 	return true;
   }
 
-  // FIX: Remove manual pContext->Release() here
   return false;
 }
 
