@@ -1068,6 +1068,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	opt->color_map_params.gamut_constants.softclip_knee = videoSettings.m_PlaceboSdrGamutConstantsSoftclipKnee;
   }
 
+  // Process HDR/SDR brightness and contrast settings
   m_bHdrIn = pl_color_transfer_is_hdr(frameIn.color.transfer);
   //m_bHdrOut = DX::Windowing()->IsHDROutput(); //cl manually toggling HDR will not update this value...
   m_bHdrOut = DX::DeviceResources::Get()->IsHDROutput1();
@@ -1093,66 +1094,28 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	opt->color_adjustment.contrast = CPLHelper::ContrastKodi2Pl(videoSettings.m_PlaceboContrastSdrSdr);
   }
 
-  pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
-  ID3D11DeviceContext* pDeviceContext = nullptr;
-  d3d11->device->GetImmediateContext(&pDeviceContext);
-#if 0
-  // GPU profiling
-  if(!pDeviceContext) return;
-  DX::DeviceResources::FrameQuery& old_frame = DX::DeviceResources::Get()->getOldFrame();
 
-  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-  if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
-  {
-	pMultithread->Enter();
-  }
-
-  if(old_frame.is_active) //cl && old_frame.disjoint && old_frame.start && old_frame.end)
-  {
-	D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
-
-	HRESULT hr = pDeviceContext->GetData(old_frame.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
-
-	if(hr == S_OK) {
-	  UINT64 start_time = 0;
-	  UINT64 end_time = 0;
-	  pDeviceContext->GetData(old_frame.start, &start_time, sizeof(UINT64), 0);
-	  pDeviceContext->GetData(old_frame.end, &end_time, sizeof(UINT64), 0);
-
-	  if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
-	  {
-		double freq = static_cast<double>(disjoint_data.Frequency);
-		buffer->m_RenderDurationGpu = (static_cast<float>(end_time - start_time) / freq);
-		renderTimeMonitorGpu.update(buffer->m_RenderDurationGpu);
-	  }
-	  old_frame.is_active = false;
-	}
-  }
-
-  ID3D11DeviceContext* pDeferredContext = DX::DeviceResources::Get()->GetD3DContext();
-  DX::DeviceResources::FrameQuery& current_frame = DX::DeviceResources::Get()->getCurrentFrame();
-
-  if(pDeferredContext && !current_frame.is_active && current_frame.start)
-  {
-	// Record the start timestamp token inside the deferred command list stream
-	pDeferredContext->End(current_frame.start);
-  }
-
-
-  if(pMultithread)
-  {
-	pMultithread->Leave(); // Release the immediate context lock
-  }
-
-#else
+  // Init GPU profiling, //cl move?
   static bool bInit = false;
   if(!bInit)
   {
 	InitProfiling();
     bInit = true;
   }
+  else
+  {
+	// reset the profiling if queries are invalid, something destroyed the query objects
+	FrameQuery& frame = m_queryRing [m_currentWriteSlot]; //cl just choose one ?
+	if(!frame.disjoint || !frame.start || !frame.end)
+	{
+	  InitProfiling();
+	}
+  }
 
-  // GPU profiling
+  // get GPU profiling stats for OSD
+  pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
+  ID3D11DeviceContext* pDeviceContext = nullptr;
+  d3d11->device->GetImmediateContext(&pDeviceContext);
   int read_slot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
   FrameQuery& old_frame = m_queryRing [read_slot];
 
@@ -1161,189 +1124,230 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
 
 	// Pass D3D11_ASYNC_GETDATA_DONOTFLUSH flag to guarantee 0% blocking/stalling
-	HRESULT hr = pDeviceContext->GetData(old_frame.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+	{
+	  HRESULT hr = pDeviceContext->GetData(old_frame.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
 
-	if(hr == S_OK) { // GPU has finished writing data to this historical frame slot
-	  UINT64 start_time = 0;
-	  UINT64 end_time = 0;
-	  pDeviceContext->GetData(old_frame.start, &start_time, sizeof(UINT64), 0);
-	  pDeviceContext->GetData(old_frame.end, &end_time, sizeof(UINT64), 0);
+	  if(hr == S_OK) { // GPU has finished writing data to this historical frame slot
+		UINT64 start_time = 0;
+		UINT64 end_time = 0;
+		pDeviceContext->GetData(old_frame.start, &start_time, sizeof(UINT64), 0);
+		pDeviceContext->GetData(old_frame.end, &end_time, sizeof(UINT64), 0);
 
-	  if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
-	  {
-		double freq = static_cast<double>(disjoint_data.Frequency);
-		buffer->m_RenderDurationGpu = (static_cast<float>(end_time - start_time) / freq);
-		renderTimeMonitorGpu.update(buffer->m_RenderDurationGpu);
+		if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
+		{
+		  double freq = static_cast<double>(disjoint_data.Frequency);
+		  buffer->m_RenderDurationGpu = (static_cast<float>(end_time - start_time) / freq);
+		  renderTimeMonitorGpu.update(buffer->m_RenderDurationGpu);
+		}
+		old_frame.is_active = false; // Reset slot for reuse
 	  }
-	  old_frame.is_active = false; // Reset slot for reuse
 	}
   }
-#endif
 
-
-  //----------------
-  // Render Image
-  //----------------
+  // Render 
   if((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue)
   {
-	LARGE_INTEGER frequency;
-	static double oldRenderPts = 0.0;
-	QueryPerformanceFrequency(&frequency);
-	int64_t start = CurrentHostCounter();
-	if(pDeviceContext)
-	{
-	  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-	  if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
-	  {
-		pMultithread->Enter();
-	  }
-
-	  FrameQuery& current_frame = m_queryRing [m_currentWriteSlot];
-
-	  // Null check protection guard to prevent early startup crashes
-	  if(!current_frame.is_active && current_frame.disjoint && current_frame.start && current_frame.end)
-	  {
-		pDeviceContext->Begin(current_frame.disjoint);
-		pDeviceContext->End(current_frame.start);
-
-		bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
-
-		pDeviceContext->End(current_frame.end);
-		pDeviceContext->End(current_frame.disjoint);
-		current_frame.is_active = true;
-		m_currentWriteSlot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
-	  }
-	  else
-	  {
-		bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
-	  }
-	  if(pMultithread) pMultithread->Leave();
-	  pDeviceContext->Release();
-	}
-
-	int64_t end = CurrentHostCounter();
-	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
-	buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
-	renderTimeMonitor.update(buffer->m_RenderDuration);
-
-	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}",
-	  m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
-	oldRenderPts = renderPts;
+	RenderSingle(buffer, renderPts, videoSettings, sourceRect, dst, frameIn, frameOut, pDeviceContext);
   }
   else
   {
-	LARGE_INTEGER frequency;
-	static double oldRenderPts = 0.0;
-	QueryPerformanceFrequency(&frequency);
-	int64_t start = CurrentHostCounter();
-	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-	if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
-	{
-	  pMultithread->Enter(); // Block if Present Thread is currently processing the GUI list
-	}
-
-	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f}, renderPtsDiff: {:.3f}",
-	  m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
-	if(queueCheck.needReset(buffer->duration, renderPts))
-	{
-	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_queue_reset");
-	  pl_queue_reset(*PL::PLInstance::Get()->GetQueue());
-	  m_FrameMixerQueueResets++;
-	}
-	pl_queue* pQueue = PL::PLInstance::Get()->GetQueue();
-	if(!pl_queue_num_frames(*pQueue))
-	{
-	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_queue is empty");
-	}
-	else
-	{
-	  // Prepare queue update params
-	  struct pl_frame_mix mix {};
-	  pl_queue_params qParams {};
-	  qParams.pts = renderPts / 1000000; // + videoSettings.m_PlaceboTest / 1000.0; // - 0.021; // + 3*buffer->duration / 1000000 ;   
-	  qParams.radius = pl_frame_mix_radius(params) * videoSettings.m_PlaceboFrameMixerRadiusFactor;
-	  qParams.vsync_duration = 1.0 / m_ScreenFps; //cl 
-	  qParams.timeout = 0; //UINT64_MAX;
-	  //qParams.interpolation_threshold = 0.01;
-	  //qParams.drift_compensation = true;
-
-      //qParams.pts += videoSettings.m_PlaceboTest / 1000.0;
-      // Find min max pts in queue for debug
-	  pl_source_frame out = {};
-	  double minPts = std::numeric_limits<double>::max();
-	  double maxPts = std::numeric_limits<double>::lowest();
-	  for(int i = 0; i < pl_queue_num_frames(*pQueue); ++i)
-	  {
-		pl_queue_peek(*pQueue, i, &out);
-		if(!out.pts && !out.duration) // for interleaved material, libplacebo internally inserts fake frames
-		  continue;
-		if(out.pts < minPts) minPts = out.pts;
-		if(out.pts > maxPts) maxPts = out.pts;
-	  }
-	  double renderPtsPos = (maxPts == minPts) ? 0.5 : (renderPts / 1000000.0 - minPts) / (maxPts - minPts);
-	  double renderPtsShiftedPos = (maxPts == minPts) ? 0.5 : (qParams.pts - minPts) / (maxPts - minPts);
-
-	  // Queue update
-	  pl_queue_status res = pl_queue_update(*pQueue, &mix, &qParams);
-	  if(res != PL_QUEUE_OK)
-	  {
-		CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_queue_update failed with status {}", res);
-		if(res == PL_QUEUE_MORE)
-		  ++m_FrameMixerQueueMore;
-		else if(res == PL_QUEUE_ERR)
-		  ++m_FrameMixerQueueErr;
-		if(mix.num_frames == 0)
-		{
-		  // Nothing to present, there will be a timeout on FinalOutput down the road but it will recover. 
-		  // We could present something anyway but it will not help much. 
-		}
-	  }
-
-	  // Adjust crop parameters
-	  for(int j=0; j< mix.num_frames; ++j)
-	  {
-		pl_frame *frameIn = const_cast<pl_frame*>(mix.frames [j]); //cl do it in mapping but value is passed here...
-		pl_frame frameOut; //dummy
-		ApplyGeometry(videoSettings, sourceRect, dst, *frameIn, frameOut);
-	  }
-
-	  // Render
-	  m_FrameMixerNumFrames = mix.num_frames;
-	  bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
-	  if(pMultithread)
-	  {
-		pMultithread->Leave(); // Safely unlock context for the Present thread
-	  }
-
-	  if(!res2)
-	  {
-		CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_render_image_mix failed");
-		++m_FrameMixerRenderErrors;
-	  }
-
-	  // Stop timer
-	  int64_t end = CurrentHostCounter();
-	  buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
-	  buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
-	  renderTimeMonitor.update(buffer->m_RenderDuration);
-
-	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, LPvps: {:.3f}, SourceFps: {:.3f}, LPfps: {:.3f}, renderTime: {:6.3f}, renderTimeGpu: {:6.3f}, idx: {} bufferPts: {:.0f}, renderPts: {:.0f}, "
-		"renderPtsDiff: {:.0f}, qParamsPts: {:.0f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, minPts: {:.0f}, maxPts: {:.0f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
-		m_ScreenFps, pl_queue_estimate_vps(*pQueue), m_fps, pl_queue_estimate_fps(*pQueue), buffer->m_RenderDuration * 1000.0, buffer->m_RenderDurationGpu*1000.0, m_iBufferIndex, buffer->pts, renderPts,
-		(renderPts - oldRenderPts), qParams.pts*1000000, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), minPts*1000000, maxPts*1000000, renderPtsPos, renderPtsShiftedPos);
-	  oldRenderPts = renderPts;
-	  for(int i = 0; i < mix.num_frames; ++i)
-	  {
-		CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) (mix.frames [i]->user_data);
-		CLog::LogFC(LOGDEBUG, LOGPLACEBO, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
-	  }
-	}
+	RenderMix(buffer, renderPts, videoSettings, sourceRect, dst, frameOut, pDeviceContext);
   }
+  pDeviceContext->Release();
   pl_tex_destroy(PL::PLInstance::Get()->GetGpu(), &frameOut.planes [0].texture);
 
   sourceRect = dst; //cl Pass dst to next render stage...
   //pDeviceContext->Flush();
 }
+
+void CRendererPL::RenderSingle(CRenderBufferImpl* buffer, double renderPts, CVideoSettings& videoSettings, CRect& sourceRect, CRect& dst, pl_frame frameIn, pl_frame frameOut, ID3D11DeviceContext* pDeviceContext)
+{
+  pl_render_params* params = &videoSettings.m_placeboOptions->getPlOptions()->params;
+  static double oldRenderPts = 0.0;
+  if(pDeviceContext)
+  {
+	LARGE_INTEGER frequency;
+	QueryPerformanceFrequency(&frequency);
+	int64_t start = CurrentHostCounter();
+
+	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+	if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+	{
+	  pMultithread->Enter();
+	}
+
+	FrameQuery& current_frame = m_queryRing [m_currentWriteSlot];
+
+	// Null check protection guard to prevent early startup crashes
+	if(!current_frame.is_active && current_frame.disjoint && current_frame.start && current_frame.end)
+	{
+	  pDeviceContext->Begin(current_frame.disjoint);
+	  pDeviceContext->End(current_frame.start);
+
+	  bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
+
+	  pDeviceContext->End(current_frame.end);
+	  pDeviceContext->End(current_frame.disjoint);
+	  current_frame.is_active = true;
+	  m_currentWriteSlot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
+	}
+	else
+	{
+	  bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
+	}
+
+	if(pMultithread)
+	{
+	  pMultithread->Leave();
+	}
+
+  int64_t end = CurrentHostCounter();
+  buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
+  buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
+  renderTimeMonitor.update(buffer->m_RenderDuration);
+
+  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.1f}, renderPts: {:.1f}, renderPtsDiff: {:.1f}",
+	m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
+  }
+  oldRenderPts = renderPts;
+}
+
+void CRendererPL::RenderMix(CRenderBufferImpl* buffer, double renderPts, CVideoSettings& videoSettings, CRect& sourceRect, CRect& dst, pl_frame frameOut, ID3D11DeviceContext* pDeviceContext)
+{
+  if(pDeviceContext)
+  {
+	LARGE_INTEGER frequency;
+	QueryPerformanceFrequency(&frequency);
+	int64_t start = CurrentHostCounter();
+
+	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+	if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+	{
+	  pMultithread->Enter();
+	}
+
+	FrameQuery& current_frame = m_queryRing [m_currentWriteSlot];
+
+	if(!current_frame.is_active && current_frame.disjoint && current_frame.start && current_frame.end)
+	{
+	  pDeviceContext->Begin(current_frame.disjoint);
+	  pDeviceContext->End(current_frame.start);
+
+	  RenderMixExec(buffer, renderPts, videoSettings, sourceRect, dst, frameOut, pDeviceContext);
+
+	  pDeviceContext->End(current_frame.end);
+	  pDeviceContext->End(current_frame.disjoint);
+	  current_frame.is_active = true;
+	  m_currentWriteSlot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
+	}
+	else
+	{
+	  RenderMixExec(buffer, renderPts, videoSettings, sourceRect, dst, frameOut, pDeviceContext);
+	}
+
+	if(pMultithread) 
+	{
+	  pMultithread->Leave();
+	}
+
+	// Stop timer
+	int64_t end = CurrentHostCounter();
+	buffer->m_RenderDuration = (end - start) / (float) frequency.QuadPart;
+	buffer->m_bHasPeakDetectMetadata = pl_renderer_get_hdr_metadata(PL::PLInstance::Get()->GetRenderer(), &buffer->m_PeakDetectMetadata);
+	renderTimeMonitor.update(buffer->m_RenderDuration);
+  }
+}
+
+void CRendererPL::RenderMixExec(CRenderBufferImpl* buffer, double renderPts, CVideoSettings& videoSettings, CRect& sourceRect, CRect& dst, pl_frame frameOut, ID3D11DeviceContext* pDeviceContext)
+{
+  pl_render_params* params = &videoSettings.m_placeboOptions->getPlOptions()->params;
+  static double oldRenderPts = 0.0;
+  if(queueCheck.needReset(buffer->duration, renderPts))
+  {
+	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_queue_reset");
+	pl_queue_reset(*PL::PLInstance::Get()->GetQueue());
+	m_FrameMixerQueueResets++;
+  }
+  pl_queue* pQueue = PL::PLInstance::Get()->GetQueue();
+  if(!pl_queue_num_frames(*pQueue))
+  {
+	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_queue is empty");
+  }
+  else
+  {
+	// Prepare queue update params
+	struct pl_frame_mix mix {};
+	pl_queue_params qParams {};
+	qParams.pts = renderPts / 1000000; // + videoSettings.m_PlaceboTest / 1000.0; // - 0.021; // + 3*buffer->duration / 1000000 ;   
+	qParams.radius = pl_frame_mix_radius(params) * videoSettings.m_PlaceboFrameMixerRadiusFactor;
+	qParams.vsync_duration = 1.0 / m_ScreenFps; //cl 
+	qParams.timeout = 0; //UINT64_MAX;
+	//qParams.interpolation_threshold = 0.01;
+	//qParams.drift_compensation = true;
+
+	//qParams.pts += videoSettings.m_PlaceboTest / 1000.0;
+	// Find min max pts in queue for debug
+	pl_source_frame out = {};
+	double minPts = std::numeric_limits<double>::max();
+	double maxPts = std::numeric_limits<double>::lowest();
+	for(int i = 0; i < pl_queue_num_frames(*pQueue); ++i)
+	{
+	  pl_queue_peek(*pQueue, i, &out);
+	  if(!out.pts && !out.duration) // for interleaved material, libplacebo internally inserts fake frames
+		continue;
+	  if(out.pts < minPts) minPts = out.pts;
+	  if(out.pts > maxPts) maxPts = out.pts;
+	}
+	double renderPtsPos = (maxPts == minPts) ? 0.5 : (renderPts / 1000000.0 - minPts) / (maxPts - minPts);
+	double renderPtsShiftedPos = (maxPts == minPts) ? 0.5 : (qParams.pts - minPts) / (maxPts - minPts);
+
+	// Queue update
+	pl_queue_status res = pl_queue_update(*pQueue, &mix, &qParams);
+	if(res != PL_QUEUE_OK)
+	{
+	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_queue_update failed with status {}", res);
+	  if(res == PL_QUEUE_MORE)
+		++m_FrameMixerQueueMore;
+	  else if(res == PL_QUEUE_ERR)
+		++m_FrameMixerQueueErr;
+	  if(mix.num_frames == 0)
+	  {
+		// Nothing to present, there will be a timeout on FinalOutput down the road but it will recover. 
+		// We could present something anyway but it will not help much. 
+	  }
+	}
+
+	// Adjust crop parameters
+	for(int j = 0; j < mix.num_frames; ++j)
+	{
+	  pl_frame* frameIn = const_cast<pl_frame*>(mix.frames [j]); //cl do it in mapping but value is passed here...
+	  pl_frame frameOut; //dummy
+	  ApplyGeometry(videoSettings, sourceRect, dst, *frameIn, frameOut);
+	}
+
+	// Render
+	m_FrameMixerNumFrames = mix.num_frames;
+	bool res2 = pl_render_image_mix(PL::PLInstance::Get()->GetRenderer(), &mix, &frameOut, params);
+	if(!res2)
+	{
+	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "pl_render_image_mix failed");
+	  ++m_FrameMixerRenderErrors;
+	}
+	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, LPvps: {:.3f}, SourceFps: {:.3f}, LPfps: {:.3f}, renderTime: {:6.3f}, renderTimeGpu: {:6.3f}, idx: {} bufferPts: {:.0f}, renderPts: {:.0f}, "
+	  "renderPtsDiff: {:.0f}, qParamsPts: {:.0f}, mixNumFrames: {}, radius: {:f}, QPtsOffset: {:f}, minPts: {:.0f}, maxPts: {:.0f}, renderPtsPos: {:.3f}, renderPtsShiftedPos: {:.3f}",
+	  m_ScreenFps, pl_queue_estimate_vps(*pQueue), m_fps, pl_queue_estimate_fps(*pQueue), buffer->m_RenderDuration * 1000.0, buffer->m_RenderDurationGpu * 1000.0, m_iBufferIndex, buffer->pts, renderPts,
+	  (renderPts - oldRenderPts), qParams.pts * 1000000, mix.num_frames, qParams.radius, pl_queue_pts_offset(*pQueue), minPts * 1000000, maxPts * 1000000, renderPtsPos, renderPtsShiftedPos);
+	oldRenderPts = renderPts;
+	for(int i = 0; i < mix.num_frames; ++i)
+	{
+	  CRenderBufferImpl* plbuffer = (CRenderBufferImpl*) (mix.frames [i]->user_data);
+	  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "frame {}: {:.3f}", i, plbuffer->getPts() / 1000000.0);
+	}
+  }
+  CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f}, renderPtsDiff: {:.3f}",
+	m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
+}
+
 
 //cl called on every frame before render
 void CRendererPL::ProcessHDR(CRenderBuffer* rb)

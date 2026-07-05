@@ -96,6 +96,9 @@ protected:
 
   //important to override we need to let libplacebo set the swapchain csp or we would get issues with HDR
   void ProcessHDR(CRenderBuffer* rb) override;
+  void RenderSingle(CRenderBufferImpl* buffer, double renderPts, CVideoSettings& videoSettings, CRect& sourceRect, CRect& dst, pl_frame frameIn, pl_frame frameOut, ID3D11DeviceContext* pDeviceContext);
+  void RenderMix(CRenderBufferImpl* buffer, double renderPts, CVideoSettings& videoSettings, CRect& sourceRect, CRect& dst, pl_frame frameOut, ID3D11DeviceContext* pDeviceContext);
+  void RenderMixExec(CRenderBufferImpl* buffer, double renderPts, CVideoSettings& videoSettings, CRect& sourceRect, CRect& dst, pl_frame frameOut, ID3D11DeviceContext* pDeviceContext);
 
 private:
   // Color space info
