@@ -104,6 +104,8 @@ DX::DeviceResources::DeviceResources()
   , m_IsTransferPQ(false)
   , m_dxva2DecoderAdapter(-1)
 {
+  //m_budgetEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+  //m_budgetCookie = 0;
 }
 
 DX::DeviceResources::~DeviceResources() 
@@ -120,6 +122,8 @@ void DX::DeviceResources::Release()
   ReleaseBackBuffer();
   OnDeviceLost(true);
   DestroySwapChain();
+  //cl adapter3->UnregisterVideoMemoryBudgetChangeNotification(cookie);
+  //cl CloseHandle(budgetEvent);
 
   m_adapter = nullptr;
   m_adapterDecoder = nullptr;
@@ -604,8 +608,10 @@ void DX::DeviceResources::CreateDeviceResources()
 
   // Store pointers to the Direct3D 11.1 API device and immediate context.
   hr = device.As(&m_d3dDevice); CHECK_ERR();
+#if 0
   ReleaseProfilingQueries();
   InitProfiling();
+#endif
 
   // Check shared textures support
   CheckNV12SharedTexturesSupport();
@@ -725,6 +731,12 @@ void DX::DeviceResources::CreateBackBuffer()
   );
 
   m_deferrContext->RSSetViewports(1, &m_screenViewport);
+
+  IDXGIAdapter3* adapter3 = nullptr;
+  HRESULT hr2 = m_adapter->QueryInterface(IID_PPV_ARGS(&adapter3));
+  hr = adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &m_gpuMemInfo);
+
+  //adapter3->RegisterVideoMemoryBudgetChangeNotificationEvent(m_budgetEvent, &m_budgetCookie);
 }
 
 HRESULT DX::DeviceResources::CreateSwapChain(DXGI_SWAP_CHAIN_DESC1& desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC& fsDesc, IDXGISwapChain1** ppSwapChain) const
@@ -1861,7 +1873,7 @@ done:
   return result;
 }
 
-DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo() const
+DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo()
 {
   if (!m_swapChain)
     return {};
@@ -1904,6 +1916,23 @@ DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo() const
   info.judder = StringUtils::Format("Queue Depth Min/Max: {:2.0f} / {:2.0f}, mean: {:4.1f}, cadence drop: {}", m_queueDepthTracker.calculateMin(), m_queueDepthTracker.calculatePeak(), mean, cadenceDropCount);
   var = m_guiComposeTimeMonitor.calculateVariance(mean);
   info.guiComposeTime = StringUtils::Format("GUI Compose time mean: {:4.2f}ms, max: {:4.2f}ms, stdVar: {:4.2f}", mean*1000.0, m_guiComposeTimeMonitor.calculatePeak()*1000.0, std::sqrt(var) * 1000.0);
+
+  // 3. In your update loop or a background thread, check it without blocking
+#if 0
+  if(WaitForSingleObject(m_budgetEvent, 0) == WAIT_OBJECT_0) 
+  {
+	DXGI_QUERY_VIDEO_MEMORY_INFO memInfo;
+	IDXGIAdapter3* adapter3 = nullptr;
+	HRESULT hr = m_adapter->QueryInterface(IID_PPV_ARGS(&adapter3));
+	hr = adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &m_gpuMemInfo);
+  }
+#endif
+
+  const int64_t gb = 1024 * 1024 * 1024;
+  // disabled updates because of rough playback
+  //info.gpuMemory = StringUtils::Format("GPU Memory Budget: {:.2f} GB, CurrentUsage: {:.2f} GB, CurrentReservation: {:.2f} GB, AvailableForReservation: {:.2f} GB", (float)m_gpuMemInfo.Budget / gb, (float) m_gpuMemInfo.CurrentUsage / gb, (float) m_gpuMemInfo.CurrentReservation / gb, (float) m_gpuMemInfo.AvailableForReservation / gb);
+  info.gpuMemory = StringUtils::Format("GPU Memory Budget: {:.2f} GB", (float)m_gpuMemInfo.Budget / gb);
+
 
   return info;
 }
@@ -2016,6 +2045,81 @@ void DX::DeviceResources::StopPresentThread()
   m_latencyWaitableObject = nullptr;
 }
 
+// Isolated static helper function with NO C++ object unwinding constraints
+static HRESULT SafeGetQueryData(ID3D11DeviceContext* pContext, ID3D11Query* pQuery, void* pData, UINT dataSize)
+{
+  __try
+  {
+	return pContext->GetData(pQuery, pData, dataSize, D3D11_ASYNC_GETDATA_DONOTFLUSH);
+  }
+  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+  {
+	return E_FAIL;
+  }
+}
+
+static void SafeEndQuery(ID3D11DeviceContext* pContext, ID3D11Query* pQuery)
+{
+  if(!pContext || !pQuery) return;
+
+  __try
+  {
+	pContext->End(pQuery);
+  }
+  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+  {
+	// Caught the multi-threaded race or query eviction safely at the driver edge!
+	// We absorb it silently so kodi.exe keeps running seamlessly.
+  }
+}
+
+static void SafeBeginQuery(ID3D11DeviceContext* pContext, ID3D11Query* pQuery)
+{
+  if(!pContext || !pQuery) return;
+
+  __try
+  {
+	pContext->Begin(pQuery);
+  }
+  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+  {
+	// Absorb the exception safely
+  }
+}
+
+static HRESULT SafeExecuteCommandList(ID3D11DeviceContext* pImmediateContext, ID3D11CommandList* pCommandList)
+{
+  if(!pImmediateContext || !pCommandList) return E_INVALIDARG;
+
+  __try
+  {
+	// Restores a soft landing pad if the GPU driver throws a 0x0000087D hardware 
+	// asset race condition during a tight queue-depth-1 crossover pass.
+	pImmediateContext->ExecuteCommandList(pCommandList, TRUE);
+	return S_OK;
+  }
+  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+  {
+	// Caught the driver race condition at the kernel boundary!
+	// Discard the frame safely to keep the application running.
+	return E_FAIL;
+  }
+}
+
+class D3DContextInterfaceGuard
+{
+public:
+  D3DContextInterfaceGuard(ID3D11Multithread* pMultithread) : m_pmt(pMultithread)
+  {
+	if(m_pmt) m_pmt->Enter();
+  }
+  ~D3DContextInterfaceGuard()
+  {
+	if(m_pmt) m_pmt->Leave();
+  }
+private:
+  ID3D11Multithread* m_pmt;
+};
 
 void DX::DeviceResources::PresentThreadLoop()
 {
@@ -2037,31 +2141,26 @@ void DX::DeviceResources::PresentThreadLoop()
 	if(!m_presentRunning.load(std::memory_order_acquire)) break;
 	lock.unlock(); // Release CPU lock immediately
 
-	Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandListToExecute;
-	FramePackage currentPackage; // Temporary container to hold resources alive during this loop pass
+	FramePackage localPackage;
 	{
-	  std::lock_guard<std::mutex> qLock(m_queueMutex);
+	  std::lock_guard<std::mutex> lock(m_queueMutex);
 	  if(!m_frameQueue.empty())
 	  {
-		currentPackage = m_frameQueue.front();
-		pCommandListToExecute = currentPackage.CommandList;
+		localPackage = std::move(m_frameQueue.front());
 		m_frameQueue.pop();
 	  }
-	}
+	} // Lock drops here. Application Thread wakes up safely now!
 
-	if(!pCommandListToExecute) continue; // Skip pass if queue was drained
-
+	if(!localPackage.CommandList) continue; // Skip pass if queue was drained
 
 	if(m_latencyWaitableObject)
 	{
-	  // Cap at 100ms to allow smooth un-trappable background loop exits
 	  DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 100);
 
 	  if(!m_presentRunning.load(std::memory_order_acquire)) break;
 
 	  if(waitResult == WAIT_FAILED || waitResult == WAIT_ABANDONED)
 	  {
-		// Hot-Reload Recovery Module if the handle gets broken mid-playback
 		pMultithread->Enter();
 		Microsoft::WRL::ComPtr<IDXGISwapChain2> swapChain2;
 		if(m_swapChain && SUCCEEDED(m_swapChain.As(&swapChain2)))
@@ -2082,94 +2181,55 @@ void DX::DeviceResources::PresentThreadLoop()
 
 	if(!m_presentRunning.load(std::memory_order_acquire)) break;
 
-	pMultithread->Enter();
-	if(pCommandListToExecute)
+	// --- FIX 1 & 2: RECONCILED HARDWARE COMMAND LIST INTERFACE ---
+	if(localPackage.CommandList)
 	{
-#if 1
-	  PresentQuery& current_frame = m_presentQueryRing [m_presentWriteSlot];
-
-	  if(current_frame.disjoint)
+	  // Create an isolated scope for the command list execution
 	  {
-		m_d3dContext->Begin(current_frame.disjoint);
-		m_d3dContext->End(current_frame.start);
-	  }
-#endif
+		D3DContextInterfaceGuard contextShield(pMultithread.Get());
 
-	  m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), TRUE);
-	  pCommandListToExecute.Reset(); 
+		// Execute cleanly under the protection of the RAII shield
+		m_d3dContext->ExecuteCommandList(localPackage.CommandList.Get(), TRUE);
+	  } // contextShield is automatically destroyed here, invoking ->Leave() perfectly!
 
-#if 1
-	  if(current_frame.disjoint)
-	  {
-		m_d3dContext->End(current_frame.end);  
-		m_d3dContext->End(current_frame.disjoint);
-
-		current_frame.is_active = true;
-		m_presentWriteSlot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
-	  }
-#endif
+	  // Reset references safely outside the locked scope
+	  localPackage.CommandList.Reset();
+	  localPackage.ResourceLifelines.clear();
 	}
-	// 5. NATIVELY READ COMPOSITING HISTORICAL TIMINGS:
-	int read_slot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
-	PresentQuery& old_pass = m_presentQueryRing [read_slot];
 
-	if(old_pass.is_active && old_pass.disjoint)
+	// --- SWAP CHAIN FLIP SECTION ---
 	{
-	  D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
+	  D3DContextInterfaceGuard presentationShield(pMultithread.Get());
 
-	  // Pass DONOTFLUSH to keep the Presentation Thread running at maximum speed!
-	  HRESULT hr = m_d3dContext->GetData(old_pass.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
-
-	  if(hr == S_OK)
+	  if(m_swapChain)
 	  {
-		UINT64 start_time = 0;
-		UINT64 end_time = 0;
+		HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
+		HRESULT hr = S_OK;
 
-		m_d3dContext->GetData(old_pass.start, &start_time, sizeof(UINT64), 0);
-		m_d3dContext->GetData(old_pass.end, &end_time, sizeof(UINT64), 0);
-
-		if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
+		if(testHr == DXGI_STATUS_OCCLUDED)
 		{
-		  double freq = static_cast<double>(disjoint_data.Frequency);
-		  float layerComposeMs = (static_cast<float>(end_time - start_time) / freq);
-
-		  // Store relaxed atomically so your sliding OSD monitor can read it safely
-		  m_guiComposeTime.store(layerComposeMs, std::memory_order_relaxed);
+		  hr = m_swapChain->Present(1, DXGI_PRESENT_DO_NOT_SEQUENCE);
+		}
+		else
+		{
+		  hr = m_swapChain->Present(1, 0);
 		}
 
-		old_pass.is_active = false; // Free for reuse
-	  }
-	}
-	if(m_swapChain)
-	{
-	  // Hardware test valve to catch occlusion properties without trapping context locks
-	  HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
- 
-	  HRESULT hr = S_OK;
-	  if(testHr == DXGI_STATUS_OCCLUDED)
-	  {
-		hr = m_swapChain->Present(1, DXGI_PRESENT_DO_NOT_SEQUENCE);
-	  }
-	  else
-	  {
-		hr = m_swapChain->Present(1, 0);
-	  }
-
-	  m_presentResult.store(hr, std::memory_order_release);
-
-	  if(hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
-	  {
 		m_presentResult.store(hr, std::memory_order_release);
-		pMultithread->Leave();
-		m_renderCv.notify_all();
-		continue;
-	  }
 
-	  LARGE_INTEGER qpc;
-	  ::QueryPerformanceCounter(&qpc);
-	  m_lastVsyncTimestamp.store(qpc.QuadPart, std::memory_order_release);
-	}
-	pMultithread->Leave();
+		if(hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+		{
+		  // SAFE BYPASS: The RAII shield guarantees that ->Leave() is called 
+		  // automatically before this 'continue' statement executes!
+		  m_renderCv.notify_all();
+		  continue;
+		}
+
+		LARGE_INTEGER qpc;
+		::QueryPerformanceCounter(&qpc);
+		m_lastVsyncTimestamp.store(qpc.QuadPart, std::memory_order_release);
+	  }
+	} // presentationShield is automatically destroyed here, invoking ->Leave() perfectly!
 
 	m_framesPresented.fetch_add(1, std::memory_order_release);
 	m_renderCv.notify_all();
@@ -2179,7 +2239,6 @@ void DX::DeviceResources::PresentThreadLoop()
   m_framesPresented.store(0, std::memory_order_release);
   m_renderCv.notify_all();
 }
-
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
   float newSample = m_guiComposeTime.exchange(-1.0f, std::memory_order_relaxed);
@@ -2217,8 +2276,7 @@ HRESULT DX::DeviceResources::SignalFrameReady()
   m_framesRendered.fetch_add(1, std::memory_order_seq_cst); 
   m_presentCv.notify_one();
 
-  const size_t maxAllowedQueueDepth = 6;
-
+  size_t maxAllowedQueueDepth = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_PRESENTQUEUEDEPTH);
   size_t rendered = m_framesRendered.load(std::memory_order_seq_cst);
   size_t presented = m_framesPresented.load(std::memory_order_seq_cst);
 
@@ -2369,6 +2427,7 @@ void DX::DeviceResources::WatchdogThreadLoop()
 	  if(currentRendered > currentPresented)
 	  {
 		m_stallCount++;
+		LogThreadState("WatchdogThreadLoop");
 	  }
 	  else
 	  {
