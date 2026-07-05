@@ -712,6 +712,19 @@ frameOut.crop.y1 = dst.y2;
 frameOut.rotation = m_renderOrientation == 90 ? PL_ROTATION_90 : m_renderOrientation == 180 ? PL_ROTATION_180 : m_renderOrientation == 270 ? PL_ROTATION_270 : PL_ROTATION_0;
 }
 
+// Isolated static helper function with NO C++ object unwinding constraints
+static HRESULT SafeGetQueryData(ID3D11DeviceContext* pContext, ID3D11Query* pQuery, void* pData, UINT dataSize)
+{
+  __try
+  {
+	return pContext->GetData(pQuery, pData, dataSize, D3D11_ASYNC_GETDATA_DONOTFLUSH);
+  }
+  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+  {
+	return E_FAIL;
+  }
+}
+
 //---------------------------------------------------
 //
 //
@@ -1123,24 +1136,23 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   {
 	D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
 
-	// Pass D3D11_ASYNC_GETDATA_DONOTFLUSH flag to guarantee 0% blocking/stalling
-	{
-	  HRESULT hr = pDeviceContext->GetData(old_frame.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+	HRESULT hr = SafeGetQueryData(pDeviceContext, old_frame.disjoint, &disjoint_data, sizeof(disjoint_data));
 
-	  if(hr == S_OK) { // GPU has finished writing data to this historical frame slot
-		UINT64 start_time = 0;
-		UINT64 end_time = 0;
-		pDeviceContext->GetData(old_frame.start, &start_time, sizeof(UINT64), 0);
-		pDeviceContext->GetData(old_frame.end, &end_time, sizeof(UINT64), 0);
+	if(hr == S_OK)
+	{ // GPU has finished writing data to this historical frame slot
+	  UINT64 start_time = 0;
+	  UINT64 end_time = 0;
 
-		if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
-		{
-		  double freq = static_cast<double>(disjoint_data.Frequency);
-		  buffer->m_RenderDurationGpu = (static_cast<float>(end_time - start_time) / freq);
-		  renderTimeMonitorGpu.update(buffer->m_RenderDurationGpu);
-		}
-		old_frame.is_active = false; // Reset slot for reuse
+	  HRESULT hrStart = SafeGetQueryData(pDeviceContext, old_frame.start, &start_time, sizeof(UINT64));
+	  HRESULT hrEnd = SafeGetQueryData(pDeviceContext, old_frame.end, &end_time, sizeof(UINT64));
+
+	  if(hrStart == S_OK && hrEnd == S_OK && !disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
+	  {
+		double freq = static_cast<double>(disjoint_data.Frequency);
+		buffer->m_RenderDurationGpu = (static_cast<float>(end_time - start_time) / freq);
+		renderTimeMonitorGpu.update(buffer->m_RenderDurationGpu);
 	  }
+	  old_frame.is_active = false; // Reset slot for reuse
 	}
   }
 

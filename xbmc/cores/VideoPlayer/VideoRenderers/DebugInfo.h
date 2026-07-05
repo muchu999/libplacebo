@@ -41,4 +41,5 @@ struct DEBUG_INFO_RENDER
   std::string renderFlags;
   std::string videoOutput;
   std::string judder;
+  std::string guiComposeTime;
 };

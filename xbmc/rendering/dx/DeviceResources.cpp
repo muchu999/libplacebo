@@ -604,9 +604,8 @@ void DX::DeviceResources::CreateDeviceResources()
 
   // Store pointers to the Direct3D 11.1 API device and immediate context.
   hr = device.As(&m_d3dDevice); CHECK_ERR();
-  //ReleaseProfilingQueries();
-  //InitProfiling();
-
+  ReleaseProfilingQueries();
+  InitProfiling();
 
   // Check shared textures support
   CheckNV12SharedTexturesSupport();
@@ -1222,6 +1221,7 @@ void DX::DeviceResources::HandleDeviceLost(bool removed)
     CServiceBroker::GetAppMessenger()->PostMsg(TMSG_EXECUTE_BUILT_IN, -1, -1, nullptr,
                                                "ReloadSkin");
 }
+CPLHelper::CMonitor m_guiComposeTimeMonitor(120);
 
 bool DX::DeviceResources::Begin()
 {
@@ -1252,72 +1252,55 @@ void DX::DeviceResources::Present()
 {
   HRESULT hr = {};
   static UINT64 freq = CurrentHostFrequency();
-
-  #if 0
-  DX::DeviceResources::FrameQuery& current_frame = getCurrentFrame();
-  if(m_deferrContext && !current_frame.is_active && current_frame.start && current_frame.end)
-  {
-	// Record start at the beginning of the deferred block
-	m_deferrContext->End(current_frame.start);
-
-	// ... Any final GUI blits or presentation prep if needed ...
-
-	// Record end right after it
-	m_deferrContext->End(current_frame.end);
-
-	// Advance slots safely
-	m_currentWriteSlot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
-  }
-  #endif
   
-	//FinishCommandList();
-	Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandList;
-	if(m_d3dContext != m_deferrContext)
+  //FinishCommandList();
+  Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandList;
+  if(m_d3dContext != m_deferrContext)
+  {
+	hr = m_deferrContext->FinishCommandList(true, &pCommandList);
+	if(FAILED(hr))
 	{
-	  hr = m_deferrContext->FinishCommandList(true, &pCommandList);
-	  if(FAILED(hr))
-	  {
-		CLog::LogF(LOGERROR, "failed to finish command queue.");
-		return; //cl 
-	  }
-
+	  CLog::LogF(LOGERROR, "failed to finish command queue.");
+	  return; //cl 
 	}
 
-	// Present frame
-	UINT64 start = CurrentHostCounter();
-	static UINT64 lastEnd = 0;
-	if(SUCCEEDED(hr))
+  }
+
+  // Present frame
+  UINT64 start = CurrentHostCounter();
+  static UINT64 lastEnd = 0;
+  if(SUCCEEDED(hr))
+  {
+	FramePackage package;
+	package.CommandList = pCommandList;
+
+	// Track the primary GUI context views to prevent out-of-order destruction
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> currentRTV;
+	m_deferrContext->OMGetRenderTargets(1, &currentRTV, nullptr);
+	if(currentRTV)
 	{
-	  FramePackage package;
-	  package.CommandList = pCommandList;
-
-	  // Track the primary GUI context views to prevent out-of-order destruction
-	  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> currentRTV;
-	  m_deferrContext->OMGetRenderTargets(1, &currentRTV, nullptr);
-	  if(currentRTV)
-	  {
-		package.ResourceLifelines.push_back(currentRTV);
-	  }
-	  {
-		std::lock_guard<std::mutex> lock(m_lifelineMutex);
-		package.ResourceLifelines = std::move(m_currentFrameLifelines);
-		m_currentFrameLifelines.clear(); // Clear for Frame N+1 recording pass
-	  }
-
-	  // Push the complete package to your FIFO queue
-	  {
-		std::lock_guard<std::mutex> lock(m_queueMutex);
-		m_frameQueue.push(package);
-	  }
-	  SignalFrameReady(); // Wake up the presentation thread loop
+	  package.ResourceLifelines.push_back(currentRTV);
+	}
+	{
+	  std::lock_guard<std::mutex> lock(m_lifelineMutex);
+	  package.ResourceLifelines = std::move(m_currentFrameLifelines);
+	  m_currentFrameLifelines.clear(); // Clear for Frame N+1 recording pass
 	}
 
-	UINT64 end = CurrentHostCounter();
-	UINT64 presentDuration = end - start;
-	UINT64 period = end - lastEnd;
-	lastEnd = end;
-	// Log
-	CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0);
+	// Push the complete package to your FIFO queue
+	{
+	  std::lock_guard<std::mutex> lock(m_queueMutex);
+	  m_frameQueue.push(package);
+	}
+	SignalFrameReady(); // Wake up the presentation thread loop
+  }
+
+  UINT64 end = CurrentHostCounter();
+  UINT64 presentDuration = end - start;
+  UINT64 period = end - lastEnd;
+  lastEnd = end;
+  // Log
+  CLog::LogFC(LOGDEBUG, LOGAVTIMING, "Present duration: {:.3f} ms, Present period: {:.3f} ms", (double) presentDuration / freq * 1000.0, (double) period / freq * 1000.0);
 
   // If the device was removed either by a disconnection or a driver upgrade, we must recreate all device resources.
   if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
@@ -1919,6 +1902,8 @@ DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo() const
   double mean;
   double var = m_queueDepthTracker.calculateVariance(mean);
   info.judder = StringUtils::Format("Queue Depth Min/Max: {:2.0f} / {:2.0f}, mean: {:4.1f}, cadence drop: {}", m_queueDepthTracker.calculateMin(), m_queueDepthTracker.calculatePeak(), mean, cadenceDropCount);
+  var = m_guiComposeTimeMonitor.calculateVariance(mean);
+  info.guiComposeTime = StringUtils::Format("GUI Compose time mean: {:4.2f}ms, max: {:4.2f}ms, stdVar: {:4.2f}", mean*1000.0, m_guiComposeTimeMonitor.calculatePeak()*1000.0, std::sqrt(var) * 1000.0);
 
   return info;
 }
@@ -2100,8 +2085,8 @@ void DX::DeviceResources::PresentThreadLoop()
 	pMultithread->Enter();
 	if(pCommandListToExecute)
 	{
-#if 0
-	  FrameQuery& current_frame = query_ring [m_presentWriteSlot];
+#if 1
+	  PresentQuery& current_frame = m_presentQueryRing [m_presentWriteSlot];
 
 	  if(current_frame.disjoint)
 	  {
@@ -2113,16 +2098,47 @@ void DX::DeviceResources::PresentThreadLoop()
 	  m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), TRUE);
 	  pCommandListToExecute.Reset(); 
 
-#if 0
+#if 1
 	  if(current_frame.disjoint)
 	  {
 		m_d3dContext->End(current_frame.end);  
 		m_d3dContext->End(current_frame.disjoint);
 
 		current_frame.is_active = true;
-		m_presentWriteSlot = (m_presentWriteSlot + 1) % QUERY_LATENCY;
+		m_presentWriteSlot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
 	  }
 #endif
+	}
+	// 5. NATIVELY READ COMPOSITING HISTORICAL TIMINGS:
+	int read_slot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
+	PresentQuery& old_pass = m_presentQueryRing [read_slot];
+
+	if(old_pass.is_active && old_pass.disjoint)
+	{
+	  D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
+
+	  // Pass DONOTFLUSH to keep the Presentation Thread running at maximum speed!
+	  HRESULT hr = m_d3dContext->GetData(old_pass.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+
+	  if(hr == S_OK)
+	  {
+		UINT64 start_time = 0;
+		UINT64 end_time = 0;
+
+		m_d3dContext->GetData(old_pass.start, &start_time, sizeof(UINT64), 0);
+		m_d3dContext->GetData(old_pass.end, &end_time, sizeof(UINT64), 0);
+
+		if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
+		{
+		  double freq = static_cast<double>(disjoint_data.Frequency);
+		  float layerComposeMs = (static_cast<float>(end_time - start_time) / freq);
+
+		  // Store relaxed atomically so your sliding OSD monitor can read it safely
+		  m_guiComposeTime.store(layerComposeMs, std::memory_order_relaxed);
+		}
+
+		old_pass.is_active = false; // Free for reuse
+	  }
 	}
 	if(m_swapChain)
 	{
@@ -2166,6 +2182,11 @@ void DX::DeviceResources::PresentThreadLoop()
 
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
+  float newSample = m_guiComposeTime.exchange(-1.0f, std::memory_order_relaxed);
+  if(newSample >= 0.0f)
+  {
+	m_guiComposeTimeMonitor.update(newSample);
+  }
   if(!m_presentRunning.load(std::memory_order_acquire) && m_swapChain)
   {
 	StartPresentThread();
@@ -2256,27 +2277,27 @@ void DX::DeviceResources::KeepResourceAliveThisFrame(const Microsoft::WRL::ComPt
   m_currentFrameLifelines.push_back(resource); 
 }
 
-#if 0
+#if 1
 void DX::DeviceResources::InitProfiling() {
   D3D11_QUERY_DESC desc_disjoint = {D3D11_QUERY_TIMESTAMP_DISJOINT, 0};
   D3D11_QUERY_DESC desc_timestamp = {D3D11_QUERY_TIMESTAMP, 0};
 
-  for(int i = 0; i < QUERY_LATENCY; i++) {
-	m_d3dDevice->CreateQuery(&desc_disjoint, &query_ring [i].disjoint);
-	m_d3dDevice->CreateQuery(&desc_timestamp, &query_ring [i].start);
-	m_d3dDevice->CreateQuery(&desc_timestamp, &query_ring [i].end);
-	query_ring [i].is_active = false;
+  for(int i = 0; i < PRESENT_QUERY_LATENCY; i++) {
+	m_d3dDevice->CreateQuery(&desc_disjoint, &m_presentQueryRing [i].disjoint);
+	m_d3dDevice->CreateQuery(&desc_timestamp, &m_presentQueryRing [i].start);
+	m_d3dDevice->CreateQuery(&desc_timestamp, &m_presentQueryRing [i].end);
+	m_presentQueryRing [i].is_active = false;
   }
 }
 
 void DX::DeviceResources::ReleaseProfilingQueries()
 {
-  for(int i = 0; i < QUERY_LATENCY; ++i)
+  for(int i = 0; i < PRESENT_QUERY_LATENCY; ++i)
   {
-	query_ring [i].disjoint = nullptr; 
-	query_ring [i].start = nullptr;
-	query_ring [i].end = nullptr;
-	query_ring [i].is_active = false;  
+	m_presentQueryRing [i].disjoint = nullptr; 
+	m_presentQueryRing [i].start = nullptr;
+	m_presentQueryRing [i].end = nullptr;
+	m_presentQueryRing [i].is_active = false;
   }
 
   m_currentWriteSlot = 0;
