@@ -204,8 +204,6 @@ CRendererPL::CRendererPL(CVideoSettings& videoSettings) : CRendererBase(videoSet
   m_renderMethodName = "LibPlacebo";
   m_colorSpace = {};
   m_chromaLocation = PL_CHROMA_UNKNOWN;
-
-
 }
 
 CRenderInfo CRendererPL::GetRenderInfo()
@@ -1098,9 +1096,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
   ID3D11DeviceContext* pDeviceContext = nullptr;
   d3d11->device->GetImmediateContext(&pDeviceContext);
-#if 1 //cl profiling in deferred context always result in 0 execution time, need to move to presentThreadLoop
-
-#if 1
+#if 0
   // GPU profiling
   if(!pDeviceContext) return;
   DX::DeviceResources::FrameQuery& old_frame = DX::DeviceResources::Get()->getOldFrame();
@@ -1149,14 +1145,18 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   }
 
 #else
-  // GPU profiling
-  pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
-  ID3D11DeviceContext* pDeviceContext = nullptr;
-  d3d11->device->GetImmediateContext(&pDeviceContext);
-  int read_slot = (current_write_slot + 1) % QUERY_LATENCY;
-  FrameQuery& old_frame = query_ring [read_slot];
+  static bool bInit = false;
+  if(!bInit)
+  {
+	InitProfiling();
+    bInit = true;
+  }
 
-  if(old_frame.is_active)
+  // GPU profiling
+  int read_slot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
+  FrameQuery& old_frame = m_queryRing [read_slot];
+
+  if(old_frame.is_active && old_frame.disjoint)
   {
 	D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
 
@@ -1169,7 +1169,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  pDeviceContext->GetData(old_frame.start, &start_time, sizeof(UINT64), 0);
 	  pDeviceContext->GetData(old_frame.end, &end_time, sizeof(UINT64), 0);
 
-	  if(!disjoint_data.Disjoint)
+	  if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
 	  {
 		double freq = static_cast<double>(disjoint_data.Frequency);
 		buffer->m_RenderDurationGpu = (static_cast<float>(end_time - start_time) / freq);
@@ -1178,16 +1178,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	  old_frame.is_active = false; // Reset slot for reuse
 	}
   }
-  // Start timers here 
-  FrameQuery& current_frame = query_ring [current_write_slot];
-  pDeviceContext->Begin(current_frame.disjoint);
-  pDeviceContext->End(current_frame.start);
 #endif
-#endif
-  LARGE_INTEGER frequency;
-  static double oldRenderPts = 0.0;
-  QueryPerformanceFrequency(&frequency);
-  int64_t start = CurrentHostCounter();
 
 
   //----------------
@@ -1195,15 +1186,39 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //----------------
   if((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue)
   {
-	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
-	if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+	LARGE_INTEGER frequency;
+	static double oldRenderPts = 0.0;
+	QueryPerformanceFrequency(&frequency);
+	int64_t start = CurrentHostCounter();
+	if(pDeviceContext)
 	{
-	  pMultithread->Enter(); // Block if Present Thread is currently processing the GUI list
-	}
-	bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
-	if(pMultithread)
-	{
-	  pMultithread->Leave(); // Safely unlock context for the Present thread
+	  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+	  if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+	  {
+		pMultithread->Enter();
+	  }
+
+	  FrameQuery& current_frame = m_queryRing [m_currentWriteSlot];
+
+	  // Null check protection guard to prevent early startup crashes
+	  if(!current_frame.is_active && current_frame.disjoint && current_frame.start && current_frame.end)
+	  {
+		pDeviceContext->Begin(current_frame.disjoint);
+		pDeviceContext->End(current_frame.start);
+
+		bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
+
+		pDeviceContext->End(current_frame.end);
+		pDeviceContext->End(current_frame.disjoint);
+		current_frame.is_active = true;
+		m_currentWriteSlot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
+	  }
+	  else
+	  {
+		bool res = pl_render_image(PL::PLInstance::Get()->GetRenderer(), &frameIn, &frameOut, params);
+	  }
+	  if(pMultithread) pMultithread->Leave();
+	  pDeviceContext->Release();
 	}
 
 	int64_t end = CurrentHostCounter();
@@ -1217,13 +1232,16 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   }
   else
   {
+	LARGE_INTEGER frequency;
+	static double oldRenderPts = 0.0;
+	QueryPerformanceFrequency(&frequency);
+	int64_t start = CurrentHostCounter();
 	Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
 	if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
 	{
 	  pMultithread->Enter(); // Block if Present Thread is currently processing the GUI list
 	}
 
-	static double oldRenderPts = 0.0;
 	CLog::LogFC(LOGDEBUG, LOGPLACEBO, "ScreenFps: {:.3f}, sourceFps:{:.3f}, renderTime: {:6.3f}, idx: {} bufferPts: {:.3f}, renderPts: {:.3f}, renderPtsDiff: {:.3f}",
 	  m_ScreenFps, m_fps, buffer->m_RenderDuration * 1000.0, m_iBufferIndex, buffer->pts / 1000.0, renderPts / 1000, (renderPts - oldRenderPts) / 1000.0);
 	if(queueCheck.needReset(buffer->duration, renderPts))
@@ -1581,4 +1599,16 @@ bool CRendererPL::CRenderBufferImpl::HasHdrData()
   return (hasHDR10PlusMetadata || hasDoviMetadata || hasDoviRpuMetadata);
 }
 
+void CRendererPL::InitProfiling() {
+  pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
 
+  D3D11_QUERY_DESC desc_disjoint = {D3D11_QUERY_TIMESTAMP_DISJOINT, 0};
+  D3D11_QUERY_DESC desc_timestamp = {D3D11_QUERY_TIMESTAMP, 0};
+
+  for(int i = 0; i < QUERY_LATENCY; i++) {
+	d3d11->device->CreateQuery(&desc_disjoint, &m_queryRing [i].disjoint);
+	d3d11->device->CreateQuery(&desc_timestamp, &m_queryRing [i].start);
+	d3d11->device->CreateQuery(&desc_timestamp, &m_queryRing [i].end);
+	m_queryRing [i].is_active = false;
+  }
+}

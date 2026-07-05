@@ -130,6 +130,19 @@ private:
   AVColorPrimaries m_lastPrimaries = AVCOL_PRI_UNSPECIFIED;
 
   AVPixelFormat m_format;
+  static constexpr int QUERY_LATENCY = 8;
+  struct FrameQuery
+  {
+	ID3D11Query* disjoint = nullptr;
+	ID3D11Query* start = nullptr;
+	ID3D11Query* end = nullptr;
+	bool is_active = false;
+  };
+  std::vector<FrameQuery> m_queryRing = std::vector<FrameQuery> (QUERY_LATENCY);
+  int m_currentWriteSlot = 0;
+  int m_presentWriteSlot = 0;
+  void InitProfiling();
+
 };
 
 class CRendererPL::CRenderBufferImpl : public CRenderBuffer

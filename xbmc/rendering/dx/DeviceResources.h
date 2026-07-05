@@ -290,9 +290,9 @@ private:
 	void StartPresentThread();
 	void StopPresentThread();
 
-	static constexpr int QUERY_LATENCY = 32;
-	void InitProfiling();
-	void ReleaseProfilingQueries();
+	//static constexpr int QUERY_LATENCY = 32;
+	//void InitProfiling();
+	//void ReleaseProfilingQueries();
 	void LogThreadState(const std::string& location);
 	std::thread             m_watchdogThread;
 	std::atomic<bool>       m_watchdogRunning {false};
@@ -306,19 +306,19 @@ private:
 public:
   // Latency matching DXGI default max frame latency
 
-  struct FrameQuery
-  {
-	ID3D11Query* disjoint = nullptr;
-	ID3D11Query* start = nullptr;
-	ID3D11Query* end = nullptr;
-	bool is_active = false;
-  };
-  std::vector<FrameQuery> query_ring = std::vector<FrameQuery> (QUERY_LATENCY);
-  int m_currentWriteSlot = 0;
-  int m_presentWriteSlot = 0;
+  //struct FrameQuery
+  //{
+	//ID3D11Query* disjoint = nullptr;
+	//ID3D11Query* start = nullptr;
+	//ID3D11Query* end = nullptr;
+	//bool is_active = false;
+  //};
+  //std::vector<FrameQuery> query_ring = std::vector<FrameQuery> (QUERY_LATENCY);
+  //int m_currentWriteSlot = 0;
+  //int m_presentWriteSlot = 0;
 
-  FrameQuery& getOldFrame() { return query_ring [(m_currentWriteSlot + 1) % QUERY_LATENCY]; }
-  FrameQuery& getCurrentFrame() { return query_ring [m_currentWriteSlot]; }
+  //FrameQuery& getOldFrame() { return query_ring [(m_currentWriteSlot + 1) % QUERY_LATENCY]; }
+  //FrameQuery& getCurrentFrame() { return query_ring [m_currentWriteSlot]; }
   void KeepResourceAliveThisFrame(const Microsoft::WRL::ComPtr<IUnknown>& resource);
   HRESULT SignalFrameReady();
   void DrainPresentationQueue();

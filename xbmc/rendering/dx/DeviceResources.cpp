@@ -604,8 +604,8 @@ void DX::DeviceResources::CreateDeviceResources()
 
   // Store pointers to the Direct3D 11.1 API device and immediate context.
   hr = device.As(&m_d3dDevice); CHECK_ERR();
-  ReleaseProfilingQueries();
-  InitProfiling();
+  //ReleaseProfilingQueries();
+  //InitProfiling();
 
 
   // Check shared textures support
@@ -1253,6 +1253,7 @@ void DX::DeviceResources::Present()
   HRESULT hr = {};
   static UINT64 freq = CurrentHostFrequency();
 
+  #if 0
   DX::DeviceResources::FrameQuery& current_frame = getCurrentFrame();
   if(m_deferrContext && !current_frame.is_active && current_frame.start && current_frame.end)
   {
@@ -1267,6 +1268,7 @@ void DX::DeviceResources::Present()
 	// Advance slots safely
 	m_currentWriteSlot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
   }
+  #endif
   
 	//FinishCommandList();
 	Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandList;
@@ -2098,6 +2100,7 @@ void DX::DeviceResources::PresentThreadLoop()
 	pMultithread->Enter();
 	if(pCommandListToExecute)
 	{
+#if 0
 	  FrameQuery& current_frame = query_ring [m_presentWriteSlot];
 
 	  if(current_frame.disjoint)
@@ -2105,10 +2108,12 @@ void DX::DeviceResources::PresentThreadLoop()
 		m_d3dContext->Begin(current_frame.disjoint);
 		m_d3dContext->End(current_frame.start);
 	  }
+#endif
 
 	  m_d3dContext->ExecuteCommandList(pCommandListToExecute.Get(), TRUE);
 	  pCommandListToExecute.Reset(); 
 
+#if 0
 	  if(current_frame.disjoint)
 	  {
 		m_d3dContext->End(current_frame.end);  
@@ -2117,6 +2122,7 @@ void DX::DeviceResources::PresentThreadLoop()
 		current_frame.is_active = true;
 		m_presentWriteSlot = (m_presentWriteSlot + 1) % QUERY_LATENCY;
 	  }
+#endif
 	}
 	if(m_swapChain)
 	{
@@ -2250,6 +2256,7 @@ void DX::DeviceResources::KeepResourceAliveThisFrame(const Microsoft::WRL::ComPt
   m_currentFrameLifelines.push_back(resource); 
 }
 
+#if 0
 void DX::DeviceResources::InitProfiling() {
   D3D11_QUERY_DESC desc_disjoint = {D3D11_QUERY_TIMESTAMP_DISJOINT, 0};
   D3D11_QUERY_DESC desc_timestamp = {D3D11_QUERY_TIMESTAMP, 0};
@@ -2274,6 +2281,7 @@ void DX::DeviceResources::ReleaseProfilingQueries()
 
   m_currentWriteSlot = 0;
 }
+#endif
 
 bool DX::DeviceResources::IsHDROutput1() const 
 {
@@ -2332,11 +2340,20 @@ void DX::DeviceResources::WatchdogThreadLoop()
 	}
 
 	uint64_t currentPresented = m_framesPresented.load(std::memory_order_acquire);
+	uint64_t currentRendered = m_framesRendered.load(std::memory_order_acquire);
 
 	if(currentPresented == m_lastCheckPresented)
 	{
 	  // The presentation counter has stopped moving!
-	  m_stallCount++;
+	  if(currentRendered > currentPresented)
+	  {
+		m_stallCount++;
+	  }
+	  else
+	  {
+		// The queue is empty. This is an application-level starvation, not a GPU freeze.
+		m_stallCount = 0;
+	  }
 
 	  if(m_stallCount >= 8) // 4 full seconds of absolute zero movement
 	  {
