@@ -316,13 +316,13 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	m_FrameMixerQueueMore,
 	m_FrameMixerQueueErr,
 	m_FrameMixerQueueResets);
-  double mean;
-  double var = renderTimeMonitor.calculateVariance(mean);
-  double meanGpu;
-  double varGpu = renderTimeMonitorGpu.calculateVariance(meanGpu);
-  info.render7 = StringUtils::Format("Render time (t): {:0>4.1f}ms, mean: {:0>4.1f}, max:{:0>4.1f}, stdDev:{:0>4.1f}", plbuffer->m_RenderDurationGpu * 1000.0, meanGpu * 1000.0, renderTimeMonitorGpu.calculatePeak() * 1000.0, std::sqrt(varGpu) * 1000.0);
-  info.render8 = StringUtils::Format("Render time (p): {:0>4.1f}ms, mean: {:0>4.1f}, max:{:0>4.1f}, stdDev:{:0>4.1f}", plbuffer->m_RenderDuration * 1000.0, mean * 1000.0, renderTimeMonitor.calculatePeak() * 1000.0, std::sqrt(var) * 1000.0);
 
+  double meanv, varv, minv, maxv;
+  renderTimeMonitorGpu.calculateAll(meanv, varv, minv, maxv);
+  info.render7 = StringUtils::Format("Render time (T) Min/Max: {:0>5.2f} / {:0>5.2f}, mean: {:0>5.2f}, stdDev:{:0>5.2f}", minv * 1000.0, maxv * 1000.0, meanv * 1000.0, std::sqrt(varv) * 1000.0);
+
+  renderTimeMonitor.calculateAll(meanv, varv, minv, maxv);
+  info.render8 = StringUtils::Format("Render time (P) Min/Max: {:0>5.2f} / {:0>5.2f}, mean: {:0>5.2f}, stdDev:{:0>5.2f}", minv * 1000.0, maxv * 1000.0, meanv * 1000.0, std::sqrt(varv) * 1000.0);
 
   info.shader = "-"; 
   if (plbuffer->hasHDR10PlusMetadata)

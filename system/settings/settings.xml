@@ -79,7 +79,7 @@
 		  <level>1</level>
 		  <default>6</default>
 		  <constraints>
-			<minimum>3</minimum>
+			<minimum>2</minimum>
 			<step>1</step>
 			<maximum>8</maximum>
 		  </constraints>

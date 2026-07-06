@@ -190,7 +190,45 @@ public:
 	  }
 	}
 
-	double calculateVariance(double& mean) const {
+	void calculateAll(double& mean, double& var, double& min, double& max) {
+	  size_t count = getActiveCount();
+	  if(count ==0)
+	  {
+		mean = 0;
+		var = 0;
+		min = 0;
+		max = 0;
+		return;
+	  }
+
+	  double sum = 0.0;
+	  double maxVal = history [0];
+	  double minVal = history [0];
+
+	  double current_mean = 0.0;
+	  double M2 = 0.0; // Tracks sum of squared differences dynamically
+
+	  for(size_t i = 0; i < count; ++i)
+	  {
+		double x = history [i];
+
+		if(x > maxVal) maxVal = x;
+		if(x < minVal) minVal = x;
+
+		size_t n = i + 1;
+		double delta = x - current_mean;
+		current_mean += delta / n;
+		double delta2 = x - current_mean;
+		M2 += delta * delta2;
+	  }
+
+	  mean = current_mean;
+	  var = (count > 1) ? (M2 / (count - 1)) : 0.0;
+	  min = minVal;
+	  max = maxVal;
+	}
+
+	double calculateVariance(double& mean) {
 	  size_t count = getActiveCount();
 	  if(count < 2) return 0.0;
 

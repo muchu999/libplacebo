@@ -43,6 +43,7 @@ extern "C"
 #include "../../../project/BuildDependencies/msys64/usr/include/w32api/timeapi.h"
 #include <dwmapi.h>
 #include <cores/VideoSettings.h>
+#include <cmath>
 
 using namespace DirectX;
 using namespace Microsoft::WRL;
@@ -1911,14 +1912,14 @@ DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo()
 
   uint64_t displayBunchingCount = m_JudderTokenBunching.load(std::memory_order_relaxed);
   uint64_t cadenceDropCount = m_JudderCadenceDrop.load(std::memory_order_relaxed);
-  //uint64_t vramStallCount = m_JudderVramStall.load(std::memory_order_relaxed);
-  double mean;
-  double var = m_queueDepthTracker.calculateVariance(mean);
-  info.judder = StringUtils::Format("Queue Depth Min/Max: {:2.0f} / {:2.0f}, mean: {:4.1f}, cadence drop: {}", m_queueDepthTracker.calculateMin(), m_queueDepthTracker.calculatePeak(), mean, cadenceDropCount);
-  var = m_guiComposeTimeMonitor.calculateVariance(mean);
-  info.guiComposeTime = StringUtils::Format("GUI Compose time mean: {:4.2f}ms, max: {:4.2f}ms, stdVar: {:4.2f}", mean*1000.0, m_guiComposeTimeMonitor.calculatePeak()*1000.0, std::sqrt(var) * 1000.0);
 
-  // 3. In your update loop or a background thread, check it without blocking
+  double meanv, varv, minv, maxv;;
+  m_queueDepthTracker.calculateAll(meanv, varv, minv, maxv);
+  info.judder = StringUtils::Format("Queue Depth Min/Max: {:2.0f} / {:2.0f}, mean: {:4.1f}, cadence drop: {}", minv, maxv, meanv, cadenceDropCount);
+
+  m_guiComposeTimeMonitor.calculateAll(meanv, varv, minv, maxv);
+  info.guiComposeTime = StringUtils::Format("Render time (G) Min/Max: {:0>5.2f} / {:0>5.2f}, mean: {:0>5.2f}, stdDev: {:0>5.2f}", minv*1000.0, maxv*1000.0, meanv*1000.0, std::sqrt(varv) * 1000.0);
+
 #if 0
   if(WaitForSingleObject(m_budgetEvent, 0) == WAIT_OBJECT_0) 
   {
