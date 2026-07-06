@@ -25681,5 +25681,13 @@ msgctxt "#55378"
 msgid "Contrast (SDR->HDR)"
 msgstr ""
 
+msgctxt "#55379"
+msgid "Presentation queue depth"
+msgstr ""
+
+msgctxt "#55380"
+msgid "Number of frames that can be prepared in advance before being submitted for presentation, affects GPU memory usage"
+msgstr ""
+
 
 
