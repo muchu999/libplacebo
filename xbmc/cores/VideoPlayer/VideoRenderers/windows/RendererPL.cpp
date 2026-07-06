@@ -725,6 +725,35 @@ static HRESULT SafeGetQueryData(ID3D11DeviceContext* pContext, ID3D11Query* pQue
   }
 }
 
+static void SafeEndQuery(ID3D11DeviceContext* pContext, ID3D11Query* pQuery)
+{
+  if(!pContext || !pQuery) return;
+
+  __try
+  {
+	pContext->End(pQuery);
+  }
+  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+  {
+	// Caught the multi-threaded race or query eviction safely at the driver edge!
+	// We absorb it silently so kodi.exe keeps running seamlessly.
+  }
+}
+
+static void SafeBeginQuery(ID3D11DeviceContext* pContext, ID3D11Query* pQuery)
+{
+  if(!pContext || !pQuery) return;
+
+  __try
+  {
+	pContext->Begin(pQuery);
+  }
+  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
+  {
+	// Absorb the exception safely
+  }
+}
+
 //---------------------------------------------------
 //
 //
@@ -1242,13 +1271,13 @@ void CRendererPL::RenderMix(CRenderBufferImpl* buffer, double renderPts, CVideoS
 
 	if(!current_frame.is_active && current_frame.disjoint && current_frame.start && current_frame.end)
 	{
-	  pDeviceContext->Begin(current_frame.disjoint);
-	  pDeviceContext->End(current_frame.start);
+	  SafeBeginQuery(pDeviceContext, current_frame.disjoint);
+	  SafeEndQuery(pDeviceContext, current_frame.start);
 
 	  RenderMixExec(buffer, renderPts, videoSettings, sourceRect, dst, frameOut, pDeviceContext);
 
-	  pDeviceContext->End(current_frame.end);
-	  pDeviceContext->End(current_frame.disjoint);
+	  SafeEndQuery(pDeviceContext, current_frame.end);
+	  SafeEndQuery(pDeviceContext, current_frame.disjoint);
 	  current_frame.is_active = true;
 	  m_currentWriteSlot = (m_currentWriteSlot + 1) % QUERY_LATENCY;
 	}
