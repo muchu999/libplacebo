@@ -290,7 +290,7 @@ private:
 	void StartPresentThread();
 	void StopPresentThread();
 
-	static constexpr int PRESENT_QUERY_LATENCY = 32;
+	static constexpr int PRESENT_QUERY_LATENCY = 8;
 	void InitProfiling();
 	void ReleaseProfilingQueries();
 	void LogThreadState(const std::string& location);
