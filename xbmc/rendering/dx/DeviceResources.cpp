@@ -2088,25 +2088,6 @@ static void SafeBeginQuery(ID3D11DeviceContext* pContext, ID3D11Query* pQuery)
   }
 }
 
-static HRESULT SafeExecuteCommandList(ID3D11DeviceContext* pImmediateContext, ID3D11CommandList* pCommandList)
-{
-  if(!pImmediateContext || !pCommandList) return E_INVALIDARG;
-
-  __try
-  {
-	// Restores a soft landing pad if the GPU driver throws a 0x0000087D hardware 
-	// asset race condition during a tight queue-depth-1 crossover pass.
-	pImmediateContext->ExecuteCommandList(pCommandList, TRUE);
-	return S_OK;
-  }
-  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
-  {
-	// Caught the driver race condition at the kernel boundary!
-	// Discard the frame safely to keep the application running.
-	return E_FAIL;
-  }
-}
-
 class D3DContextInterfaceGuard
 {
 public:
@@ -2162,13 +2143,12 @@ void DX::DeviceResources::PresentThreadLoop()
 
 	  if(waitResult == WAIT_FAILED || waitResult == WAIT_ABANDONED)
 	  {
-		pMultithread->Enter();
+		D3DContextInterfaceGuard shield(pMultithread.Get());
 		Microsoft::WRL::ComPtr<IDXGISwapChain2> swapChain2;
 		if(m_swapChain && SUCCEEDED(m_swapChain.As(&swapChain2)))
 		{
 		  m_latencyWaitableObject = swapChain2->GetFrameLatencyWaitableObject();
 		}
-		pMultithread->Leave();
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		continue;
@@ -2189,8 +2169,27 @@ void DX::DeviceResources::PresentThreadLoop()
 	  {
 		D3DContextInterfaceGuard contextShield(pMultithread.Get());
 
+#if 1
+		PresentQuery& current_frame = m_presentQueryRing [m_presentWriteSlot];
+
+		if(current_frame.disjoint)
+		{
+		  m_d3dContext->Begin(current_frame.disjoint);
+		  m_d3dContext->End(current_frame.start);
+		}
+#endif
 		// Execute cleanly under the protection of the RAII shield
 		m_d3dContext->ExecuteCommandList(localPackage.CommandList.Get(), TRUE);
+#if 1
+		if(current_frame.disjoint)
+		{
+		  m_d3dContext->End(current_frame.end);
+		  m_d3dContext->End(current_frame.disjoint);
+
+		  current_frame.is_active = true;
+		  m_presentWriteSlot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
+		}
+#endif
 	  } // contextShield is automatically destroyed here, invoking ->Leave() perfectly!
 
 	  // Reset references safely outside the locked scope
@@ -2202,6 +2201,38 @@ void DX::DeviceResources::PresentThreadLoop()
 	{
 	  D3DContextInterfaceGuard presentationShield(pMultithread.Get());
 
+#if 1
+	  int read_slot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
+	  PresentQuery& old_pass = m_presentQueryRing [read_slot];
+
+	  if(old_pass.is_active && old_pass.disjoint)
+	  {
+		D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
+
+		// Pass DONOTFLUSH to keep the Presentation Thread running at maximum speed!
+		HRESULT hr = m_d3dContext->GetData(old_pass.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+
+		if(hr == S_OK)
+		{
+		  UINT64 start_time = 0;
+		  UINT64 end_time = 0;
+
+		  m_d3dContext->GetData(old_pass.start, &start_time, sizeof(UINT64), 0);
+		  m_d3dContext->GetData(old_pass.end, &end_time, sizeof(UINT64), 0);
+
+		  if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
+		  {
+			double freq = static_cast<double>(disjoint_data.Frequency);
+			float layerComposeMs = (static_cast<float>(end_time - start_time) / freq);
+
+			// Store relaxed atomically so your sliding OSD monitor can read it safely
+			m_guiComposeTime.store(layerComposeMs, std::memory_order_relaxed);
+		  }
+
+		  old_pass.is_active = false; // Free for reuse
+		}
+	  }
+#endif
 	  if(m_swapChain)
 	  {
 		HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
@@ -2240,6 +2271,7 @@ void DX::DeviceResources::PresentThreadLoop()
   m_framesPresented.store(0, std::memory_order_release);
   m_renderCv.notify_all();
 }
+
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
   float newSample = m_guiComposeTime.exchange(-1.0f, std::memory_order_relaxed);
