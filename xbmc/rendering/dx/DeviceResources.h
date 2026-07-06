@@ -300,15 +300,12 @@ private:
 	int                     m_stallCount {0};
 
 	void WatchdogThreadLoop();
-	HANDLE m_budgetEvent = {};
-	DWORD m_budgetCookie = 0;
 
 
 
 public:
   // Latency matching DXGI default max frame latency
 
-  DXGI_QUERY_VIDEO_MEMORY_INFO m_gpuMemInfo;
   struct PresentQuery
   {
 	ID3D11Query* disjoint = nullptr;
