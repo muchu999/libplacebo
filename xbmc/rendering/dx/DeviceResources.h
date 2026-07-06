@@ -171,7 +171,7 @@ namespace DX
 
 
     // Gets debug info from swapchain
-    DEBUG_INFO_RENDER GetDebugInfo() const;
+    DEBUG_INFO_RENDER GetDebugInfo();
     std::vector<DXGI_COLOR_SPACE_TYPE> GetSwapChainColorSpaces() const;
     bool SetMultithreadProtected(bool enabled) const;
     bool IsGCNOrOlder() const;

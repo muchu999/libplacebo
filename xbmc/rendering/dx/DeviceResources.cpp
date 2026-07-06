@@ -399,7 +399,7 @@ void DX::DeviceResources::CreateDecoderDeviceResources()
   if(DX::SdkLayersAvailable())
   {
 	// If the project is in a debug build, enable debugging via SDK Layers with this flag.
-	creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
+	// creationFlags |= D3D11_CREATE_DEVICE_DEBUG; //cl disabled because of dx11 debug layer bug with multithreaded presentation causing frequent crashes and corrupting D3D11 leading to crash even in previously working versions
   }
 #endif
 
@@ -608,7 +608,7 @@ void DX::DeviceResources::CreateDeviceResources()
 
   // Store pointers to the Direct3D 11.1 API device and immediate context.
   hr = device.As(&m_d3dDevice); CHECK_ERR();
-#if 0
+#if 1
   ReleaseProfilingQueries();
   InitProfiling();
 #endif
@@ -732,9 +732,9 @@ void DX::DeviceResources::CreateBackBuffer()
 
   m_deferrContext->RSSetViewports(1, &m_screenViewport);
 
-  IDXGIAdapter3* adapter3 = nullptr;
-  HRESULT hr2 = m_adapter->QueryInterface(IID_PPV_ARGS(&adapter3));
-  hr = adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &m_gpuMemInfo);
+  //IDXGIAdapter3* adapter3 = nullptr;
+  //HRESULT hr2 = m_adapter->QueryInterface(IID_PPV_ARGS(&adapter3));
+  //hr = adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &m_gpuMemInfo);
 
   //adapter3->RegisterVideoMemoryBudgetChangeNotificationEvent(m_budgetEvent, &m_budgetCookie);
 }
@@ -1233,6 +1233,7 @@ void DX::DeviceResources::HandleDeviceLost(bool removed)
     CServiceBroker::GetAppMessenger()->PostMsg(TMSG_EXECUTE_BUILT_IN, -1, -1, nullptr,
                                                "ReloadSkin");
 }
+
 CPLHelper::CMonitor m_guiComposeTimeMonitor(120);
 
 bool DX::DeviceResources::Begin()
@@ -1931,7 +1932,7 @@ DEBUG_INFO_RENDER DX::DeviceResources::GetDebugInfo()
   const int64_t gb = 1024 * 1024 * 1024;
   // disabled updates because of rough playback
   //info.gpuMemory = StringUtils::Format("GPU Memory Budget: {:.2f} GB, CurrentUsage: {:.2f} GB, CurrentReservation: {:.2f} GB, AvailableForReservation: {:.2f} GB", (float)m_gpuMemInfo.Budget / gb, (float) m_gpuMemInfo.CurrentUsage / gb, (float) m_gpuMemInfo.CurrentReservation / gb, (float) m_gpuMemInfo.AvailableForReservation / gb);
-  info.gpuMemory = StringUtils::Format("GPU Memory Budget: {:.2f} GB", (float)m_gpuMemInfo.Budget / gb);
+  //info.gpuMemory = StringUtils::Format("GPU Memory Budget: {:.2f} GB", (float)m_gpuMemInfo.Budget / gb);
 
 
   return info;
