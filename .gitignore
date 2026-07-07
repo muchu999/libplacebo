@@ -7,3 +7,5 @@
 *.o
 .cache
 __pycache__
+/src/include/libplacebo/config.h
+/src/include/config.h

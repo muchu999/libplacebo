@@ -372,7 +372,7 @@ static enum DXGI_FORMAT pick_format(pl_swapchain sw,
     if (use_10_bits && d3d11_format_supported(ctx, DXGI_FORMAT_R10G10B10A2_UNORM))
         return DXGI_FORMAT_R10G10B10A2_UNORM;
 
-    return DXGI_FORMAT_R8G8B8A8_UNORM;
+    return DXGI_FORMAT_B8G8R8A8_UNORM; //cl DXGI_FORMAT_R8G8B8A8_UNORM; //cl initial swapchain 8 bit
 }
 
 static void update_swapchain_color_config(pl_swapchain sw,
