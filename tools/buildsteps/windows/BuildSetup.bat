@@ -82,10 +82,9 @@ IF DEFINED BUILDDIR (
   MKDIR %BUILDDIR%
   PUSHD %BUILDDIR%
 
-  copy %base_dir%\xbmc\libplacebo\%buildconfig%\src\libplacebo.dll.a %BUILDDIR% > NUL
-  copy %base_dir%\xbmc\libplacebo\%buildconfig%\src\*.dll %BUILDDIR%\%buildconfig% > NUL
-  copy %base_dir%\DLLs\%buildconfig%\*.dll %BUILDDIR%\%buildconfig% > NUL
-
+  xcopy %base_dir%\xbmc\libplacebo\%buildconfig%\src\libplacebo.dll.a %BUILDDIR% /Q /I /Y > NUL
+  xcopy %base_dir%\xbmc\libplacebo\%buildconfig%\src\*.dll %BUILDDIR%\%buildconfig% /Q /I /Y > NUL
+  xcopy %base_dir%\DLLs\%buildconfig%\*.dll %BUILDDIR%\%buildconfig% /Q /I /Y > NUL
 
   cmake.exe -G "%cmakeGenerator%" -A %cmakeArch% -T host=x64 %cmakeProps% %base_dir%
   IF %errorlevel%==1 (

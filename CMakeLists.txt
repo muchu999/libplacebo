@@ -195,7 +195,6 @@ list(APPEND INCLUDES
   ${CMAKE_SOURCE_DIR}/xbmc/libplacebo/src/include
 )
 
-# Automatically copy config.h to the public folder where renderer.h expects it
 if(EXISTS "${CMAKE_SOURCE_DIR}/xbmc/libplacebo/Release/src/include/libplacebo/config.h")
     file(COPY "${CMAKE_SOURCE_DIR}/xbmc/libplacebo/Release/src/include/libplacebo/config.h" 
          DESTINATION "${CMAKE_SOURCE_DIR}/xbmc/libplacebo/src/include/libplacebo")
