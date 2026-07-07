@@ -191,6 +191,15 @@ set(INCLUDES ${CMAKE_SOURCE_DIR}/xbmc
              ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}
              ${CMAKE_BINARY_DIR}/${CORE_BUILD_DIR}/include)
 
+list(APPEND INCLUDES 
+  ${CMAKE_SOURCE_DIR}/xbmc/libplacebo/src/include
+)
+
+# Automatically copy config.h to the public folder where renderer.h expects it
+if(EXISTS "${CMAKE_SOURCE_DIR}/xbmc/libplacebo/Release/src/include/libplacebo/config.h")
+    file(COPY "${CMAKE_SOURCE_DIR}/xbmc/libplacebo/Release/src/include/libplacebo/config.h" 
+         DESTINATION "${CMAKE_SOURCE_DIR}/xbmc/libplacebo/src/include/libplacebo")
+endif()
 if (NOT PLATFORMDEFS_DIR STREQUAL "")
   list(APPEND INCLUDES ${CMAKE_SOURCE_DIR}/xbmc/${PLATFORMDEFS_DIR})
 endif()
