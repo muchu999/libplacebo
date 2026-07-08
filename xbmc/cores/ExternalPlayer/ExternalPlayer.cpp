@@ -147,7 +147,7 @@ void CExternalPlayer::Process()
   }
   else if((m_name == "MPC-BE") || (m_name == "MPC-HC") || (m_name == "mpc-be") || (m_name == "mpc-hc"))
   {
-	m_args += std::format(" /startpos {}", m_startTime);
+	m_args += std::format(" /start {}", m_startTime*1000.0);
   }
   else if((m_name == "VLC") || (m_name == "vlc"))
   {
