@@ -526,6 +526,13 @@ public:
   float m_PlaceboSdrToneConstantSlopeOffset;
   float m_PlaceboSdrToneConstantSlopeTuning;
   float m_PlaceboSdrToneConstantSplineContrast;
+  float m_PlaceboSdrToneConstantParam0;
+  float m_PlaceboSdrToneConstantParam1;
+  float m_PlaceboSdrToneConstantParam2;
+  float m_PlaceboSdrToneConstantParam3;
+  float m_PlaceboSdrToneConstantParam4;
+  float m_PlaceboSdrToneConstantParam5;
+  float m_PlaceboSdrToneConstantParam6;
 
   float m_PlaceboSdrGamutConstantsColorimetricGamma;
   float m_PlaceboSdrGamutConstantsPerceptualDeadzone;

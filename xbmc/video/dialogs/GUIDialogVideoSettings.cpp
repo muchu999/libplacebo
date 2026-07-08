@@ -190,6 +190,13 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH     "video.libplacebo.gamut_constants_perceptual_strength"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_DESAT          "video.libplacebo.gamut_constants_softclip_desat"
 #define SETTING_LIB_PLACEBO_GAMUT_CONSTANTS_SOFTCLIP_KNEE           "video.libplacebo.gamut_constants_softclip_knee"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM0               "video.libplacebo.sdr_tone_constants_param0"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM1               "video.libplacebo.sdr_tone_constants_param1"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM2               "video.libplacebo.sdr_tone_constants_param2"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM3               "video.libplacebo.sdr_tone_constants_param3"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM4               "video.libplacebo.sdr_tone_constants_param4"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM5               "video.libplacebo.sdr_tone_constants_param5"
+#define SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM6               "video.libplacebo.sdr_tone_constants_param6"
 #define SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_COLORIMETRIC_GAMMA      "video.libplacebo.sdr_gamut_constants_colorimetric_gamma"
 #define SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_PERCEPTUAL_DEADZONE     "video.libplacebo.sdr_gamut_constants_perceptual_deadzone"
 #define SETTING_LIB_PLACEBO_SDR_GAMUT_CONSTANTS_PERCEPTUAL_STRENGTH     "video.libplacebo.sdr_gamut_constants_perceptual_strength"
@@ -949,6 +956,41 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboSdrToneConstantSlopeTuning = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
 	appPlayer->SetVideoSettings(vs);
   }
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM0)
+  {
+	vs.m_PlaceboSdrToneConstantParam0 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM1)
+  {
+	vs.m_PlaceboSdrToneConstantParam1 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM2)
+  {
+	vs.m_PlaceboSdrToneConstantParam2 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM3)
+  {
+	vs.m_PlaceboSdrToneConstantParam3 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM4)
+  {
+	vs.m_PlaceboSdrToneConstantParam4 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM5)
+  {
+	vs.m_PlaceboSdrToneConstantParam5 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	}
+  else if(settingId == SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM6)
+  {
+	vs.m_PlaceboSdrToneConstantParam6 = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+	}
   else if (settingId == SETTING_LIB_PLACEBO_COLOR_MAP_VISUALIZE_LUT)
   {
 	vs.m_PlaceboColorMapVisualizeLut = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
@@ -2247,14 +2289,24 @@ void CGUIDialogVideoSettings::InitializeToneMappingMenuSdr(CVideoSettings& video
 	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_KNEE_MINIMUM, 55270, SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantKneeMinimum, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 0.5);
   }
 
-  if(funcDesc == "Single-pivot polynomial spline")
+  else if(funcDesc == "Single-pivot polynomial spline")
   {
 	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_SLOPE_OFFSET, "   Slope offset", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantSlopeOffset, "{0:4.2f}", (float) 0.0, (float) 0.01, (float) 1.0);  //cl strings.po...
 	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_SLOPE_TUNING, "   Slope Tuning", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantSlopeTuning, "{0:4.2f}", (float) 0.0, (float) 0.1, (float) 10.0);  //cl strings.po...
   }
+  else if(funcDesc == "Custom Spline")
+  {
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM0, "   Param 0", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantParam0, "{0:4.1f}", (float) 0.0, (float) 1.0, (float) 255.0);  //cl strings.po...
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM1, "   Param 1", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantParam1, "{0:4.1f}", (float) -89.0, (float) 0.1, (float) 89.0);  //cl strings.po...
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM2, "   Param 2", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantParam2, "{0:4.3f}", (float) 0.005, (float) 0.005, (float) 1.0);  //cl strings.po...
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM3, "   Param 3", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantParam3, "{0:4.2f}", (float) -1.0, (float) 0.01, (float) 1.0);  //cl strings.po...
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM4, "   Param 4", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantParam4, "{0:4.2f}", (float) -5.0, (float) 0.05, (float) 5.0);  //cl strings.po...
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM5, "   Param 5", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantParam5, "{0:4.3f}", (float) 0.005, (float) 0.005, (float) 1.0);  //cl strings.po...
+	AddSlider(group, SETTING_LIB_PLACEBO_SDR_TONE_CONSTANTS_PARAM6, "   Param 6", SettingLevel::Basic, videoSettings.m_PlaceboSdrToneConstantParam6, "{0:4.1f}", (float) -89.0, (float) 0.1, (float) 89.0);  //cl strings.po...
+
+  }
+
 }
-
-
 
 void CGUIDialogVideoSettings::InitializeShaderMenu(CVideoSettings& vs, const std::shared_ptr<CSettingCategory>& category)
 {

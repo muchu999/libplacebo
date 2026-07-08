@@ -737,6 +737,13 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetFloat(pNode, "placebosdrtoneconstantslopeoffset", vs.m_PlaceboSdrToneConstantSlopeOffset);
   XMLUtils::SetFloat(pNode, "placebosdrtoneconstantslopetuning", vs.m_PlaceboSdrToneConstantSlopeTuning);
   XMLUtils::SetFloat(pNode, "placebosdrtoneconstantsplinecontrast", vs.m_PlaceboSdrToneConstantSplineContrast);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantparam0", vs.m_PlaceboSdrToneConstantParam0);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantparam1", vs.m_PlaceboSdrToneConstantParam1);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantparam2", vs.m_PlaceboSdrToneConstantParam2);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantparam3", vs.m_PlaceboSdrToneConstantParam3);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantparam4", vs.m_PlaceboSdrToneConstantParam4);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantparam5", vs.m_PlaceboSdrToneConstantParam5);
+  XMLUtils::SetFloat(pNode, "placebosdrtoneconstantparam6", vs.m_PlaceboSdrToneConstantParam6);
   XMLUtils::SetFloat(pNode, "placebosdrgamutconstantscolorimetricgamma", vs.m_PlaceboSdrGamutConstantsColorimetricGamma);
   XMLUtils::SetFloat(pNode, "placebosdrgamutconstantsperceptualdeadzone", vs.m_PlaceboSdrGamutConstantsPerceptualDeadzone);
   XMLUtils::SetFloat(pNode, "placebosdrgamutconstantsperceptualstrength", vs.m_PlaceboSdrGamutConstantsPerceptualStrength);
@@ -920,6 +927,13 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantslopeoffset", vs.m_PlaceboSdrToneConstantSlopeOffset);
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantslopetuning", vs.m_PlaceboSdrToneConstantSlopeTuning);
   XMLUtils::GetFloat(pElement, "placebosdrtoneconstantsplinecontrast", vs.m_PlaceboSdrToneConstantSplineContrast);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantparam0", vs.m_PlaceboSdrToneConstantParam0);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantparam1", vs.m_PlaceboSdrToneConstantParam1);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantparam2", vs.m_PlaceboSdrToneConstantParam2);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantparam3", vs.m_PlaceboSdrToneConstantParam3);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantparam4", vs.m_PlaceboSdrToneConstantParam4);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantparam5", vs.m_PlaceboSdrToneConstantParam5);
+  XMLUtils::GetFloat(pElement, "placebosdrtoneconstantparam6", vs.m_PlaceboSdrToneConstantParam6);
   XMLUtils::GetFloat(pElement, "placebosdrgamutconstantscolorimetricgamma", vs.m_PlaceboSdrGamutConstantsColorimetricGamma);
   XMLUtils::GetFloat(pElement, "placebosdrgamutconstantsperceptualdeadzone", vs.m_PlaceboSdrGamutConstantsPerceptualDeadzone);
   XMLUtils::GetFloat(pElement, "placebosdrgamutconstantsperceptualstrength", vs.m_PlaceboSdrGamutConstantsPerceptualStrength);

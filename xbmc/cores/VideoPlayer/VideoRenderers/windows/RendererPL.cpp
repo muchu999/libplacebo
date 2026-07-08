@@ -1074,6 +1074,13 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	opt->color_map_params.tone_constants.slope_offset = videoSettings.m_PlaceboSdrToneConstantSlopeOffset;
 	opt->color_map_params.tone_constants.slope_tuning = videoSettings.m_PlaceboSdrToneConstantSlopeTuning;
 	opt->color_map_params.tone_constants.spline_contrast = videoSettings.m_PlaceboSdrToneConstantSplineContrast;
+	opt->color_map_params.tone_constants.param0 = videoSettings.m_PlaceboSdrToneConstantParam0;
+	opt->color_map_params.tone_constants.param1 = videoSettings.m_PlaceboSdrToneConstantParam1;
+	opt->color_map_params.tone_constants.param2 = videoSettings.m_PlaceboSdrToneConstantParam2;
+	opt->color_map_params.tone_constants.param3 = videoSettings.m_PlaceboSdrToneConstantParam3;
+	opt->color_map_params.tone_constants.param4 = videoSettings.m_PlaceboSdrToneConstantParam4;
+	opt->color_map_params.tone_constants.param5 = videoSettings.m_PlaceboSdrToneConstantParam5;
+	opt->color_map_params.tone_constants.param6 = videoSettings.m_PlaceboSdrToneConstantParam6;
 	opt->color_map_params.gamut_constants.colorimetric_gamma = videoSettings.m_PlaceboSdrGamutConstantsColorimetricGamma;
 	opt->color_map_params.gamut_constants.perceptual_deadzone = videoSettings.m_PlaceboSdrGamutConstantsPerceptualDeadzone;
 	opt->color_map_params.gamut_constants.perceptual_strength = videoSettings.m_PlaceboSdrGamutConstantsPerceptualStrength;
