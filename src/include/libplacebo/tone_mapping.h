@@ -111,20 +111,37 @@ struct pl_tone_map_constants {
     // For linear methods (linear, linearlight), this controls the linear
     // exposure/gain applied to the image. (0,10]
     float exposure;
+
+	// For bt2446a_inv  
+	float param0;
+	float param1;
+	float param2;
+	float param3;
+	float param4;
+	float param5;
+	float param6;
+
 };
 
 #define PL_TONE_MAP_CONSTANTS  \
-    .knee_adaptation   = 0.4f, \
-    .knee_minimum      = 0.1f, \
-    .knee_maximum      = 0.8f, \
-    .knee_default      = 0.4f, \
-    .knee_offset       = 1.0f, \
-    .slope_tuning      = 1.5f, \
-    .slope_offset      = 0.2f, \
-    .spline_contrast   = 0.5f, \
-    .reinhard_contrast = 0.5f, \
-    .linear_knee       = 0.3f, \
-    .exposure          = 1.0f,
+    .knee_adaptation      = 0.4f, \
+    .knee_minimum         = 0.1f, \
+    .knee_maximum         = 0.8f, \
+    .knee_default         = 0.4f, \
+    .knee_offset          = 1.0f, \
+    .slope_tuning         = 1.5f, \
+    .slope_offset         = 0.2f, \
+    .spline_contrast      = 0.5f, \
+    .reinhard_contrast    = 0.5f, \
+    .linear_knee          = 0.3f, \
+    .exposure             = 1.0f, \
+	.param0     = 74.0f, \
+	.param1     = 1.7f, \
+	.param2     = 0.3f, \
+	.param3     = 0.30f, \
+    .param4     = 1.75f, \
+    .param5     = 0.375f, \
+    .param6     = -21.5f
 
 struct pl_tone_map_params {
     // If `function` is NULL, defaults to `pl_tone_map_clip`.
@@ -212,6 +229,7 @@ PL_API extern const struct pl_tone_map_function pl_tone_map_bt2390;
 
 // EETF from ITU-R Report BT.2446, method A. Can be used for both forward
 // and inverse tone mapping.
+PL_API extern const struct pl_tone_map_function pl_tone_map_customSpline;
 PL_API extern const struct pl_tone_map_function pl_tone_map_bt2446a;
 
 // Simple spline consisting of two polynomials, joined by a single pivot point,

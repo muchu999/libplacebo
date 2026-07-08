@@ -25,17 +25,25 @@
 static void fix_constants(struct pl_tone_map_constants *c)
 {
     const float eps = 1e-6f;
-    c->knee_adaptation   = fclampf(c->knee_adaptation, 0.0f, 1.0f);
-    c->knee_minimum      = fclampf(c->knee_minimum, eps, 0.5f - eps);
-    c->knee_maximum      = fclampf(c->knee_maximum, 0.5f + eps, 1.0f - eps);
-    c->knee_default      = fclampf(c->knee_default, c->knee_minimum, c->knee_maximum);
-    c->knee_offset       = fclampf(c->knee_offset, 0.5f, 2.0f);
-    c->slope_tuning      = fclampf(c->slope_tuning, 0.0f, 10.0f);
-    c->slope_offset      = fclampf(c->slope_offset, 0.0f, 1.0f);
-    c->spline_contrast   = fclampf(c->spline_contrast, 0.0f, 1.5f);
-    c->reinhard_contrast = fclampf(c->reinhard_contrast, eps, 1.0f - eps);
-    c->linear_knee       = fclampf(c->linear_knee, eps, 1.0f - eps);
-    c->exposure          = fclampf(c->exposure, eps, 10.0f);
+    c->knee_adaptation      = fclampf(c->knee_adaptation, 0.0f, 1.0f);
+    c->knee_minimum         = fclampf(c->knee_minimum, eps, 0.5f - eps);
+    c->knee_maximum         = fclampf(c->knee_maximum, 0.5f + eps, 1.0f - eps);
+    c->knee_default         = fclampf(c->knee_default, c->knee_minimum, c->knee_maximum);
+    c->knee_offset          = fclampf(c->knee_offset, 0.5f, 2.0f);
+    c->slope_tuning         = fclampf(c->slope_tuning, 0.0f, 10.0f);
+    c->slope_offset         = fclampf(c->slope_offset, 0.0f, 1.0f);
+    c->spline_contrast      = fclampf(c->spline_contrast, 0.0f, 1.5f);
+    c->reinhard_contrast    = fclampf(c->reinhard_contrast, eps, 1.0f - eps);
+    c->linear_knee          = fclampf(c->linear_knee, eps, 1.0f - eps);
+    c->exposure             = fclampf(c->exposure, eps, 10.0f);
+	c->param0               = fclampf(c->param0, -1000.0f, 1000.0f);
+	c->param1               = fclampf(c->param1, -1000.0f, 1000.0f);
+	c->param2               = fclampf(c->param2, -1000.0f, 1000.0f);
+	c->param3               = fclampf(c->param3, -1000.0f, 1000.0f);
+	c->param4               = fclampf(c->param4, -1000.0f, 1000.0f);
+	c->param5               = fclampf(c->param5, -1000.0f, 1000.0f);
+	c->param6               = fclampf(c->param6, -1000.0f, 1000.0f);
+
 }
 
 static inline bool constants_equal(const struct pl_tone_map_constants *a,
@@ -509,23 +517,132 @@ static void bt2446a(float *lut, const struct pl_tone_map_params *params)
     const float phdr = 1 + 32 * powf(params->input_max / 10000, 1/2.4f);
     const float psdr = 1 + 32 * powf(params->output_max / 10000, 1/2.4f);
 
-    FOREACH_LUT(lut, x) {
+  FOREACH_LUT(lut, x) {
         x = powf(rescale_in(x, params), 1/2.4f);
-        x = logf(1 + (phdr - 1) * x) / logf(phdr);
+	x = logf(1 + (phdr - 1) * x) / logf(phdr);
 
         if (x <= 0.7399f) {
-            x = 1.0770f * x;
+	  x = 1.0770f * x;
         } else if (x < 0.9909f) {
-            x = (-1.1510f * x + 2.7811f) * x - 0.6302f;
+	  x = (-1.1510f * x + 2.7811f) * x - 0.6302f;
         } else {
-            x = 0.5f * x + 0.5f;
-        }
+	  x = 0.5f * x + 0.5f;
+	}
 
-        x = (powf(psdr, x) - 1) / (psdr - 1);
-        x = bt1886_eotf(x, params->output_min, params->output_max);
-    }
+	x = (powf(psdr, x) - 1) / (psdr - 1);
+	x = bt1886_eotf(x, params->output_min, params->output_max);
+  }
 }
 
+static void log_to_disk(char *message) {
+  // Use an absolute path where your user account has write permissions
+  FILE* f = fopen("D:\\libplacebo_debug.txt", "a");
+  if(f) {
+	fprintf(f, "Intercepted value: %s\n", message);
+	fclose(f);
+  }
+}
+
+static void customSpline(float* lut, const struct pl_tone_map_params* params) {
+  // 1. Establish the Unified Normalized Inflection Point (0.0 to 1.0)
+  // Convert libplacebo's 0-255 constant into a reliable 0.0-1.0 coordinate
+  float sdr_inflection = params->constants.param0 / 255.0f;
+  if(sdr_inflection <= 0.01f || sdr_inflection >= 0.99f) sdr_inflection = 0.3f;
+
+  // Calculate baseline native target height reference
+  float sdr_inf_scaled = sdr_inflection * 255.0f;
+  float native_exp_low = ((1.8712e-5f * sdr_inf_scaled - 2.7334e-3f) * sdr_inf_scaled + 1.3141f);
+  // Normalize to 0-1 range (relative to a 1000 nit master limit)
+  float base_inf_height = (powf(sdr_inf_scaled, native_exp_low) / 1000.0f);
+
+  // --- READ THE 6 CUSTOM SPLINE TUNERS ---
+  // Since scaling is PL_HDR_PQ, all coordinates are uniform 0.0 to 1.0 on both axes!
+
+  // 1. shadow_angle: Tangent exit slope from pure black (0.0 = horizontal, 1.0 = 45-degree diagonal)
+  float shadow_angle = params->constants.param1;
+
+  // 2. shadow_distance: Sets where the shadow corner fillet ends (Range: 0.01 to sdr_inflection)
+  float x1 = params->constants.param2;
+  if(x1 < 0.01f) x1 = 0.01f;
+  if(x1 > sdr_inflection - 0.01f) x1 = sdr_inflection - 0.01f;
+
+  // 3. inflection_height: Directly adjusts vertical midtone height at the central joint
+  float mid_height = base_inf_height + params->constants.param3; // Range: -0.4 to 0.4
+  if(mid_height < 0.01f) mid_height = 0.01f;
+  if(mid_height > 0.99f) mid_height = 0.99f;
+
+  // 4. mid_slope: Straight linear midsection track gradient
+  float mid_slope = params->constants.param4;
+
+  // 5. highlight_distance: Width of the highlight corner fillet (Range: 0.01 to 1.0 - sdr_inflection)
+  float high_distance = params->constants.param5;
+  float max_high_dist = 1.0f - sdr_inflection;
+  if(high_distance < 0.01f) high_distance = 0.01f;
+  if(high_distance > max_high_dist - 0.01f) high_distance = max_high_dist - 0.01f;
+  float x2 = 1.0f - high_distance;
+
+  // 6. peak_angle: Approach slope rolling into the maximum HDR ceiling at 1.0
+  float peak_angle = params->constants.param6;
+
+  // Calculate structural boundary heights for the linear track
+  float y1 = mid_height + mid_slope * (x1 - sdr_inflection);
+  float y2 = mid_height + mid_slope * (x2 - sdr_inflection);
+
+  FOREACH_LUT(lut, x) {
+	// With PL_HDR_PQ, 'x' enters as a perfectly normalized float from 0.0 to 1.0
+	float x_norm = x;
+	float y_final = 0.0f;
+
+	if(x_norm < x1) {
+	  // --- REGION 1: SHADOW CORNER FILLET ---
+	  float t = x_norm / x1;
+	  float t2 = t * t;
+	  float t3 = t2 * t;
+
+	  float h00 = 2.0f * t3 - 3.0f * t2 + 1.0f;
+	  float h10 = t3 - 2.0f * t2 + t;
+	  float h01 = -2.0f * t3 + 3.0f * t2;
+	  float h11 = t3 - t2;
+
+	  y_final = h00 * 0.0f + h10 * (shadow_angle * x1) + h01 * y1 + h11 * (mid_slope * x1);
+
+	}
+	else if(x_norm <= x2) {
+	  // --- REGION 2: LINEAR MIDSECTION ---
+	  y_final = mid_height + mid_slope * (x_norm - sdr_inflection);
+
+	}
+	else {
+	  // --- REGION 3: HIGHLIGHT CORNER FILLET ---
+	  float range_high = 1.0f - x2;
+	  float t = (x_norm - x2) / range_high;
+	  if(t < 0.0f) t = 0.0f;
+	  if(t > 1.0f) t = 1.0f;
+
+	  float t2 = t * t;
+	  float t3 = t2 * t;
+
+	  float h00 = 2.0f * t3 - 3.0f * t2 + 1.0f;
+	  float h10 = t3 - 2.0f * t2 + t;
+	  float h01 = -2.0f * t3 + 3.0f * t2;
+	  float h11 = t3 - t2;
+
+	  y_final = h00 * y2 + h10 * (mid_slope * range_high) + h01 * 1.0f + h11 * (peak_angle * range_high);
+	}
+
+	// Clip outputs safely to normalized bounds
+	if(y_final < 0.0f) y_final = 0.0f;
+	if(y_final > 1.0f) y_final = 1.0f;
+
+	// Pass the normalized output straight back to libplacebo's pipeline wrapper
+	x = y_final;
+	x = rescale_out(x, params);
+	//char log_buffer[256];
+	//sprintf(log_buffer, "x_norm:%f, y_final:%f, x: %f", x_norm, y_final, x);
+	//log_to_disk(log_buffer);
+	//PL_DEBUG(p, "x_norm:%f, y_final:%f, x: %f", x_norm, y_final, x);
+  }
+}
 static void bt2446a_inv(float *lut, const struct pl_tone_map_params *params)
 {
     FOREACH_LUT(lut, x) {
@@ -541,12 +658,20 @@ static void bt2446a_inv(float *lut, const struct pl_tone_map_params *params)
     }
 }
 
+const struct pl_tone_map_function pl_tone_map_customSpline = {
+    .name = "customSpline",
+    .description = "Custom Spline",
+    .scaling = PL_HDR_PQ,
+    .map = customSpline,
+    .map_inverse = customSpline,
+};
+
 const struct pl_tone_map_function pl_tone_map_bt2446a = {
-    .name = "bt2446a",
-    .description = "ITU-R BT.2446 Method A",
-    .scaling = PL_HDR_NITS,
-    .map = bt2446a,
-    .map_inverse = bt2446a_inv,
+	.name = "bt2446a",
+	.description = "ITU-R BT.2446 Method A",
+	.scaling = PL_HDR_PQ,
+	.map = bt2446a,
+	.map_inverse = bt2446a_inv,
 };
 
 static void spline(float *lut, const struct pl_tone_map_params *params)
@@ -754,6 +879,7 @@ const struct pl_tone_map_function * const pl_tone_map_functions[] = {
     &pl_tone_map_st2094_10,
     &pl_tone_map_bt2390,
     &pl_tone_map_bt2446a,
+    &pl_tone_map_customSpline,
     &pl_tone_map_spline,
     &pl_tone_map_reinhard,
     &pl_tone_map_mobius,
