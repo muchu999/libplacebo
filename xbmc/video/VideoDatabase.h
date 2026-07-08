@@ -435,10 +435,12 @@ public:
   void DeleteTag(int idTag, VideoDbContentType mediaType);
   bool DeleteFile(int idFile);
 
+  bool RemoveLibplaceboExtraColumnsFromSettingsTable(int idFile);
   bool RemoveLibplaceboColumnsFromSettingsTable(int idFile);
   bool AddLibplaceboColumnsToSettingsTable(int idFile, const CVideoSettings& settings);
+  void InitLibplaceboColumns(int idFile, const CVideoSettings& settings);
 
-    /*! \brief Get video settings for the specified file id
+  /*! \brief Get video settings for the specified file id
    \param idFile file id to get the settings for
    \return true if video settings found, false otherwise
    \sa SetVideoSettings
