@@ -669,7 +669,7 @@ const struct pl_tone_map_function pl_tone_map_customSpline = {
 const struct pl_tone_map_function pl_tone_map_bt2446a = {
 	.name = "bt2446a",
 	.description = "ITU-R BT.2446 Method A",
-	.scaling = PL_HDR_PQ,
+	.scaling = PL_HDR_NITS,
 	.map = bt2446a,
 	.map_inverse = bt2446a_inv,
 };
