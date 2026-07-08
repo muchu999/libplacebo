@@ -185,7 +185,12 @@ CRenderInfo CRendererBase::GetRenderInfo()
     AV_PIX_FMT_YUV420P10,
     AV_PIX_FMT_YUV420P16
   };
+#ifdef _WIN32
+  int num_buffers = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_VIDEOBUFFERS);
+  info.max_buffer_size = num_buffers;
+#else
   info.max_buffer_size = NUM_BUFFERS;
+#endif
 
   return info;
 }
@@ -338,7 +343,12 @@ bool CRendererBase::Flush(bool saveBuffers)
 {
   if (!saveBuffers)
   {
-    for (int i = 0; i < NUM_BUFFERS; i++)
+#ifdef _WIN32
+	int num_buffers = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_VIDEOBUFFERS);
+    for (int i = 0; i < num_buffers; i++)
+#else
+	for(int i = 0; i < NUM_BUFFERS; i++)
+#endif
       DeleteRenderBuffer(i);
 
     m_iBufferIndex = 0;

@@ -50,6 +50,10 @@ CRenderManager::CRenderManager(CDVDClock &clock, IRenderMsg *player) :
   m_dvdClock(clock),
   m_playerPort(player)
 {
+#ifdef _WIN32
+  int num_buffers = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_VIDEOBUFFERS);
+  m_Queue = std::make_unique<SPresent []>(num_buffers);
+#endif
 }
 
 CRenderManager::~CRenderManager()

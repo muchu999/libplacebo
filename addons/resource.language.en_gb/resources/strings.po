@@ -25686,7 +25686,15 @@ msgid "Presentation queue depth"
 msgstr ""
 
 msgctxt "#55380"
-msgid "Number of frames that can be prepared in advance before being submitted for presentation, affects GPU memory usage"
+msgid "Number of frames that can be prepared in advance before being submitted for presentation, smooths-out render time variations, affects GPU memory usage"
+msgstr ""
+
+msgctxt "#55381"
+msgid "Number of video buffers"
+msgstr ""
+
+msgctxt "#55382"
+msgid "Maximum number of video buffers shared between the decoder and the video output, increase it when using frame mixing"
 msgstr ""
 
 

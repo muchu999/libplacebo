@@ -194,15 +194,20 @@ protected:
 
   int m_QueueSize = 2;
   int m_QueueSkip = 0;
-
+ 
   struct SPresent
   {
-    double         pts;
-    EFIELDSYNC     presentfield;
-    EPRESENTMETHOD presentmethod;
+	double         pts;
+	EFIELDSYNC     presentfield;
+	EPRESENTMETHOD presentmethod;
 	double         renderPts;
-  } m_Queue[NUM_BUFFERS]{};
-
+  };
+#ifdef _WIN32
+  std::unique_ptr<SPresent []> m_Queue;
+#else
+  struct SPresent m_Queue [NUM_BUFFERS] {};
+#endif
+  
   std::deque<int> m_free;
   std::deque<int> m_queued;
   std::deque<int> m_discard;

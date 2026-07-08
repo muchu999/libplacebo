@@ -44,11 +44,23 @@ COverlay::COverlay()
 COverlay::~COverlay() = default;
 
 unsigned int CRenderer::m_textureid = 1;
+int CRenderer::LoadBufferSetting()
+{
+  return CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_VIDEOBUFFERS);
+}
 
+#ifdef _WIN32
+CRenderer::CRenderer()
+  : m_buffers(LoadBufferSetting())
+{
+  CServiceBroker::GetSettingsComponent()->GetSubtitlesSettings()->RegisterObserver(this);
+}
+#else
 CRenderer::CRenderer()
 {
   CServiceBroker::GetSettingsComponent()->GetSubtitlesSettings()->RegisterObserver(this);
 }
+#endif
 
 CRenderer::~CRenderer()
 {
@@ -611,3 +623,4 @@ void CRenderer::LoadSettings()
   m_subtitleAlign = settings->GetAlignment();
   ResetSubtitlePosition();
 }
+
