@@ -25418,7 +25418,7 @@ msgid "Skip caching single frame"
 msgstr ""
 
 msgctxt "#55313"
-msgid "Display HDR peak luminance (0 for auto)"
+msgid "Display HDR peak luminance (0: auto)"
 msgstr ""
 
 msgctxt "#55314"
@@ -25554,7 +25554,7 @@ msgid "Default: output adapter"
 msgstr ""
 
 msgctxt "#55347"
-msgid "Display SDR peak luminance (0 for auto)"
+msgid "Display SDR peak luminance (0: auto)"
 msgstr ""
 
 msgctxt "#55348"
@@ -25566,7 +25566,7 @@ msgid "   Perceptual strength"
 msgstr ""
 
 msgctxt "#55350"
-msgid "Dither depth (0 for auto)"
+msgid "Dither depth (0: auto)"
 msgstr ""
 
 msgctxt "#55351"
@@ -25695,6 +25695,10 @@ msgstr ""
 
 msgctxt "#55382"
 msgid "Maximum number of video buffers shared between the decoder and the video output, increase it when using frame mixing"
+msgstr ""
+
+msgctxt "#55383"
+msgid "Target contrast (-1:inf, 0: auto, >0: log scale)"
 msgstr ""
 
 

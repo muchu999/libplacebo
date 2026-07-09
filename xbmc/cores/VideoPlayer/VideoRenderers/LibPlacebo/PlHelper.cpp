@@ -703,6 +703,8 @@ void CPLHelper::SaveLibplaceboSettings(const CVideoSettings& vs, TiXmlNode* pNod
   XMLUtils::SetString(pNode, "placebolutfilename", vs.m_PlaceboLutFilename);
   XMLUtils::SetFloat(pNode, "placebodisplayhdrpeakluminance", vs.m_PlaceboDisplayHdrPeakLuminance);
   XMLUtils::SetFloat(pNode,"placebodisplaysdrpeakluminance",vs.m_PlaceboDisplaySdrPeakLuminance);
+  XMLUtils::SetInt(pNode, "placebotargetcontrast", vs.m_PlaceboTargetContrast);
+  XMLUtils::SetInt(pNode, "placebosdrtargetcontrast", vs.m_PlaceboSdrTargetContrast);
   XMLUtils::SetInt(pNode, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
   XMLUtils::SetInt(pNode, "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);
   XMLUtils::SetInt(pNode, "placeboditherdepth", vs.m_PlaceboDitherDepth);
@@ -892,6 +894,8 @@ bool CPLHelper::LoadLibplaceboSettings(CVideoSettings& vs, const TiXmlElement* p
   XMLUtils::GetInt(pElement, "placeboskinzoomposition", temp); vs.m_PlaceboSkinZoomPosition = (VS_PLACEBO_SZ_POSITION) temp;
   XMLUtils::GetString(pElement, "placebolutfilename", vs.m_PlaceboLutFilename);  LoadLutFile(vs, vs.m_PlaceboLutFilename);
   XMLUtils::GetFloat(pElement, "placebodisplayhdrpeakluminance", vs.m_PlaceboDisplayHdrPeakLuminance);
+  XMLUtils::GetInt(pElement, "placebotargetcontrast", vs.m_PlaceboTargetContrast);
+  XMLUtils::GetInt(pElement,"placebosdrtargetcontrast",vs.m_PlaceboSdrTargetContrast);
   XMLUtils::GetFloat(pElement,"placebodisplaysdrpeakluminance",vs.m_PlaceboDisplaySdrPeakLuminance);
   XMLUtils::GetInt(pElement, "placebotargetcolorspacehint", vs.m_PlaceboTargetColorspaceHint);
   XMLUtils::GetInt(pElement, "placebotargetcolorspacehintmode", vs.m_PlaceboTargetColorspaceHintMode);

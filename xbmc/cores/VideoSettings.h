@@ -373,6 +373,8 @@ public:
   std::string m_PlaceboLutFilename;
   float m_PlaceboDisplayHdrPeakLuminance;
   float m_PlaceboDisplaySdrPeakLuminance;
+  int m_PlaceboTargetContrast;
+  int m_PlaceboSdrTargetContrast;
   int m_PlaceboTargetColorspaceHint;
   int m_PlaceboTargetColorspaceHintMode;
   int m_PlaceboDitherDepth;

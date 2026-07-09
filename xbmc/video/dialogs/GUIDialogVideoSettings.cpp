@@ -238,6 +238,8 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_SKIP_TARGET_CLEARING                "video.libplacebo.skip_target_clearing"
 #define SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE          "video.libplacebo.display_hdr_peak_luminance"
 #define SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE          "video.libplacebo.display_sdr_peak_luminance"
+#define SETTING_LIB_PLACEBO_TARGET_CONTRAST                     "video.libplacebo.target_contrast"
+#define SETTING_LIB_PLACEBO_SDR_TARGET_CONTRAST                 "video.libplacebo.sdr_target_contrast"
 #define SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT              "video.libplacebo.target_colorspace_hint"
 #define SETTING_LIB_PLACEBO_USE_HDR_FOR_SDR                     "video.libplacebo.use_hdr_for_sdr"
 #define SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT_MODE         "video.libplacebo.target_colorspace_hint_mode"
@@ -752,6 +754,26 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
   else if(settingId == SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE)
   {
 	vs.m_PlaceboDisplaySdrPeakLuminance = static_cast<float>(std::static_pointer_cast<const CSettingNumber>(setting)->GetValue());
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_TARGET_CONTRAST)
+  {
+	int val = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	vs.m_PlaceboTargetContrast = val;
+	if(val >0)
+	{
+	  vs.m_PlaceboTargetContrast = std::pow(10.0, (val + 19) / 20.0);
+	}
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if (settingId == SETTING_LIB_PLACEBO_SDR_TARGET_CONTRAST)
+  {
+	int val = static_cast<int>(std::static_pointer_cast<const CSettingInt>(setting)->GetValue());
+	vs.m_PlaceboSdrTargetContrast = val;
+	if(val > 0)
+	{
+	  vs.m_PlaceboSdrTargetContrast = std::pow(10.0, (val+19)/20.0);
+	}
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SHADER_APPLY)
@@ -1895,6 +1917,10 @@ void CGUIDialogVideoSettings::InitializeSettings()
 
 	// Render Options
 	AddSlider(groupOptions, SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE, 55313, SettingLevel::Basic, videoSettings.m_PlaceboDisplayHdrPeakLuminance, "{0:5.0f}", (float)0.0, (float)10, (float)10000.0, 55313, usePopup);
+	int dummy3 = videoSettings.m_PlaceboTargetContrast;
+	if(videoSettings.m_PlaceboTargetContrast > 0)
+	  dummy3 = std::max(std::log10(videoSettings.m_PlaceboTargetContrast) * 20.0 - 19.0, 1.0);
+	AddSlider(groupOptions, SETTING_LIB_PLACEBO_TARGET_CONTRAST, 55383, SettingLevel::Basic, dummy3, -1, -1, 1, 120, 55383, usePopup);
 
 	entries.clear();
 	entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));
@@ -2012,6 +2038,11 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	AddToggle(groupSdr, SETTING_LIB_PLACEBO_USE_HDR_FOR_SDR, 55351, SettingLevel::Basic, videoSettings.m_PlaceboUseHdrForSdr);
 	AddButton(groupSdr, SETTING_LIB_PLACEBO_SDR_TO_HDR_LOAD_PRESET, 55353, SettingLevel::Basic);
 	AddSlider(groupSdr, SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE, 55347, SettingLevel::Basic, videoSettings.m_PlaceboDisplaySdrPeakLuminance, "{0:5.0f}", (float) 0.0, (float) 10, (float) 10000.0, 55347, usePopup);
+
+	int dummy2 = videoSettings.m_PlaceboSdrTargetContrast;
+	if(videoSettings.m_PlaceboSdrTargetContrast > 0)
+	  dummy2 = std::max(std::log10(videoSettings.m_PlaceboSdrTargetContrast) * 20.0 - 19.0, 1.0);
+	AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_TARGET_CONTRAST, 55383, SettingLevel::Basic, dummy2, -1, -1, 1, 120, 55383, usePopup);
 	AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSdrSaturation, "{0:4.1f}", (float) 0.0, (float) 0.5, (float) 100.0, 55210, usePopup);
 	AddToggle(groupSdr, SETTING_LIB_PLACEBO_SDR_COLOR_MAP_INVERSE_TONE_MAPPING, 55291, SettingLevel::Basic, videoSettings.m_PlaceboSdrColorMapInverseToneMapping);
 	AddToggle(groupSdr, SETTING_LIB_PLACEBO_SDR_COLOR_MAP_GAMUT_EXPANSION, 55290, SettingLevel::Basic, videoSettings.m_PlaceboSdrColorMapGamutExpansion);

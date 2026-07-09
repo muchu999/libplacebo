@@ -508,7 +508,7 @@ struct pl_color_space MpDxgiDesc1ToColorSpace(const DXGI_OUTPUT_DESC1* desc1)
   return ret;
 }
 
-void CRendererPL::ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* target, float min_luma, bool hint)
+void CRendererPL::ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* source, struct pl_frame* target, float min_luma, bool hint)
 {
 
   //// Colorspace overrides
@@ -521,8 +521,13 @@ void CRendererPL::ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_fr
   //if(opts->target_trc && (!target->color.transfer || !hint))
   //  target->color.transfer = opts->target_trc;
 
+  // need to decide here because of possible changes above
+  bool bSdrToHdr = videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(source->color.transfer) && m_bHdrOut;
+  int target_contrast = bSdrToHdr ? videoSettings.m_PlaceboSdrTargetContrast : videoSettings.m_PlaceboTargetContrast;
   if ((!target->color.hdr.min_luma || !hint))
-    ApplyTargetContrast(&target->color, min_luma, 0.0); //cl auto for now
+  {
+      ApplyTargetContrast(&target->color, min_luma, target_contrast);
+  }
   //if (opts->target_gamut)
   //  mp_parse_raw_primaries(mp_null_log, opts->target_gamut, &target->color.hdr.prim);
   
@@ -731,6 +736,8 @@ static HRESULT SafeGetQueryData(ID3D11DeviceContext* pContext, ID3D11Query* pQue
 //---------------------------------------------------
 void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts)
 {
+  //m_bHdrOut = DX::Windowing()->IsHDROutput(); //cl manually toggling HDR will not update this value...
+  m_bHdrOut = DX::DeviceResources::Get()->IsHDROutput1();
   CRect dst = ApplyTransforms(CRect(destPoints [0], destPoints [2])); //uses m_renderOrientation
   pl_frame frameOut{};
   pl_frame frameIn{};
@@ -934,7 +941,9 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 	if (hint.hdr.max_cll && hint.hdr.max_fall > hint.hdr.max_cll)
 	  hint.hdr.max_fall = 0;
 
-	ApplyTargetContrast(&hint, hint.hdr.min_luma, 0.0); //cl auto for now, comes from options in MPV
+	bool bSrdToHdr = videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(frameIn.color.transfer) && m_bHdrOut;
+	int targetContrast = bSrdToHdr ? videoSettings.m_PlaceboSdrTargetContrast : videoSettings.m_PlaceboTargetContrast;
+    ApplyTargetContrast(&hint, hint.hdr.min_luma, targetContrast);
   }
   else if (!target_hint)
   {
@@ -953,7 +962,7 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   //if(videoSettings.m_PlaceboUseHdrForSdr && !pl_color_transfer_is_hdr(frameIn.color.transfer) && pl_color_transfer_is_hdr(hint.transfer))
     //peakLuminance = 
 
-  ApplyTargetOptions(videoSettings, &frameOut, hint.hdr.min_luma, strict_sw_params);
+  ApplyTargetOptions(videoSettings, &frameIn, &frameOut, hint.hdr.min_luma, strict_sw_params);
 
   if(pl_color_transfer_is_hdr(frameOut.color.transfer) && videoSettings.m_PlaceboDisplayHdrPeakLuminance && (!frameOut.color.hdr.max_luma || !strict_sw_params))
 	frameOut.color.hdr.max_luma = videoSettings.m_PlaceboDisplayHdrPeakLuminance;
@@ -995,63 +1004,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   if (false && target_pq)
 	frameOut.color.transfer = PL_COLOR_TRC_SRGB;
 
-  // Target texture
-  pl_d3d11_wrap_params d3dparams =
-  {
-  .tex = target.Get(),
-  .array_slice = 1,
-  .fmt = target.GetFormat(),
-  .w = (int)target.GetWidth(),
-  .h = (int)target.GetHeight()
-  };
-
-  frameOut.num_planes = 1;
-  frameOut.planes[0].texture = pl_d3d11_wrap(PL::PLInstance::Get()->GetGpu(), &d3dparams);
-  frameOut.planes[0].components = 4;
-  frameOut.planes[0].component_mapping[0] = PL_CHANNEL_R;
-  frameOut.planes[0].component_mapping[1] = PL_CHANNEL_G;
-  frameOut.planes[0].component_mapping[2] = PL_CHANNEL_B;
-  frameOut.planes[0].component_mapping[3] = PL_CHANNEL_A;
-  
-  // Geometry
-  ApplyGeometry(videoSettings, sourceRect, dst, frameIn, frameOut);
-
-  // Data used for the video debug renderer
-  m_displayTransfer = frameOut.color.transfer;
-  m_displayPrimaries = frameOut.color.primaries;
-  m_videoMatrix = frameIn.repr.sys;
-  buffer->m_FrameInColor = frameIn.color;
-  buffer->m_FrameOutColor = frameOut.color;
-  m_ScreenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
-
-  // Shaders
-  if((videoSettings.m_PlaceboShadersHooks.size() > 0) && (videoSettings.m_PlaceboShaderApply))
-  {
-	static std::vector<const pl_hook*> hooks;
-
-	hooks.clear();
-    for(int i=0; i< videoSettings.m_PlaceboShadersHooks.size(); ++i)
-	{
-	  if (videoSettings.m_PlaceboShadersEnabled[i] && videoSettings.m_PlaceboShadersHooks.m_Valid[i])
-	  {
-		hooks.push_back(videoSettings.m_PlaceboShadersHooks.m_Hooks[i].get()); 
-	  }
-	}
-    if(hooks.size() > 0)
-	{
-	  params->hooks = hooks.data();
-	  params->num_hooks = hooks.size();
-	}
-	else
-	{
-	  params->num_hooks = 0;
-	}
-  }
-  else
-  {
-	//cl params.hooks = nullptr;
-	params->num_hooks = 0;
-  }
 
   // Apply SDR to HDR specific settings
   pl_options opt = videoSettings.m_placeboOptions->getPlOptions();
@@ -1090,8 +1042,6 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
 
   // Process HDR/SDR brightness and contrast settings
   m_bHdrIn = pl_color_transfer_is_hdr(frameIn.color.transfer);
-  //m_bHdrOut = DX::Windowing()->IsHDROutput(); //cl manually toggling HDR will not update this value...
-  m_bHdrOut = DX::DeviceResources::Get()->IsHDROutput1();
   if(m_bHdrIn && m_bHdrOut)
   {
 	opt->color_adjustment.brightness = CPLHelper::BrightnessKodi2Pl(videoSettings.m_PlaceboBrightnessHdrHdr);
@@ -1112,6 +1062,64 @@ void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&des
   {
 	opt->color_adjustment.brightness = CPLHelper::BrightnessKodi2Pl(videoSettings.m_PlaceboBrightnessSdrSdr);
 	opt->color_adjustment.contrast = CPLHelper::ContrastKodi2Pl(videoSettings.m_PlaceboContrastSdrSdr);
+  }
+
+  // Target texture
+  pl_d3d11_wrap_params d3dparams =
+  {
+  .tex = target.Get(),
+  .array_slice = 1,
+  .fmt = target.GetFormat(),
+  .w = (int) target.GetWidth(),
+  .h = (int) target.GetHeight()
+  };
+
+  frameOut.num_planes = 1;
+  frameOut.planes [0].texture = pl_d3d11_wrap(PL::PLInstance::Get()->GetGpu(), &d3dparams);
+  frameOut.planes [0].components = 4;
+  frameOut.planes [0].component_mapping [0] = PL_CHANNEL_R;
+  frameOut.planes [0].component_mapping [1] = PL_CHANNEL_G;
+  frameOut.planes [0].component_mapping [2] = PL_CHANNEL_B;
+  frameOut.planes [0].component_mapping [3] = PL_CHANNEL_A;
+
+  // Geometry
+  ApplyGeometry(videoSettings, sourceRect, dst, frameIn, frameOut);
+
+  // Data used for the video debug renderer
+  m_displayTransfer = frameOut.color.transfer;
+  m_displayPrimaries = frameOut.color.primaries;
+  m_videoMatrix = frameIn.repr.sys;
+  buffer->m_FrameInColor = frameIn.color;
+  buffer->m_FrameOutColor = frameOut.color;
+  m_ScreenFps = static_cast<double>(CServiceBroker::GetWinSystem()->GetGfxContext().GetFPS());
+
+  // Shaders
+  if((videoSettings.m_PlaceboShadersHooks.size() > 0) && (videoSettings.m_PlaceboShaderApply))
+  {
+	static std::vector<const pl_hook*> hooks;
+
+	hooks.clear();
+	for(int i = 0; i < videoSettings.m_PlaceboShadersHooks.size(); ++i)
+	{
+	  if(videoSettings.m_PlaceboShadersEnabled [i] && videoSettings.m_PlaceboShadersHooks.m_Valid [i])
+	  {
+		hooks.push_back(videoSettings.m_PlaceboShadersHooks.m_Hooks [i].get());
+	  }
+	}
+	if(hooks.size() > 0)
+	{
+	  params->hooks = hooks.data();
+	  params->num_hooks = hooks.size();
+	}
+	else
+	{
+	  params->num_hooks = 0;
+	}
+  }
+  else
+  {
+	//cl params.hooks = nullptr;
+	params->num_hooks = 0;
   }
 
 
