@@ -181,7 +181,7 @@ namespace OVERLAY {
 #ifdef _WIN32
 	std::vector<std::vector<SElement>> m_buffers;
 #else
-	//std::vector<SElement> m_buffers[NUM_BUFFERS];
+	std::vector<SElement> m_buffers[NUM_BUFFERS];
 #endif
 	std::map<unsigned int, std::shared_ptr<COverlay>> m_textureCache;
     static unsigned int m_textureid;
