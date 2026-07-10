@@ -239,14 +239,21 @@ void CVideoSettings::ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type)
   // Overriding SDR default values for SDR to HDR mapping
   m_PlaceboDisplaySdrPeakLuminance = 480;
   m_PlaceboTargetContrast = 0;
-  m_PlaceboSdrTargetContrast = 0;
-  m_PlaceboSdrSaturation = 53.5; 
+  m_PlaceboSdrTargetContrast = -1;
+  m_PlaceboSdrSaturation = 58.0; 
   //m_PlaceboTest = 0.0f;
   m_PlaceboSdrColorMapInverseToneMapping = true;
   m_PlaceboSdrColorMapGamutExpansion = true;
   m_PlaceboSdrColorMapIntent = PL_INTENT_PERCEPTUAL; // PL_INTENT_SATURATION PL_INTENT_PERCEPTUAL
   m_PlaceboSdrColorMapGamutMapping = CPLHelper::getGamutMapIndexFromDescription("Perceptual mapping");   //cl "Perceptual mapping", "Saturation mapping"
-  m_PlaceboSdrColorMapToneMapping = CPLHelper::getToneMapIndexFromDescription("Single-pivot polynomial spline"); //cl the ones supporting inverse (should filter?):"ITU-R BT.2446 Method A", "Single-pivot polynomial spline", "Perceptually linear stretch", "Linear light stretch"
+  m_PlaceboSdrColorMapToneMapping = CPLHelper::getToneMapIndexFromDescription("Custom Spline"); //cl the ones supporting inverse (should filter?):"ITU-R BT.2446 Method A", "Single-pivot polynomial spline", "Perceptually linear stretch", "Linear light stretch", "Custom spline"
+  m_PlaceboSdrToneConstantParam0 = 74.0;
+  m_PlaceboSdrToneConstantParam1 = 4.0;
+  m_PlaceboSdrToneConstantParam2 = 0.065;
+  m_PlaceboSdrToneConstantParam3 = 0.33;
+  m_PlaceboSdrToneConstantParam4 = 1.65;
+  m_PlaceboSdrToneConstantParam5 = 0.375;
+  m_PlaceboSdrToneConstantParam6 = -20.0;
 
   // Just use defaults for the other ones
   static bool bInit = false;
@@ -268,13 +275,6 @@ void CVideoSettings::ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type)
   m_PlaceboSdrToneConstantSlopeOffset = opt->getPlOptions()->color_map_params.tone_constants.slope_offset;
   m_PlaceboSdrToneConstantSlopeTuning = opt->getPlOptions()->color_map_params.tone_constants.slope_tuning;
   m_PlaceboSdrToneConstantSplineContrast = opt->getPlOptions()->color_map_params.tone_constants.spline_contrast;
-  m_PlaceboSdrToneConstantParam0 = opt->getPlOptions()->color_map_params.tone_constants.param0;
-  m_PlaceboSdrToneConstantParam1 = opt->getPlOptions()->color_map_params.tone_constants.param1;
-  m_PlaceboSdrToneConstantParam2 = opt->getPlOptions()->color_map_params.tone_constants.param2;
-  m_PlaceboSdrToneConstantParam3 = opt->getPlOptions()->color_map_params.tone_constants.param3;
-  m_PlaceboSdrToneConstantParam4 = opt->getPlOptions()->color_map_params.tone_constants.param4;
-  m_PlaceboSdrToneConstantParam5 = opt->getPlOptions()->color_map_params.tone_constants.param5;
-  m_PlaceboSdrToneConstantParam6 = opt->getPlOptions()->color_map_params.tone_constants.param6;
 
   m_PlaceboSdrGamutConstantsColorimetricGamma = opt->getPlOptions()->color_map_params.gamut_constants.colorimetric_gamma;
   m_PlaceboSdrGamutConstantsPerceptualDeadzone = opt->getPlOptions()->color_map_params.gamut_constants.perceptual_deadzone;
