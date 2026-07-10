@@ -240,7 +240,7 @@ void CVideoSettings::ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type)
   m_PlaceboDisplaySdrPeakLuminance = 480;
   m_PlaceboTargetContrast = 0;
   m_PlaceboSdrTargetContrast = -1;
-  m_PlaceboSdrSaturation = 58.0; 
+  m_PlaceboSdrSaturation = 57.0; 
   //m_PlaceboTest = 0.0f;
   m_PlaceboSdrColorMapInverseToneMapping = true;
   m_PlaceboSdrColorMapGamutExpansion = true;
