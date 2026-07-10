@@ -1,3 +1,4 @@
 [submodule "xbmc/libplacebo"]
 	path = xbmc/libplacebo
 	url = https://github.com/muchu999/libplacebo
+	branch = myDev
