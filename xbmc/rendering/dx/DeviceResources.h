@@ -298,6 +298,7 @@ private:
 	std::atomic<bool>       m_watchdogRunning {false};
 	uint64_t                m_lastCheckPresented {0};
 	int                     m_stallCount {0};
+	bool                    m_bIsTearingDown = false;
 
 	void WatchdogThreadLoop();
 

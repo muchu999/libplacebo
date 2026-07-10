@@ -742,6 +742,7 @@ void DX::DeviceResources::CreateBackBuffer()
 
 HRESULT DX::DeviceResources::CreateSwapChain(DXGI_SWAP_CHAIN_DESC1& desc, DXGI_SWAP_CHAIN_FULLSCREEN_DESC& fsDesc, IDXGISwapChain1** ppSwapChain) const
 {
+  CLog::LogF(LOGDEBUG, "enter");
   HRESULT hr;
 #ifdef TARGET_WINDOWS_DESKTOP
   hr = m_dxgiFactory->CreateSwapChainForHwnd(
@@ -762,6 +763,7 @@ HRESULT DX::DeviceResources::CreateSwapChain(DXGI_SWAP_CHAIN_DESC1& desc, DXGI_S
     ppSwapChain
   ); RETURN_ERR(hr);
 #endif
+  CLog::LogF(LOGDEBUG, "exit");
   return hr;
 }
 
@@ -789,27 +791,67 @@ void DX::DeviceResources::NotifySwapchainListeners(const std::string& message)
 
 void DX::DeviceResources::DestroySwapChain()
 {
+  CLog::LogF(LOGDEBUG, "enter");
   NotifySwapchainListeners("DestroySwapChain");
 
-  if (!m_swapChain)
-    return;
+  if(!m_swapChain || m_bIsTearingDown)
+	return;
 
+  m_bIsTearingDown = true;
+
+  // 1. PURGE THE LIFELINES AND FIFO QUEUE COMPLETELY
+  {
+	std::lock_guard<std::mutex> lock(m_lifelineMutex);
+	m_currentFrameLifelines.clear(); // Drop pending lifelines for the frame being recorded
+  }
+
+  {
+	std::lock_guard<std::mutex> lock(m_queueMutex);
+
+	// Clear the FIFO queue by swapping it with an empty one.
+	// This instantly calls the destructors for all FramePackages, 
+	// releasing the RTV smart pointers and dropping the reference count to 0.
+	std::queue<FramePackage> emptyQueue;
+	std::swap(m_frameQueue, emptyQueue);
+  }
+
+  // 2. CLEAR THE DEFERRED CONTEXT (It caches the last bound RTV)
+  ID3D11RenderTargetView* nullViews [] = {nullptr};
+  m_deferrContext->OMSetRenderTargets(1, nullViews, nullptr);
+  m_deferrContext->ClearState();
+  m_deferrContext->Flush();
+
+  // 3. CLEAR THE IMMEDIATE CONTEXT AND RTV
+  m_d3dContext->OMSetRenderTargets(1, nullViews, nullptr);
+  m_d3dContext->ClearState();
+
+  //if(m_renderTargetView)
+  //{
+	//m_renderTargetView = nullptr; // Drop Kodi's primary RTV reference
+  //}
+  m_d3dContext->Flush();
+
+  // 4. HANDLE FULLSCREEN
   BOOL bFullcreen = 0;
   m_swapChain->GetFullscreenState(&bFullcreen, nullptr);
-  if (!!bFullcreen)
-    m_swapChain->SetFullscreenState(false, nullptr); // mandatory before releasing swapchain
+  if(!!bFullcreen)
+  {
+	m_swapChain->SetFullscreenState(false, nullptr);
+	m_d3dContext->Flush();
+  }
+
+  // 5. DESTROY SWAP CHAIN
   m_swapChain = nullptr;
-  m_deferrContext->Flush();
-  m_d3dContext->Flush();
   m_IsTransferPQ = false;
+  CLog::LogF(LOGDEBUG, "exit");
 }
 
 void DX::DeviceResources::ResizeBuffers()
 {
+  CLog::LogF(LOGDEBUG, "enter");
   if (!m_bDeviceCreated)
     return;
 
-  CLog::LogF(LOGDEBUG, "resize buffers.");
 
   bool bHWStereoEnabled = RenderStereoMode::HARDWAREBASED ==
                           CServiceBroker::GetWinSystem()->GetGfxContext().GetStereoMode();
@@ -831,17 +873,21 @@ void DX::DeviceResources::ResizeBuffers()
 
   if (m_swapChain) // If the swap chain already exists, resize it.
   {
+	CLog::LogF(LOGDEBUG, "swap chain already exists");
+
 	NotifySwapchainListeners("DestroySwapChain");
-    m_swapChain->GetDesc1(&scDesc);
+	m_bIsTearingDown = true;
+
+	m_swapChain->GetDesc1(&scDesc);
     hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
                                     lround(m_outputSize.Height), scDesc.Format,
 	                                (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
 	);
-	NotifySwapchainListeners("CreateSwapChain");
 
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
     {
-      // If the device was removed for any reason, a new device and swap chain will need to be created.
+	  CLog::LogF(LOGDEBUG, "hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET");
+	  // If the device was removed for any reason, a new device and swap chain will need to be created.
       HandleDeviceLost(hr == DXGI_ERROR_DEVICE_REMOVED);
 
       // Everything is set up now. Do not continue execution of this method. HandleDeviceLost will reenter this method
@@ -850,12 +896,31 @@ void DX::DeviceResources::ResizeBuffers()
     }
     else if (hr == DXGI_ERROR_INVALID_CALL)
     {
-      // Called when Windows HDR is toggled externally to Kodi.
-      // Is forced to re-create swap chain to avoid crash.
-      CreateWindowSizeDependentResources();
-      return;
+      CLog::LogF(LOGDEBUG, "DXGI_ERROR_INVALID_CALL");
+
+	  //cl during window resize with the new presentation thread and no video playing, first ResizeBuffers call can fail with DXGI_ERROR_INVALID_CALL probably because 
+	  // something is hanging on to backbuffers, try a second time after delay solves it for now but needs better solution, not happening while video is playing probably 
+	  // because of natural delay to stop the video....
+	  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+	  hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
+		lround(m_outputSize.Height), scDesc.Format,
+		(windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
+	  );
+	  if(hr == DXGI_ERROR_INVALID_CALL)
+	  {
+
+		// Called when Windows HDR is toggled externally to Kodi.
+        // Is forced to re-create swap chain to avoid crash.
+		m_bIsTearingDown = false;
+		CreateWindowSizeDependentResources();
+        return;
+	  }
+	  CLog::LogF(LOGDEBUG, "ResizeBuffers succeeded second time around");
+
     }
-    CHECK_ERR();
+	m_bIsTearingDown = false;
+	NotifySwapchainListeners("CreateSwapChain");
+	CHECK_ERR();
   }
   else // Otherwise, create a new one using the same adapter as the existing Direct3D device.
   {
@@ -995,6 +1060,7 @@ void DX::DeviceResources::ResizeBuffers()
 // These resources need to be recreated every time the window size is changed.
 void DX::DeviceResources::CreateWindowSizeDependentResources()
 {
+  CLog::LogF(LOGDEBUG, "enter");
   StopPresentThread();
 
   ReleaseBackBuffer();
@@ -1009,6 +1075,7 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
 
   CreateBackBuffer();
 
+  m_bIsTearingDown = false;
   NotifySwapchainListeners("CreateSwapChain");
 
   Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
@@ -1016,6 +1083,7 @@ void DX::DeviceResources::CreateWindowSizeDependentResources()
   {
 	pMultithread->SetMultithreadProtected(TRUE);
   }
+  CLog::LogF(LOGDEBUG, "exit");
 }
 
 // Determine the dimensions of the render target and whether it will be scaled down.
@@ -1266,6 +1334,11 @@ void DX::DeviceResources::Present()
 {
   HRESULT hr = {};
   static UINT64 freq = CurrentHostFrequency();
+  if(m_bIsTearingDown || !m_swapChain)
+  {
+	return;
+  }
+
   
   //FinishCommandList();
   Microsoft::WRL::ComPtr<ID3D11CommandList> pCommandList;
@@ -1997,6 +2070,9 @@ bool DX::DeviceResources::IsGCNOrOlder() const
 
 void DX::DeviceResources::StartPresentThread()
 {
+  if(m_bIsTearingDown)
+	return;
+
   if(m_presentRunning.load(std::memory_order_acquire) && m_presentThread.get_id() == std::thread::id())
   {
 	m_presentRunning.store(false, std::memory_order_release);
@@ -2106,6 +2182,7 @@ private:
 
 void DX::DeviceResources::PresentThreadLoop()
 {
+  CLog::LogF(LOGDEBUG, "Enter");
   // Set native Windows scheduling thread priority to Real-Time
   ::SetThreadPriority(::GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
@@ -2135,6 +2212,14 @@ void DX::DeviceResources::PresentThreadLoop()
 	} // Lock drops here. Application Thread wakes up safely now!
 
 	if(!localPackage.CommandList) continue; // Skip pass if queue was drained
+
+	if(!m_swapChain)
+	{
+	  // The main thread is currently reconstructing the swap chain. 
+	  // Abort processing immediately and wait for the next pass.
+	  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	  return;
+	}
 
 	if(m_latencyWaitableObject)
 	{
@@ -2275,6 +2360,7 @@ void DX::DeviceResources::PresentThreadLoop()
 
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
+  CLog::LogF(LOGDEBUG, "Enter");
   float newSample = m_guiComposeTime.exchange(-1.0f, std::memory_order_relaxed);
   if(newSample >= 0.0f)
   {
