@@ -852,50 +852,6 @@ void DX::DeviceResources::ResizeBuffers()
 	NotifySwapchainListeners("DestroySwapChain");
 	m_bIsTearingDown = true;
 
-#if 0
-	// ========================================================================
-	// --- THE MASTER WAITABLE SWAPCHAIN SYNCHRONIZATION PURGE ---
-	// ========================================================================
-	// If a presentation loop is active, we must cleanly clear its back buffer 
-	// dependencies to prevent DXGI_ERROR_INVALID_CALL on the first try.
-	bool bWasPresentRunning = m_presentRunning.load(std::memory_order_acquire);
-	if(bWasPresentRunning)
-	{
-	  // 1. Temporarily pause the presentation loop thread processing
-	  m_presentRunning.store(false, std::memory_order_release);
-
-	  // 2. Discard outstanding compiled recording tasks
-	  Microsoft::WRL::ComPtr<ID3D11CommandList> pStaleCommandList;
-	  if(m_deferrContext)
-	  {
-		m_deferrContext->FinishCommandList(FALSE, &pStaleCommandList);
-		pStaleCommandList = nullptr;
-	  }
-
-	  // 3. Forcibly strip targets from execution context pipelines
-	  ID3D11RenderTargetView* nullViews [] = {nullptr};
-	  m_d3dContext->OMSetRenderTargets(1, nullViews, nullptr);
-	  if(m_deferrContext) m_deferrContext->OMSetRenderTargets(1, nullViews, nullptr);
-
-	  m_d3dContext->ClearState();
-	  if(m_deferrContext) m_deferrContext->ClearState();
-
-	  // 4. Clean out the pending rendering frame queue frames safely
-	  {
-		std::lock_guard<std::mutex> lock(m_lifelineMutex);
-		m_currentFrameLifelines.clear();
-	  }
-	  {
-		std::lock_guard<std::mutex> lock(m_queueMutex);
-		std::queue<FramePackage> emptyQueue;
-		std::swap(m_frameQueue, emptyQueue);
-	  }
-
-	  // 5. Force the hardware driver queue to execute these releases right now
-	  if(m_deferrContext) m_deferrContext->Flush();
-	  m_d3dContext->Flush();
-	}
-#endif
 	m_swapChain->GetDesc1(&scDesc);
     hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
                                     lround(m_outputSize.Height), scDesc.Format,
@@ -916,9 +872,8 @@ void DX::DeviceResources::ResizeBuffers()
     {
       CLog::LogF(LOGDEBUG, "DXGI_ERROR_INVALID_CALL");
 
-	  //cl during window resize with the new presentation thread and no video playing, first ResizeBuffers call can fail with DXGI_ERROR_INVALID_CALL probably because 
-	  // something is hanging on to backbuffers, try a second time after delay solves it for now but needs better solution, not happening while video is playing probably 
-	  // because of natural delay to stop the video....
+	  // cl without this wait, crashes will happen on window resize, various conditions, couldn't find a proper "all clear" condition yet,
+	  // windows swapchain creation call will return E_ACCESSDENIED, trying to clear views and references here instead of waiting results in black screen...
 	  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	  hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
 		lround(m_outputSize.Height), scDesc.Format,
@@ -935,27 +890,6 @@ void DX::DeviceResources::ResizeBuffers()
 	  }
 	  CLog::LogF(LOGDEBUG, "ResizeBuffers succeeded second time around");
     }
-#if 0
-	if(SUCCEEDED(hr))
-	{
-	  // 1. Refresh the Frame Latency Waitable Object with the fresh kernel handle address
-	  Microsoft::WRL::ComPtr<IDXGISwapChain2> swapChain2;
-	  if(SUCCEEDED(m_swapChain.As(&swapChain2)))
-	  {
-		m_latencyWaitableObject = swapChain2->GetFrameLatencyWaitableObject();
-		swapChain2->SetMaximumFrameLatency(1);
-	  }
-
-	  // 2. FORCIBLY RE-BOOT THE PRESENTATION ENGINE TRACKS
-	  // Ensure the background rendering threads are explicitly armed and turned on
-	  if(!m_presentRunning.load(std::memory_order_acquire))
-	  {
-		m_presentRunning.store(true, std::memory_order_release);
-		StartPresentThread();
-		StartWatchdog();
-	  }
-	}
-#endif
 	
 	m_bIsTearingDown = false;
 	NotifySwapchainListeners("CreateSwapChain");
