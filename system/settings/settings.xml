@@ -94,6 +94,12 @@
 		  <control type="list" format="string" />
 		</setting>
 		<setting id="videoplayer.presentQueueDepth" type="integer" label="55379" help="55380">
+		  <requirement>hasmultithreaded</requirement>
+		  <dependencies>
+			<dependency type="enable">
+			  <condition setting="videoplayer.presentmode" operator="is">0</condition>
+			</dependency>
+		  </dependencies>
 		  <level>1</level>
 		  <default>6</default>
 		  <constraints>
