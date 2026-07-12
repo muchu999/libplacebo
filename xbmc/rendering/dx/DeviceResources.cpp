@@ -874,11 +874,18 @@ void DX::DeviceResources::ResizeBuffers()
 
 	  // cl without this wait, crashes will happen on window resize, various conditions, couldn't find a proper "all clear" condition yet,
 	  // windows swapchain creation call will return E_ACCESSDENIED, trying to clear views and references here instead of waiting results in black screen...
-	  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-	  hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
-		lround(m_outputSize.Height), scDesc.Format,
-		(windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
-	  );
+	  int retryCount = 0;
+	  while(hr == DXGI_ERROR_INVALID_CALL && retryCount < 10)
+	  {
+		CLog::LogF(LOGDEBUG, "Retrying ResizeBuffers...");
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+	    hr = m_swapChain->ResizeBuffers(scDesc.BufferCount, lround(m_outputSize.Width),
+		  lround(m_outputSize.Height), scDesc.Format,
+		  (windowed ? 0 : DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH) | DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT
+	    );
+		++retryCount;
+	  }
+	  //cl other fail hr???
 	  if(hr == DXGI_ERROR_INVALID_CALL)
 	  {
 
@@ -888,7 +895,7 @@ void DX::DeviceResources::ResizeBuffers()
 		CreateWindowSizeDependentResources();
         return;
 	  }
-	  CLog::LogF(LOGDEBUG, "ResizeBuffers succeeded second time around");
+	  CLog::LogF(LOGDEBUG, "ResizeBuffers return code: {}", hr);
     }
 	
 	m_bIsTearingDown = false;
@@ -980,8 +987,17 @@ void DX::DeviceResources::ResizeBuffers()
     }
 
 	//cl best place for this?
-	StartPresentThread();
-	StartWatchdog();
+	EPRESENTMODE mode = (EPRESENTMODE) CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_PRESENTMODE);
+	if(mode == VS_PRESENTMODE_MULTITHREADED)
+	{
+	  StartPresentThread();
+	  StartWatchdog();
+	}
+	else
+	{
+	  StopPresentThread();
+	  StopWatchdog();
+	}
 
 	IDXGISwapChain2* swapChain2 = nullptr;
 	HRESULT hr = swapChain->QueryInterface(__uuidof(IDXGISwapChain2), (void**) &swapChain2);
@@ -1305,7 +1321,7 @@ bool DX::DeviceResources::Begin()
 // Present the contents of the swap chain to the screen.
 void DX::DeviceResources::Present()
 {
-  CLog::LogF(LOGDEBUG, "Enter");
+  //CLog::LogF(LOGDEBUG, "Enter");
   HRESULT hr = {};
   static UINT64 freq = CurrentHostFrequency();
   if(m_bIsTearingDown || !m_swapChain)
@@ -1326,34 +1342,156 @@ void DX::DeviceResources::Present()
 	}
 
   }
-
   // Present frame
   UINT64 start = CurrentHostCounter();
   static UINT64 lastEnd = 0;
-  if(SUCCEEDED(hr))
+  EPRESENTMODE mode = (EPRESENTMODE) CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_VIDEOPLAYER_PRESENTMODE);
+  if(mode == VS_PRESENTMODE_MULTITHREADED)
   {
-	FramePackage package;
-	package.CommandList = pCommandList;
+	if(SUCCEEDED(hr))
+	{
+	  FramePackage package;
+	  package.CommandList = pCommandList;
 
-	// Track the primary GUI context views to prevent out-of-order destruction
-	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> currentRTV;
-	m_deferrContext->OMGetRenderTargets(1, &currentRTV, nullptr);
-	if(currentRTV)
-	{
-	  package.ResourceLifelines.push_back(currentRTV);
-	}
-	{
-	  std::lock_guard<std::mutex> lock(m_lifelineMutex);
-	  package.ResourceLifelines = std::move(m_currentFrameLifelines);
-	  m_currentFrameLifelines.clear(); // Clear for Frame N+1 recording pass
-	}
+	  // Track the primary GUI context views to prevent out-of-order destruction
+	  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> currentRTV;
+	  m_deferrContext->OMGetRenderTargets(1, &currentRTV, nullptr);
+	  if(currentRTV)
+	  {
+		package.ResourceLifelines.push_back(currentRTV);
+	  }
+	  {
+		std::lock_guard<std::mutex> lock(m_lifelineMutex);
+		package.ResourceLifelines = std::move(m_currentFrameLifelines);
+		m_currentFrameLifelines.clear(); // Clear for Frame N+1 recording pass
+	  }
 
-	// Push the complete package to your FIFO queue
-	{
-	  std::lock_guard<std::mutex> lock(m_queueMutex);
-	  m_frameQueue.push(package);
+	  // Push the complete package to your FIFO queue
+	  {
+		std::lock_guard<std::mutex> lock(m_queueMutex);
+		m_frameQueue.push(package);
+	  }
+	  SignalFrameReady(); // Wake up the presentation thread loop
 	}
-	SignalFrameReady(); // Wake up the presentation thread loop
+  }
+else
+  {
+	// single threaded mode
+	StopPresentThread(); //cl hot switch...
+	StopWatchdog();
+
+	//cl keep same logic for now
+	if(SUCCEEDED(hr))
+	{
+	  FramePackage package;
+	  package.CommandList = pCommandList;
+
+	  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> currentRTV;
+	  m_deferrContext->OMGetRenderTargets(1, &currentRTV, nullptr);
+	  if(currentRTV)
+	  {
+		package.ResourceLifelines.push_back(currentRTV);
+	  }
+	  {
+		package.ResourceLifelines = std::move(m_currentFrameLifelines);
+		m_currentFrameLifelines.clear(); // Clear for Frame N+1 recording pass
+	  }
+
+	  // Push the complete package to your FIFO queue
+	  {
+		m_frameQueue.push(package);
+	  }
+
+	  FramePackage localPackage;
+	  {
+		if(!m_frameQueue.empty())
+		{
+		  localPackage = std::move(m_frameQueue.front());
+		  m_frameQueue.pop();
+		}
+	  }
+
+	  if(m_latencyWaitableObject)
+	  {
+		DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 100);
+	  }
+
+	  if(localPackage.CommandList)
+	  {
+		// Create an isolated scope for the command list execution
+		{
+#if 1
+		  PresentQuery& current_frame = m_presentQueryRing [m_presentWriteSlot];
+
+		  if(current_frame.disjoint)
+		  {
+			m_d3dContext->Begin(current_frame.disjoint);
+			m_d3dContext->End(current_frame.start);
+		  }
+#endif
+		  // Execute cleanly under the protection of the RAII shield
+		  m_d3dContext->ExecuteCommandList(localPackage.CommandList.Get(), TRUE);
+#if 1
+		  if(current_frame.disjoint)
+		  {
+			m_d3dContext->End(current_frame.end);
+			m_d3dContext->End(current_frame.disjoint);
+
+			current_frame.is_active = true;
+			m_presentWriteSlot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
+		  }
+#endif
+		} // contextShield is automatically destroyed here, invoking ->Leave() perfectly!
+
+		// Reset references safely outside the locked scope
+		localPackage.CommandList.Reset();
+		localPackage.ResourceLifelines.clear();
+	  }
+#if 1
+	  int read_slot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
+	  PresentQuery& old_pass = m_presentQueryRing [read_slot];
+
+	  if(old_pass.is_active && old_pass.disjoint)
+	  {
+		D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint_data;
+		HRESULT hr = m_d3dContext->GetData(old_pass.disjoint, &disjoint_data, sizeof(disjoint_data), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+
+		if(hr == S_OK)
+		{
+		  UINT64 start_time = 0;
+		  UINT64 end_time = 0;
+
+		  m_d3dContext->GetData(old_pass.start, &start_time, sizeof(UINT64), 0);
+		  m_d3dContext->GetData(old_pass.end, &end_time, sizeof(UINT64), 0);
+
+		  if(!disjoint_data.Disjoint && start_time > 0 && end_time > start_time)
+		  {
+			double freq = static_cast<double>(disjoint_data.Frequency);
+			float layerComposeMs = (static_cast<float>(end_time - start_time) / freq);
+
+			m_guiComposeTime.store(layerComposeMs, std::memory_order_relaxed);
+		  }
+
+		  old_pass.is_active = false; 
+		}
+	  }
+	  float newSample = m_guiComposeTime.exchange(-1.0f, std::memory_order_relaxed);
+	  if(newSample >= 0.0f)
+	  {
+		m_guiComposeTimeMonitor.update(newSample);
+	  }
+
+#endif
+
+	  if(m_swapChain)
+	  {
+  	    hr = m_swapChain->Present(1, 0);
+
+		LARGE_INTEGER qpc;
+		::QueryPerformanceCounter(&qpc);
+		m_lastVsyncTimestamp.store(qpc.QuadPart, std::memory_order_release);
+	  }
+	}
   }
 
   UINT64 end = CurrentHostCounter();
@@ -2044,7 +2182,7 @@ bool DX::DeviceResources::IsGCNOrOlder() const
 
 void DX::DeviceResources::StartPresentThread()
 {
-  CLog::LogF(LOGDEBUG, "Enter");
+  //CLog::LogF(LOGDEBUG, "Enter");
   if(m_bIsTearingDown)
 	return;
 
@@ -2077,7 +2215,7 @@ void DX::DeviceResources::StartPresentThread()
 
 void DX::DeviceResources::StopPresentThread()
 {
-  CLog::LogF(LOGDEBUG, "Enter");
+  //CLog::LogF(LOGDEBUG, "Enter");
   if(!m_presentRunning.load(std::memory_order_acquire)) return;
 
   m_presentRunning.store(false, std::memory_order_release);
@@ -2336,7 +2474,7 @@ void DX::DeviceResources::PresentThreadLoop()
 
 HRESULT DX::DeviceResources::SignalFrameReady()
 {
-  CLog::LogF(LOGDEBUG, "Enter");
+  //CLog::LogF(LOGDEBUG, "Enter");
   float newSample = m_guiComposeTime.exchange(-1.0f, std::memory_order_relaxed);
   if(newSample >= 0.0f)
   {

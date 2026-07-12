@@ -173,6 +173,12 @@ enum ETONEMAPMETHOD
   VS_TONEMAPMETHOD_MAX
 };
 
+enum EPRESENTMODE
+{
+  VS_PRESENTMODE_MULTITHREADED = 0,
+  VS_PRESENTMODE_CLASSIC = 1
+};
+
 template<>
 struct fmt::formatter<ETONEMAPMETHOD> : fmt::formatter<std::string_view>
 {

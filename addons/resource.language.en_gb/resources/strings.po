@@ -25701,5 +25701,13 @@ msgctxt "#55383"
 msgid "Target contrast (-1:inf, 0: auto, >0: log scale)"
 msgstr ""
 
+msgctxt "#55384"
+msgid "Presentation mode, restart Kodi or risk a crash..."
+msgstr ""
+
+msgctxt "#55385"
+msgid "Multithreaded reduces judder but might increase latency and CPU/GPU memory usage, Classic is Kodi's original method"
+msgstr ""
+
 
 

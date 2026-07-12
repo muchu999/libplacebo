@@ -106,6 +106,7 @@ public:
   static constexpr auto SETTING_VIDEOPLAYER_SEEKDELAY = "videoplayer.seekdelay";
   static constexpr auto SETTING_VIDEOPLAYER_ADJUSTREFRESHRATE = "videoplayer.adjustrefreshrate";
   static constexpr auto SETTING_VIDEOPLAYER_USEDISPLAYASCLOCK = "videoplayer.usedisplayasclock";
+  static constexpr auto SETTING_VIDEOPLAYER_PRESENTMODE = "videoplayer.presentmode";
   static constexpr auto SETTING_VIDEOPLAYER_PRESENTQUEUEDEPTH = "videoplayer.presentQueueDepth";
   static constexpr auto SETTING_VIDEOPLAYER_VIDEOBUFFERS = "videoplayer.videobuffers";
   static constexpr auto SETTING_VIDEOPLAYER_ERRORINASPECT = "videoplayer.errorinaspect";
