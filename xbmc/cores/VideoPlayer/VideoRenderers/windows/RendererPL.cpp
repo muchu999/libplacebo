@@ -290,19 +290,20 @@ DEBUG_INFO_VIDEO CRendererPL::GetDebugInfo(int idx)
 	, pl_color_transfer_name(m_colorSpace.transfer)
 	, pl_color_system_name(m_videoMatrix));
   
-  info.render1 = StringUtils::Format("Display maxLuma: {}, maxFALL: {}",plbuffer->m_OutputDesc1.MaxLuminance, plbuffer->m_OutputDesc1.MaxFullFrameLuminance);
+  info.render1 = StringUtils::Format("Display maxLuma: {:.0f}, maxFALL: {:.0f}",plbuffer->m_OutputDesc1.MaxLuminance, plbuffer->m_OutputDesc1.MaxFullFrameLuminance);
   info.render2 = StringUtils::Format("HDR10PlusMetadata:");
   if(plbuffer->hasHDR10PlusMetadata)
   {
-	info.render2 += StringUtils::Format(" light (meta): max luma: {:.0f}, min luma: {:.4f}", hdr.max_luma, hdr.min_luma);
+	info.render2 += StringUtils::Format(" light (meta): min luma: {:.4f}, max luma: {:.0f}", hdr.min_luma, hdr.max_luma);
 	info.render2 += StringUtils::Format(", max CLL: {}, max FALL: {}", hdr.max_cll, hdr.max_fall);
   }
 
-  info.render3 = StringUtils::Format("FrameIn maxLuma: {:5.0f}, maxPqy: {:5.0f}, avgPqy: {:5.0f}, Out maxLuma: {:5.0f}",
+  info.render3 = StringUtils::Format("FrameIn maxLuma: {:5.0f}, maxPqy: {:5.0f}, avgPqy: {:5.0f}, Out minLuma: {:.4f}, maxLuma: {:5.0f}",
 	plbuffer->m_FrameInColor.hdr.max_luma,
 	Pq2nit(plbuffer->m_FrameInColor.hdr.max_pq_y),
 	Pq2nit(plbuffer->m_FrameInColor.hdr.avg_pq_y),
-	plbuffer->m_FrameOutColor.hdr.max_luma);
+	plbuffer->m_FrameOutColor.hdr.min_luma,
+    plbuffer->m_FrameOutColor.hdr.max_luma);
 
   info.render4 = StringUtils::Format("PeakDetect:");
   if(plbuffer->m_bHasPeakDetectMetadata)

@@ -1380,47 +1380,16 @@ else
 	StopPresentThread(); //cl hot switch...
 	StopWatchdog();
 
-	//cl keep same logic for now
 	if(SUCCEEDED(hr))
 	{
-	  FramePackage package;
-	  package.CommandList = pCommandList;
-
-	  Microsoft::WRL::ComPtr<ID3D11RenderTargetView> currentRTV;
-	  m_deferrContext->OMGetRenderTargets(1, &currentRTV, nullptr);
-	  if(currentRTV)
-	  {
-		package.ResourceLifelines.push_back(currentRTV);
-	  }
-	  {
-		package.ResourceLifelines = std::move(m_currentFrameLifelines);
-		m_currentFrameLifelines.clear(); // Clear for Frame N+1 recording pass
-	  }
-
-	  // Push the complete package to your FIFO queue
-	  {
-		m_frameQueue.push(package);
-	  }
-
-	  FramePackage localPackage;
-	  {
-		if(!m_frameQueue.empty())
-		{
-		  localPackage = std::move(m_frameQueue.front());
-		  m_frameQueue.pop();
-		}
-	  }
-
 	  if(m_latencyWaitableObject)
 	  {
 		DWORD waitResult = ::WaitForSingleObject(m_latencyWaitableObject, 100);
 	  }
 
-	  if(localPackage.CommandList)
+	  if(pCommandList)
 	  {
-		// Create an isolated scope for the command list execution
 		{
-#if 1
 		  PresentQuery& current_frame = m_presentQueryRing [m_presentWriteSlot];
 
 		  if(current_frame.disjoint)
@@ -1428,10 +1397,8 @@ else
 			m_d3dContext->Begin(current_frame.disjoint);
 			m_d3dContext->End(current_frame.start);
 		  }
-#endif
 		  // Execute cleanly under the protection of the RAII shield
-		  m_d3dContext->ExecuteCommandList(localPackage.CommandList.Get(), TRUE);
-#if 1
+		  m_d3dContext->ExecuteCommandList(pCommandList.Get(), TRUE);
 		  if(current_frame.disjoint)
 		  {
 			m_d3dContext->End(current_frame.end);
@@ -1440,14 +1407,11 @@ else
 			current_frame.is_active = true;
 			m_presentWriteSlot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
 		  }
-#endif
 		} // contextShield is automatically destroyed here, invoking ->Leave() perfectly!
 
 		// Reset references safely outside the locked scope
-		localPackage.CommandList.Reset();
-		localPackage.ResourceLifelines.clear();
+		pCommandList.Reset();
 	  }
-#if 1
 	  int read_slot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
 	  PresentQuery& old_pass = m_presentQueryRing [read_slot];
 
@@ -1481,7 +1445,6 @@ else
 		m_guiComposeTimeMonitor.update(newSample);
 	  }
 
-#endif
 
 	  if(m_swapChain)
 	  {
@@ -2237,48 +2200,6 @@ void DX::DeviceResources::StopPresentThread()
   m_latencyWaitableObject = nullptr;
 }
 
-// Isolated static helper function with NO C++ object unwinding constraints
-static HRESULT SafeGetQueryData(ID3D11DeviceContext* pContext, ID3D11Query* pQuery, void* pData, UINT dataSize)
-{
-  __try
-  {
-	return pContext->GetData(pQuery, pData, dataSize, D3D11_ASYNC_GETDATA_DONOTFLUSH);
-  }
-  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
-  {
-	return E_FAIL;
-  }
-}
-
-static void SafeEndQuery(ID3D11DeviceContext* pContext, ID3D11Query* pQuery)
-{
-  if(!pContext || !pQuery) return;
-
-  __try
-  {
-	pContext->End(pQuery);
-  }
-  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
-  {
-	// Caught the multi-threaded race or query eviction safely at the driver edge!
-	// We absorb it silently so kodi.exe keeps running seamlessly.
-  }
-}
-
-static void SafeBeginQuery(ID3D11DeviceContext* pContext, ID3D11Query* pQuery)
-{
-  if(!pContext || !pQuery) return;
-
-  __try
-  {
-	pContext->Begin(pQuery);
-  }
-  __except(GetExceptionCode() == 0x0000087D ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
-  {
-	// Absorb the exception safely
-  }
-}
-
 class D3DContextInterfaceGuard
 {
 public:
@@ -2369,7 +2290,6 @@ void DX::DeviceResources::PresentThreadLoop()
 	  {
 		D3DContextInterfaceGuard contextShield(pMultithread.Get());
 
-#if 1
 		PresentQuery& current_frame = m_presentQueryRing [m_presentWriteSlot];
 
 		if(current_frame.disjoint)
@@ -2377,10 +2297,8 @@ void DX::DeviceResources::PresentThreadLoop()
 		  m_d3dContext->Begin(current_frame.disjoint);
 		  m_d3dContext->End(current_frame.start);
 		}
-#endif
 		// Execute cleanly under the protection of the RAII shield
 		m_d3dContext->ExecuteCommandList(localPackage.CommandList.Get(), TRUE);
-#if 1
 		if(current_frame.disjoint)
 		{
 		  m_d3dContext->End(current_frame.end);
@@ -2389,7 +2307,6 @@ void DX::DeviceResources::PresentThreadLoop()
 		  current_frame.is_active = true;
 		  m_presentWriteSlot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
 		}
-#endif
 	  } // contextShield is automatically destroyed here, invoking ->Leave() perfectly!
 
 	  // Reset references safely outside the locked scope
@@ -2401,7 +2318,6 @@ void DX::DeviceResources::PresentThreadLoop()
 	{
 	  D3DContextInterfaceGuard presentationShield(pMultithread.Get());
 
-#if 1
 	  int read_slot = (m_presentWriteSlot + 1) % PRESENT_QUERY_LATENCY;
 	  PresentQuery& old_pass = m_presentQueryRing [read_slot];
 
@@ -2432,7 +2348,6 @@ void DX::DeviceResources::PresentThreadLoop()
 		  old_pass.is_active = false; // Free for reuse
 		}
 	  }
-#endif
 	  if(m_swapChain)
 	  {
 		HRESULT testHr = m_swapChain->Present(0, DXGI_PRESENT_TEST);
