@@ -1920,7 +1920,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	int dummy3 = videoSettings.m_PlaceboTargetContrast;
 	if(videoSettings.m_PlaceboTargetContrast > 0)
 	  dummy3 = std::max(std::log10(videoSettings.m_PlaceboTargetContrast) * 20.0 - 19.0, 1.0);
-	AddSlider(groupOptions, SETTING_LIB_PLACEBO_TARGET_CONTRAST, 55383, SettingLevel::Basic, dummy3, -1, -1, 1, 120, 55383, usePopup);
+	AddSlider(groupOptions, SETTING_LIB_PLACEBO_TARGET_CONTRAST, 55383, SettingLevel::Basic, dummy3, -1, -1, 1, 201, 55383, usePopup);
 
 	entries.clear();
 	entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));
@@ -2042,7 +2042,7 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	int dummy2 = videoSettings.m_PlaceboSdrTargetContrast;
 	if(videoSettings.m_PlaceboSdrTargetContrast > 0)
 	  dummy2 = std::max(std::log10(videoSettings.m_PlaceboSdrTargetContrast) * 20.0 - 19.0, 1.0);
-	AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_TARGET_CONTRAST, 55383, SettingLevel::Basic, dummy2, -1, -1, 1, 120, 55383, usePopup);
+	AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_TARGET_CONTRAST, 55383, SettingLevel::Basic, dummy2, -1, -1, 1, 201, 55383, usePopup);
 	AddSlider(groupSdr, SETTING_LIB_PLACEBO_SDR_SATURATION, 55210, SettingLevel::Basic, videoSettings.m_PlaceboSdrSaturation, "{0:4.1f}", (float) 0.0, (float) 0.5, (float) 100.0, 55210, usePopup);
 	AddToggle(groupSdr, SETTING_LIB_PLACEBO_SDR_COLOR_MAP_INVERSE_TONE_MAPPING, 55291, SettingLevel::Basic, videoSettings.m_PlaceboSdrColorMapInverseToneMapping);
 	AddToggle(groupSdr, SETTING_LIB_PLACEBO_SDR_COLOR_MAP_GAMUT_EXPANSION, 55290, SettingLevel::Basic, videoSettings.m_PlaceboSdrColorMapGamutExpansion);
