@@ -762,7 +762,7 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboTargetContrast = val;
 	if(val >0)
 	{
-	  vs.m_PlaceboTargetContrast = std::pow(10.0, (val + 19) / 20.0);
+	  vs.m_PlaceboTargetContrast = std::pow(10.0, (202-val + 39) / 40.0);
 	}
 	appPlayer->SetVideoSettings(vs);
   }
@@ -772,7 +772,7 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	vs.m_PlaceboSdrTargetContrast = val;
 	if(val > 0)
 	{
-	  vs.m_PlaceboSdrTargetContrast = std::pow(10.0, (val+19)/20.0);
+	  vs.m_PlaceboSdrTargetContrast = std::pow(10.0, (202-val+39)/40.0);
 	}
 	appPlayer->SetVideoSettings(vs);
   }
