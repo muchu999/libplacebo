@@ -222,7 +222,7 @@ void CRendererSoftware::CRenderBufferImpl::ReleasePicture()
   __super::ReleasePicture();
 }
 
-bool CRendererSoftware::CRenderBufferImpl::UploadBuffer()
+bool CRendererSoftware::CRenderBufferImpl::UploadBuffer(CVideoSettings* pVs)
 {
   if (!videoBuffer)
     return false;

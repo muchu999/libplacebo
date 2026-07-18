@@ -149,7 +149,7 @@ bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
   if(!plbuffer->IsLoaded())
   {
-	if (!plbuffer->UploadBuffer())
+	if (!plbuffer->UploadBuffer(nullptr))
 	{
 	  CLog::LogF(LOGERROR, "Failed to upload buffer to GPU");
 	  return false;
@@ -456,9 +456,9 @@ void CRendererPL::CheckVideoParameters()
 	bUseUnordered = true;
   }
   CreateIntermediateTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_UNKNOWN, bUseUnordered); //cl DXGI_FORMAT_R10G10B10A2_UNORM);
-  if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled() || DX::Windowing()->IsRtxVideoHdrSettingEnabled())
+  if(m_videoSettings.m_PlaceboNvSuperResolutionEnabled || m_videoSettings.m_PlaceboNvRtxHdrEnabled)
   {
-	if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled()&& !DX::Windowing()->IsRtxVideoHdrSettingEnabled())
+	if(m_videoSettings.m_PlaceboNvSuperResolutionEnabled && ! m_videoSettings.m_PlaceboNvRtxHdrEnabled)
 	{
 	  // Use target resolution, format will be backbuffer format independent of RtxVideoHdr setting
 	  CreateTempTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_UNKNOWN, bUseUnordered);
@@ -792,9 +792,9 @@ bool CRendererPL::InitializeFrame(pl_swapchain sw, pl_frame &frameOut)
   return true;
 }
 
-void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer)
+void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer, bool bNvSuperResolutionEnabled, bool bNvRtxHdrEnabled)
 {
-  if(DX::Windowing()->IsRtxVideoHdrSettingEnabled())
+  if(bNvRtxHdrEnabled)
   {
 	frameIn->color.primaries = PL_COLOR_PRIM_BT_709;
 	frameIn->color.transfer = PL_COLOR_TRC_LINEAR; //PL_COLOR_TRC_HLG; // PL_COLOR_TRC_PQ;
@@ -814,7 +814,7 @@ void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRende
 	frameIn->planes [2] = buffer->plplanes [2];
 	//cl ?pl_frame_set_chroma_location(frameIn, buffer->m_chromaLocation);
   }
-  else if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled())
+  else if(bNvSuperResolutionEnabled)
   {
 	frameIn->color.primaries = PL_COLOR_PRIM_BT_709;
 	frameIn->color.transfer = PL_COLOR_TRC_SRGB;
@@ -1031,7 +1031,7 @@ void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destP
 void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts)
 {
   CRect dst = ApplyTransforms(CRect(destPoints [0], destPoints [2])); //uses m_renderOrientation
-  if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled() || DX::Windowing()->IsRtxVideoHdrSettingEnabled())
+  if(m_videoSettings.m_PlaceboNvSuperResolutionEnabled || m_videoSettings.m_PlaceboNvRtxHdrEnabled)
   {
 	RenderDx(target, sourceRect, destPoints, flags, renderPts);
 	sourceRect.x1 = 0;
@@ -1072,7 +1072,7 @@ void CRendererPL::Render(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoi
 	return;
   CRenderBufferImpl* buffer = static_cast<CRenderBufferImpl*>(buf);
 
-  InitializeFrameInFields(&frameIn, buffer); //cl wastefull, need cleanup
+  InitializeFrameInFields(&frameIn, buffer, m_videoSettings.m_PlaceboNvSuperResolutionEnabled, m_videoSettings.m_PlaceboNvRtxHdrEnabled); 
   if((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue)
   {
 	if(buffer->pictureFlags & DVP_FLAG_INTERLACED)
@@ -1842,14 +1842,14 @@ void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
   }
 }
 
-bool CRendererPL::CRenderBufferImpl::UploadBuffer()
+bool CRendererPL::CRenderBufferImpl::UploadBuffer(CVideoSettings* pVs)
 {
   if (!videoBuffer)
 	return false;
 
   if (videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
   {
-	if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled() || DX::Windowing()->IsRtxVideoHdrSettingEnabled())
+	if(pVs && (pVs->m_PlaceboNvSuperResolutionEnabled || pVs->m_PlaceboNvRtxHdrEnabled))
 	{
 	  m_bLoaded = true;
 	  return m_bLoaded;

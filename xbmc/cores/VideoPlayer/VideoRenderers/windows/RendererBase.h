@@ -66,7 +66,7 @@ public:
 
   virtual void AppendPicture(const VideoPicture& picture);
   virtual void ReleasePicture();
-  virtual bool UploadBuffer() { return false; }
+  virtual bool UploadBuffer(CVideoSettings* pVs = nullptr) { return false; }
   virtual HRESULT GetResource(ID3D11Resource** ppResource, unsigned* index) const;
 
   // implementation specified

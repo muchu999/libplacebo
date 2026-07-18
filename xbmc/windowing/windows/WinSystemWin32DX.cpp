@@ -445,8 +445,3 @@ bool CWinSystemWin32DX::SupportsVideoSuperResolution()
 {
   return m_deviceResources->IsSuperResolutionSupported();
 }
-
-bool CWinSystemWin32DX::SupportsRtxVideoHdr()
-{
-  return m_deviceResources->IsRtxVideoHdrSupported();
-}

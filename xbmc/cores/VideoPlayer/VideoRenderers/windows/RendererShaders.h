@@ -61,7 +61,7 @@ public:
   ~CRenderBufferImpl();
 
   void AppendPicture(const VideoPicture& picture) override;
-  bool UploadBuffer() override;
+  bool UploadBuffer(CVideoSettings* pVs = nullptr) override;
   unsigned GetViewCount() const override;
   ID3D11View* GetView(unsigned viewIdx) override;
   void ReleasePicture() override;

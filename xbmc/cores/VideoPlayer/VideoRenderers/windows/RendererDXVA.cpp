@@ -364,7 +364,7 @@ CRendererDXVA::CRenderBufferImpl::~CRenderBufferImpl()
   CRenderBufferImpl::ReleasePicture();
 }
 
-bool CRendererDXVA::CRenderBufferImpl::UploadBuffer()
+bool CRendererDXVA::CRenderBufferImpl::UploadBuffer(CVideoSettings* pVs)
 {
   if (!videoBuffer)
     return false;
