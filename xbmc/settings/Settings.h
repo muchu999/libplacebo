@@ -123,7 +123,6 @@ public:
   static constexpr auto SETTING_VIDEOPLAYER_HQSCALERS = "videoplayer.hqscalers";
   static constexpr auto SETTING_VIDEOPLAYER_HQSCALERPRECISION = "videoplayer.hqscalerprecision";
   static constexpr auto SETTING_VIDEOPLAYER_USESUPERRESOLUTION = "videoplayer.usesuperresolution";
-  static constexpr auto SETTING_VIDEOPLAYER_USERTXVIDEOHDR = "videoplayer.usertxvideohdr";
   static constexpr auto SETTING_VIDEOPLAYER_HIGHPRECISIONPROCESSING = "videoplayer.highprecision";
   static constexpr auto SETTING_VIDEOPLAYER_USEMEDIACODEC = "videoplayer.usemediacodec";
   static constexpr auto SETTING_VIDEOPLAYER_USEMEDIACODECSURFACE =

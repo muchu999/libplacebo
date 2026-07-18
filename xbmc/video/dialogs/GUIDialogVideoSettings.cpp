@@ -239,6 +239,8 @@ using namespace XFILE;
 #define SETTING_LIB_PLACEBO_DISPLAY_HDR_PEAK_LUMINANCE          "video.libplacebo.display_hdr_peak_luminance"
 #define SETTING_LIB_PLACEBO_DISPLAY_SDR_PEAK_LUMINANCE          "video.libplacebo.display_sdr_peak_luminance"
 #define SETTING_LIB_PLACEBO_TARGET_CONTRAST                     "video.libplacebo.target_contrast"
+#define SETTING_LIB_PLACEBO_NV_SUPER_RESOLUTION                 "video.libplacebo.nv_super_resolution"
+#define SETTING_LIB_PLACEBO_NV_RTX_HDR                          "video.libplacebo.nv_rtx_hdr"
 #define SETTING_LIB_PLACEBO_SDR_TARGET_CONTRAST                 "video.libplacebo.sdr_target_contrast"
 #define SETTING_LIB_PLACEBO_TARGET_COLORSPACE_HINT              "video.libplacebo.target_colorspace_hint"
 #define SETTING_LIB_PLACEBO_USE_HDR_FOR_SDR                     "video.libplacebo.use_hdr_for_sdr"
@@ -764,6 +766,16 @@ void CGUIDialogVideoSettings::OnSettingChanged(const std::shared_ptr<const CSett
 	{
 	  vs.m_PlaceboTargetContrast = std::pow(10.0, (141-val) / 20.0);
 	}
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_NV_SUPER_RESOLUTION)
+  {
+	vs.m_PlaceboNvSuperResolutionEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
+	appPlayer->SetVideoSettings(vs);
+  }
+  else if(settingId == SETTING_LIB_PLACEBO_NV_RTX_HDR)
+  {
+	vs.m_PlaceboNvRtxHdrEnabled = std::static_pointer_cast<const CSettingBool>(setting)->GetValue();
 	appPlayer->SetVideoSettings(vs);
   }
   else if (settingId == SETTING_LIB_PLACEBO_SDR_TARGET_CONTRAST)
@@ -1921,8 +1933,8 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	if(videoSettings.m_PlaceboTargetContrast > 0)
 	  dummy3 = std::max(-std::log10(videoSettings.m_PlaceboTargetContrast) * 20.0 + 141, 1.0);
 	AddSlider(groupOptions, SETTING_LIB_PLACEBO_TARGET_CONTRAST, 55383, SettingLevel::Basic, dummy3, -1, -1, 1, 121, 55383, usePopup);
-	//AddToggle(groupOptions, SETTING_LIB_PLACEBO_NV_SUPER_RESOLUTION, 55221, SettingLevel::Basic, videoSettings.m_PlaceboColorAdjustmentEnabled);
-	//AddToggle(groupOptions, SETTING_LIB_PLACEBO_NV_RTX_HDR, 55221, SettingLevel::Basic, videoSettings.m_PlaceboColorAdjustmentEnabled);
+	AddToggle(groupOptions, SETTING_LIB_PLACEBO_NV_SUPER_RESOLUTION, 55386, SettingLevel::Basic, videoSettings.m_PlaceboNvSuperResolutionEnabled);
+	AddToggle(groupOptions, SETTING_LIB_PLACEBO_NV_RTX_HDR, 55387, SettingLevel::Basic, videoSettings.m_PlaceboNvRtxHdrEnabled);
 
 	entries.clear();
 	entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));

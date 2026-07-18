@@ -83,7 +83,6 @@ public:
   DEBUG_INFO_RENDER GetDebugInfo() override;
 
   bool SupportsVideoSuperResolution() override;
-  bool SupportsRtxVideoHdr() override;
 
 protected:
   void SetDeviceFullScreen(bool fullScreen, RESOLUTION_INFO& res) override;

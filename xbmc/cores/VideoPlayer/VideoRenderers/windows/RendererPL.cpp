@@ -468,8 +468,8 @@ void CRendererPL::CheckVideoParameters()
 	{
 	  if(m_RtxVideoProcessor.IsVsrViable())
 	  {
-		if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled()
-		  && buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
+		if(//DX::Windowing()->IsVideoSuperResolutionSettingEnabled()
+		   buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
 		  && m_videoSettings.m_PlaceboFrameMixer == -1
 		  && m_videoSettings.m_PlaceboFrameMixerBypassQueue == true)
 		{
@@ -478,8 +478,8 @@ void CRendererPL::CheckVideoParameters()
 	  }
 	  if(m_RtxVideoProcessor.IsRtxHdrViable())
 	  {
-		if(DX::Windowing()->IsRtxVideoHdrSettingEnabled()
-		  && DX::Windowing()->IsHDROutput()
+		if(//DX::Windowing()->IsRtxVideoHdrSettingEnabled()
+		  DX::Windowing()->IsHDROutput()
 		  && buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
 		  && m_videoSettings.m_PlaceboFrameMixer == -1
 		  && m_videoSettings.m_PlaceboFrameMixerBypassQueue == true)
