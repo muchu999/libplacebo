@@ -49,7 +49,7 @@ public:
   bool GetDataPlanes(uint8_t*(&planes)[3], int(&strides)[3]) override;
 
   void ReleasePicture() override;
-  bool UploadBuffer(CVideoSettings* pVs = nullptr) override;
+  bool UploadBuffer() override;
 
 private:
   D3D11_MAPPED_SUBRESOURCE m_msr{};

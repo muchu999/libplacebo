@@ -123,7 +123,7 @@ protected:
   void Render(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts = 0.0);
   void RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts = 0.0);
   void ApplyGeometry(CVideoSettings& vs, CRect& sourceRect, CRect& dst, pl_frame& frameIn, pl_frame& frameOut);
-  static void InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer, bool bNvSuperResolutionEnabled = false, bool bNvRtxHdrEnabled = false);
+  static void InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer);
   void ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* source, struct pl_frame* target, float min_luma, bool hint);
   CRenderBuffer* CreateBuffer() override;
 
@@ -195,7 +195,7 @@ public:
 
 
   void AppendPicture(const VideoPicture& picture) override;
-  bool UploadBuffer(CVideoSettings* pVs) override;
+  bool UploadBuffer() override;
   bool GetLibplaceboFrame(pl_frame& frame);
   bool map_frame(pl_gpu gpu, pl_tex* tex, struct pl_source_frame* src, struct pl_frame* out_frame);
   double getPts() { return pts; }

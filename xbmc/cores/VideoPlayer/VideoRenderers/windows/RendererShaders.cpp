@@ -318,7 +318,7 @@ void CRendererShaders::CRenderBufferImpl::AppendPicture(const VideoPicture& pict
   }
 }
 
-bool CRendererShaders::CRenderBufferImpl::UploadBuffer(CVideoSettings* pVs)
+bool CRendererShaders::CRenderBufferImpl::UploadBuffer()
 {
   if (!videoBuffer)
     return false;

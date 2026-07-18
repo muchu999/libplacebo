@@ -69,7 +69,7 @@ public:
   explicit CRenderBufferImpl(AVPixelFormat av_pix_format, unsigned width, unsigned height);
   ~CRenderBufferImpl();
 
-  bool UploadBuffer(CVideoSettings* pVs = nullptr) override;
+  bool UploadBuffer() override;
   HRESULT GetResource(ID3D11Resource** ppResource, unsigned* index) const override;
 
   static DXGI_FORMAT GetDXGIFormat(AVPixelFormat format, DXGI_FORMAT default_fmt = DXGI_FORMAT_UNKNOWN);
