@@ -253,6 +253,7 @@ public:
    *
    */
   virtual bool SupportsVideoSuperResolution() { return false; }
+  virtual bool SupportsRtxVideoHdr() { return false; }
 
   // GUI compositing for HDR: render GUI to FBO, composite with tone mapping
   // colorTransfer: AVCOL_TRC_SMPTE2084 (PQ) or AVCOL_TRC_ARIB_STD_B67 (HLG), 0 to disable
@@ -287,6 +288,12 @@ public:
    *
    */
   bool IsVideoSuperResolutionSettingEnabled();
+
+  /*!
+   * \brief Return true when "Rtx Video Hdr" is supported and enabled in settings
+   *
+   */
+  bool IsRtxVideoHdrSettingEnabled();
 
   /*!
    * \brief Return true when setting "High Precision Processing" is enabled

@@ -55,6 +55,28 @@ enum class SettinglibPlaceboTargetColorspaceHintMode
 
 enum RenderMethod;
 
+class CRTXVideoProcessor
+{
+private:
+  // Tracker to know if initialization was successful
+  bool m_bInitialized = false;
+
+public:
+  bool IsInitialized() const { return m_bInitialized; }
+  Microsoft::WRL::ComPtr<ID3D11VideoDevice>           m_pVideoDevice;
+  Microsoft::WRL::ComPtr<ID3D11VideoContext>          m_pVideoContext;
+  Microsoft::WRL::ComPtr<ID3D11VideoProcessor>        m_pVideoProcessor;
+  Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator> m_pVideoEnumerator;
+
+  bool InitializePipeline(unsigned int width, unsigned int height, unsigned int iFlags);
+  void ProcessVideoFrame(ID3D11VideoProcessorInputView* inputView, ID3D11VideoProcessorOutputView* outputView);
+  void UninitializePipeline();
+  bool ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, ID3D11VideoProcessorOutputView* pOutputView);
+  void DebugBypassToDisplay(ID3D11Texture2D* pOutputWindowTexture, ID3D11Texture2D* pTempTarget, CPoint(&destPoints) [4]);
+  bool ConfigureHdrColorSpaces(ID3D11VideoProcessor* pProcessor);
+
+};
+
 class CRendererPL : public CRendererBase
 {
     CRect ApplyTransforms(const CRect& destRect) const;
@@ -62,6 +84,7 @@ class CRendererPL : public CRendererBase
 public:
   ~CRendererPL();
 
+  bool CreateTempTarget(unsigned int width, unsigned int height, bool dynamic = false, DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN, bool bUseUnordered = false);
   void UpdateVideoFilters() override;
   bool NeedBuffer(int idx) override;
   CRenderInfo GetRenderInfo() override;
@@ -84,11 +107,21 @@ public:
   static DXGI_FORMAT GetDXGIFormat(AVPixelFormat format, DXGI_FORMAT default_fmt);
   static bool InitializeFrame(pl_swapchain sw, pl_frame& frameOut);
   static int getColorDepth(void);
+  std::unique_ptr<DXVA::CProcessorHD> m_processor;
+  std::shared_ptr<DXVA::CEnumeratorHD> m_enumerator;
+  DXVA::ProcessorConversion m_conversion;
+  DXVA::SupportedConversionsArgs m_conversionsArgs;
+  bool m_tryVSR {false};
+  DXVA::ProcessorConversion ChooseConversion(const DXVA::ProcessorConversions& conversions) const;
+
+
 protected:
   explicit CRendererPL(CVideoSettings& videoSettings);
 
   void CheckVideoParameters() override;
   void RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags, double renderPts = 0.0) override;
+  void Render(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts = 0.0);
+  void RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts = 0.0);
   void ApplyGeometry(CVideoSettings& vs, CRect& sourceRect, CRect& dst, pl_frame& frameIn, pl_frame& frameOut);
   static void InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer);
   void ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* source, struct pl_frame* target, float min_luma, bool hint);
@@ -133,7 +166,7 @@ private:
   AVColorPrimaries m_lastPrimaries = AVCOL_PRI_UNSPECIFIED;
 
   AVPixelFormat m_format;
-  static constexpr int QUERY_LATENCY = 8;
+  static constexpr int QUERY_LATENCY = 12;
   struct FrameQuery
   {
 	ID3D11Query* disjoint = nullptr;
@@ -145,6 +178,10 @@ private:
   int m_currentWriteSlot = 0;
   int m_presentWriteSlot = 0;
   void InitProfiling();
+  //ID3D11Texture2D* m_pOutputHdrTexture = nullptr;
+
+  CRTXVideoProcessor m_RtxVideoProcessor;
+
 
 };
 
@@ -155,6 +192,7 @@ public:
 
   explicit CRenderBufferImpl(AVPixelFormat av_pix_format, unsigned width, unsigned height);
   ~CRenderBufferImpl();
+
 
   void AppendPicture(const VideoPicture& picture) override;
   bool UploadBuffer() override;
@@ -185,7 +223,6 @@ public:
   pl_color_space m_FrameInColor = {};
   pl_color_space m_FrameOutColor = {};
 
-  bool m_bIsInterlaced = false;
   uint64_t m_signature = 0;
   AVDynamicHDRPlus hdrMetadata = {};
   bool disable_residual_flag = true;
@@ -194,18 +231,18 @@ public:
   //planes are used to create the frame
   pl_plane plplanes[3] = {};
 
+  // they are only kept for plane reference
+// we could put them to null according to libplacebo doc but it crash right away
+  pl_tex pltex [3] = {};
+  /* data info for dxva planes formating and bit encoding fill with plhelper
+  *  this include the bit format for the color conversion
+  * */
+
 private:
   //sw upload
   bool UploadPlanes();
   //When decoded with d3d11va
   bool UploadWrapPlanes();
   //move those to the video codec if linux start to use libplacebo
+}; 
 
-
-  // they are only kept for plane reference
-  // we could put them to null according to libplacebo doc but it crash right away
-  pl_tex pltex[3] = {};
-  /* data info for dxva planes formating and bit encoding fill with plhelper
-  *  this include the bit format for the color conversion 
-  * */
-};

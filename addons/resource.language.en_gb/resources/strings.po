@@ -25709,5 +25709,12 @@ msgctxt "#55385"
 msgid "Multithreaded reduces judder but might increase latency and CPU/GPU memory usage, Classic is Kodi's original method"
 msgstr ""
 
+msgctxt "#55386"
+msgid "Allow DXVA RTX Video HDR"
+msgstr ""
+
+msgctxt "#55387"
+msgid "Enables \"RTX Video HDR\".[CR]Used when the video source is not already HDR.[CR]Only available on NVIDIA RTX.[CR]Not available when Libplacebo Frame mixing is enabled"
+msgstr ""
 
 

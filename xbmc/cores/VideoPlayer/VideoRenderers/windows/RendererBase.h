@@ -206,6 +206,9 @@ protected:
 
   AVPixelFormat m_format = AV_PIX_FMT_NONE;
   CD3DTexture m_IntermediateTarget;
+  CD3DTexture m_TempTarget;
+  Microsoft::WRL::ComPtr < ID3D11VideoProcessorOutputView> m_pTempTargetView;
+
   std::shared_ptr<COutputShader> m_outputShader;
   std::unique_ptr<CColorManager> m_colorManager;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_pLUTView;

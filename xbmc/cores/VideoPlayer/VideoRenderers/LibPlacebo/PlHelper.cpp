@@ -277,6 +277,21 @@ void PL::PLInstance::fill_d3d_format(pl_d3d_format* info, DXGI_FORMAT format)
 
   switch(format)
   {
+  case DXGI_FORMAT_R16G16B16A16_FLOAT:
+	info->bits.color_depth = 16;
+	info->bits.sample_depth = 16;
+	info->bits.bit_shift = 0;
+	info->planes [0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	info->num_planes = 1;
+	info->components [0] = 4; 
+	info->component_mapping [0][0] = PL_CHANNEL_R;
+	info->component_mapping [0][1] = PL_CHANNEL_G;
+	info->component_mapping [0][2] = PL_CHANNEL_B;
+	info->component_mapping [0][3] = PL_CHANNEL_A;
+	info->width_div [0] = 1;
+	info->height_div [0] = 1;
+	strcpy(info->description, "rgba16f");
+	break;
   case DXGI_FORMAT_R10G10B10A2_UNORM:
 	info->bits.color_depth = 10;
 	info->bits.sample_depth = 10;

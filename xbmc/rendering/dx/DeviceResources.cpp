@@ -1734,6 +1734,13 @@ void DX::DeviceResources::CheckDXVA2SharedDecoderSurfaces()
 
   if (m_DXVASuperResolutionSupport)
     CLog::LogF(LOGINFO, "DXVA Video Super Resolution is potentially supported");
+
+  m_DXVARtxVideoHdrSupport =
+	m_d3dFeatureLevel >= D3D_FEATURE_LEVEL_12_1 &&
+	(ad.VendorId == PCIV_NVIDIA && driver.valid && driver.majorVersion >= 551); //cl ?
+
+  if(m_DXVARtxVideoHdrSupport)
+	CLog::LogF(LOGINFO, "DXVA RTX Video HDR is potentially supported");
 }
 
 VideoDriverInfo DX::DeviceResources::GetVideoDriverVersion() const
@@ -2625,3 +2632,27 @@ void DX::DeviceResources::RestartPresentThreadAsynchronously()
   m_presentRunning.store(true, std::memory_order_release);
   m_presentThread = std::thread(&DeviceResources::PresentThreadLoop, this);
 }
+
+#if 0
+#ifndef NVIDIA_TRUE_HDR_INTERFACE_GUID
+DEFINE_GUID(NVIDIA_TRUE_HDR_INTERFACE_GUID,
+  0xfdd62bb4, 0x620b, 0x4fd7, 0x9a, 0xb3,
+  0x1e, 0x59, 0xd0, 0xd5, 0x44, 0xb3);
+#endif
+bool DX::DeviceResources::supports_nvidia_true_hdr(struct mp_filter* vf)
+{
+
+  UINT supported = 0;
+  HRESULT hr = ID3D11VideoContext::VideoProcessorGetStreamExtension(p->video_proc,
+	0,
+	&NVIDIA_TRUE_HDR_INTERFACE_GUID,
+	sizeof(supported),
+	&supported);
+
+  if(FAILED(hr) || !supported) {
+	MP_WARN(vf, "NVIDIA RTX Video HDR not supported.\n");
+	return false;
+  }
+
+  return true;
+#endif

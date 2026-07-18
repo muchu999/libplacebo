@@ -337,6 +337,17 @@ bool CWinSystemBase::IsVideoSuperResolutionSettingEnabled()
   return (settings && settings->GetBool(CSettings::SETTING_VIDEOPLAYER_USESUPERRESOLUTION));
 }
 
+bool CWinSystemBase::IsRtxVideoHdrSettingEnabled()
+{
+  if(!SupportsRtxVideoHdr())
+	return false;
+
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+
+  return (settings && settings->GetBool(CSettings::SETTING_VIDEOPLAYER_USERTXVIDEOHDR));
+}
+
+
 bool CWinSystemBase::IsHighPrecisionProcessingSettingEnabled()
 {
   const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();

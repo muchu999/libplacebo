@@ -1921,6 +1921,8 @@ void CGUIDialogVideoSettings::InitializeSettings()
 	if(videoSettings.m_PlaceboTargetContrast > 0)
 	  dummy3 = std::max(-std::log10(videoSettings.m_PlaceboTargetContrast) * 20.0 + 141, 1.0);
 	AddSlider(groupOptions, SETTING_LIB_PLACEBO_TARGET_CONTRAST, 55383, SettingLevel::Basic, dummy3, -1, -1, 1, 121, 55383, usePopup);
+	//AddToggle(groupOptions, SETTING_LIB_PLACEBO_NV_SUPER_RESOLUTION, 55221, SettingLevel::Basic, videoSettings.m_PlaceboColorAdjustmentEnabled);
+	//AddToggle(groupOptions, SETTING_LIB_PLACEBO_NV_RTX_HDR, 55221, SettingLevel::Basic, videoSettings.m_PlaceboColorAdjustmentEnabled);
 
 	entries.clear();
 	entries.emplace_back(55315, static_cast<int>(SettinglibPlaceboTargetColorspaceHint::AUTO));

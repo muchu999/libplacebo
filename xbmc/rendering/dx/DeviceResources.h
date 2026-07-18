@@ -160,7 +160,8 @@ namespace DX
     bool IsNV12SharedTexturesSupported() const { return m_NV12SharedTexturesSupport; }
     bool IsDXVA2SharedDecoderSurfaces() const { return m_DXVA2SharedDecoderSurfaces; }
     bool IsSuperResolutionSupported() const { return m_DXVASuperResolutionSupport; }
-    bool UseFence() const { return m_DXVA2UseFence; }
+	bool IsRtxVideoHdrSupported() const { return m_DXVARtxVideoHdrSupport; }
+	bool UseFence() const { return m_DXVA2UseFence; }
 
     struct mp_dxgi_factory_ctx {
       IDXGIFactory1* factory;
@@ -260,7 +261,8 @@ namespace DX
     bool m_NV12SharedTexturesSupport{false};
     bool m_DXVA2SharedDecoderSurfaces{false};
     bool m_DXVASuperResolutionSupport{false};
-    bool m_DXVA2UseFence{false};
+	bool m_DXVARtxVideoHdrSupport {false};
+	bool m_DXVA2UseFence{false};
 private:
 	// Multi-threaded Present Engine Primitives
 	std::thread m_presentThread;
@@ -330,6 +332,8 @@ public:
   void StartWatchdog();
   void StopWatchdog();
   void RestartPresentThreadAsynchronously();
+  static bool supports_nvidia_true_hdr(struct mp_filter* vf);
+
   
 
   };
