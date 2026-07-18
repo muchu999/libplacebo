@@ -461,7 +461,7 @@ void CRendererPL::CheckVideoParameters()
 	if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled()&& !DX::Windowing()->IsRtxVideoHdrSettingEnabled())
 	{
 	  // Use target resolution, format will be backbuffer format independent of RtxVideoHdr setting
-	  CreateTempTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_UNKNOWN, bUseUnordered);
+	  CreateTempTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_R16G16B16A16_FLOAT, bUseUnordered);
 	}
 	else
 	{
@@ -796,9 +796,9 @@ void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRende
 {
   if(DX::Windowing()->IsRtxVideoHdrSettingEnabled())
   {
-	frameIn->color.primaries = PL_COLOR_PRIM_BT_709;
-	frameIn->color.transfer = PL_COLOR_TRC_LINEAR; //PL_COLOR_TRC_HLG; // PL_COLOR_TRC_PQ;
-	frameIn->color.hdr = {};
+	frameIn->color.primaries = PL_COLOR_PRIM_BT_2020; //PL_COLOR_PRIM_BT_709;
+	frameIn->color.transfer = PL_COLOR_TRC_LINEAR; //L_COLOR_TRC_LINEAR; //PL_COLOR_TRC_HLG; // PL_COLOR_TRC_PQ;
+
 	frameIn->color.hdr = {};
 	frameIn->color.hdr.min_luma = 0.0005;
 	frameIn->color.hdr.max_luma = 1000.0;
@@ -807,29 +807,16 @@ void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRende
 	frameIn->repr.sys = PL_COLOR_SYSTEM_RGB;
 	frameIn->repr.bits = buffer->plFormat.bits;
 	frameIn->repr.alpha = PL_ALPHA_UNKNOWN;
-
-	frameIn->num_planes = buffer->plFormat.num_planes;
-	frameIn->planes [0] = buffer->plplanes [0];
-	frameIn->planes [1] = buffer->plplanes [1];
-	frameIn->planes [2] = buffer->plplanes [2];
-	//cl ?pl_frame_set_chroma_location(frameIn, buffer->m_chromaLocation);
   }
   else if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled())
   {
 	frameIn->color.primaries = PL_COLOR_PRIM_BT_709;
-	frameIn->color.transfer = PL_COLOR_TRC_SRGB;
-
+	frameIn->color.transfer = PL_COLOR_TRC_LINEAR;
 
 	frameIn->repr.levels = PL_COLOR_LEVELS_FULL;
 	frameIn->repr.sys = PL_COLOR_SYSTEM_RGB;
 	frameIn->repr.bits = buffer->plFormat.bits;
 	frameIn->repr.alpha = PL_ALPHA_UNKNOWN;
-
-	frameIn->num_planes = buffer->plFormat.num_planes;
-	frameIn->planes [0] = buffer->plplanes [0];
-	frameIn->planes [1] = buffer->plplanes [1];
-	frameIn->planes [2] = buffer->plplanes [2];
-	//cl ?pl_frame_set_chroma_location(frameIn, buffer->m_chromaLocation);
   }
   else 
   {
@@ -850,12 +837,12 @@ void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRende
 		frameIn->repr.sys = PL_COLOR_SYSTEM_BT_709;
 	}
 
-	frameIn->num_planes = buffer->plFormat.num_planes;
-	frameIn->planes [0] = buffer->plplanes [0];
-	frameIn->planes [1] = buffer->plplanes [1];
-	frameIn->planes [2] = buffer->plplanes [2];
-	pl_frame_set_chroma_location(frameIn, buffer->m_chromaLocation);
   }
+  frameIn->num_planes = buffer->plFormat.num_planes;
+  frameIn->planes [0] = buffer->plplanes [0];
+  frameIn->planes [1] = buffer->plplanes [1];
+  frameIn->planes [2] = buffer->plplanes [2];
+  pl_frame_set_chroma_location(frameIn, buffer->m_chromaLocation);
 }
 
 class PlQueueCheck {
@@ -1527,6 +1514,7 @@ void CRendererPL::RenderSingle(CRenderBufferImpl* buffer, double renderPts, CVid
 	// Null check protection guard to prevent early startup crashes
 	FrameQuery& current_frame = m_queryRing [m_currentWriteSlot];
 
+	//frameOut.color.transfer = PL_COLOR_TRC_GAMMA22;
 	if(!current_frame.is_active && current_frame.disjoint && current_frame.start && current_frame.end)
 	{
 	  pDeviceContext->Begin(current_frame.disjoint);
