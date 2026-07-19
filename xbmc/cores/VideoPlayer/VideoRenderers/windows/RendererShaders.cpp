@@ -318,22 +318,26 @@ void CRendererShaders::CRenderBufferImpl::AppendPicture(const VideoPicture& pict
   }
 }
 
-bool CRendererShaders::CRenderBufferImpl::UploadBuffer()
+bool CRendererShaders::UploadBuffer(CRenderBuffer* buffer)
 {
-  if (!videoBuffer)
+  if (!buffer)
     return false;
 
-  if (videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
+  CRenderBufferImpl* buf = static_cast<CRenderBufferImpl*>(buffer);
+  if(!buf->videoBuffer)
+	return false;
+
+  if (buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
   {
-    if (AV_PIX_FMT_D3D11VA_VLD == av_format)
-      m_bLoaded = true;
-    else
-      m_bLoaded = UploadFromGPU();
+    if (AV_PIX_FMT_D3D11VA_VLD == buf->av_format)
+	  buf->SetLoaded();
+	else
+	  buf->UploadFromGPU() ? buf->SetLoaded() : buf->ResetLoaded();
   }
   else
-    m_bLoaded = UploadFromBuffer();
+	buf->UploadFromBuffer() ? buf->SetLoaded() : buf->ResetLoaded();
 
-  return m_bLoaded;
+  return buf->IsLoaded();
 }
 
 unsigned CRendererShaders::CRenderBufferImpl::GetViewCount() const

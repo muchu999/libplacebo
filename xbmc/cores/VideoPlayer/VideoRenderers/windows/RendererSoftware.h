@@ -21,6 +21,7 @@ class CRendererSoftware : public CRendererBase
 public:
   ~CRendererSoftware();
 
+  bool UploadBuffer(CRenderBuffer* buffer) override;
   bool Configure(const VideoPicture& picture, float fps, unsigned orientation) override;
   bool Supports(ESCALINGMETHOD method) const override;
 
@@ -49,7 +50,8 @@ public:
   bool GetDataPlanes(uint8_t*(&planes)[3], int(&strides)[3]) override;
 
   void ReleasePicture() override;
-  bool UploadBuffer() override;
+  D3D11_MAPPED_SUBRESOURCE* GetMappedResourcePtr() { return &m_msr; }
+
 
 private:
   D3D11_MAPPED_SUBRESOURCE m_msr{};

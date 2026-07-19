@@ -271,7 +271,7 @@ void CRendererDXVA::FillBuffersSet(CRenderBuffer* (&buffers)[8])   //cl
       if (m_renderBuffers[i]->frameIdx == buf->frameIdx + (future * 2 + 2))
       {
         // a future frame may not be loaded yet
-        if (m_renderBuffers[i]->IsLoaded() || m_renderBuffers[i]->UploadBuffer())
+        if (m_renderBuffers[i]->IsLoaded() || UploadBuffer(m_renderBuffers [i]))
         {
           buffers[1 - future++] = m_renderBuffers[i];
           found = true;
@@ -364,18 +364,22 @@ CRendererDXVA::CRenderBufferImpl::~CRenderBufferImpl()
   CRenderBufferImpl::ReleasePicture();
 }
 
-bool CRendererDXVA::CRenderBufferImpl::UploadBuffer()
+bool CRendererDXVA::UploadBuffer(CRenderBuffer* buffer)
 {
-  if (!videoBuffer)
+  if (!buffer)
     return false;
 
-  if (videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
+  CRenderBufferImpl* buf = static_cast<CRenderBufferImpl*>(buffer);
+  if(!buf->videoBuffer)
+	return false;
+
+  if (buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
   {
-    m_bLoaded = true;
-    return true;
+	buf->SetLoaded();
+	return buf->IsLoaded();
   }
 
-  return UploadToTexture();
+  return buf->UploadToTexture();
 }
 
 HRESULT CRendererDXVA::CRenderBufferImpl::GetResource(ID3D11Resource** ppResource, unsigned* index) const

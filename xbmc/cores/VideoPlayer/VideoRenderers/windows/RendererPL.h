@@ -55,6 +55,13 @@ enum class SettinglibPlaceboTargetColorspaceHintMode
 
 enum RenderMethod;
 
+class CRendererPL;
+struct SRequestContext
+{
+  CRendererPL* renderer;
+  CRenderBuffer* buffer;
+};
+
 class CRTXVideoProcessor
 {
 private:
@@ -83,6 +90,7 @@ class CRendererPL : public CRendererBase
 	class CRenderBufferImpl;
 public:
   ~CRendererPL();
+  bool UploadBuffer(CRenderBuffer* buffer) override;
 
   bool CreateTempTarget(unsigned int width, unsigned int height, bool dynamic = false, DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN, bool bUseUnordered = false);
   void UpdateVideoFilters() override;
@@ -123,7 +131,8 @@ protected:
   void Render(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts = 0.0);
   void RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts = 0.0);
   void ApplyGeometry(CVideoSettings& vs, CRect& sourceRect, CRect& dst, pl_frame& frameIn, pl_frame& frameOut);
-  static void InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer);
+  static void InitializeFrameInFieldsMix(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer);
+  void InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer);
   void ApplyTargetOptions(CVideoSettings& videoSettings, struct pl_frame* source, struct pl_frame* target, float min_luma, bool hint);
   CRenderBuffer* CreateBuffer() override;
 
@@ -181,8 +190,8 @@ private:
   //ID3D11Texture2D* m_pOutputHdrTexture = nullptr;
 
   CRTXVideoProcessor m_RtxVideoProcessor;
-
-
+  bool m_bUseNvRtxHdr = false;
+  bool m_bUseNvSuperResolution = false;
 };
 
 class CRendererPL::CRenderBufferImpl : public CRenderBuffer
@@ -195,7 +204,6 @@ public:
 
 
   void AppendPicture(const VideoPicture& picture) override;
-  bool UploadBuffer() override;
   bool GetLibplaceboFrame(pl_frame& frame);
   bool map_frame(pl_gpu gpu, pl_tex* tex, struct pl_source_frame* src, struct pl_frame* out_frame);
   double getPts() { return pts; }
@@ -212,6 +220,7 @@ public:
   AVDOVIDmData doviExt{ 0 };
   bool hasDoviExt = false;
   bool m_NeedFrame = false;
+  bool bUseTempBuffer = false;
   pl_chroma_location m_chromaLocation = PL_CHROMA_UNKNOWN;
 
   // For debugInfo
@@ -238,11 +247,11 @@ public:
   *  this include the bit format for the color conversion
   * */
 
-private:
   //sw upload
   bool UploadPlanes();
   //When decoded with d3d11va
   bool UploadWrapPlanes();
   //move those to the video codec if linux start to use libplacebo
+private:
 }; 
 

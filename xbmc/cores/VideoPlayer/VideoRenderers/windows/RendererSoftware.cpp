@@ -222,26 +222,29 @@ void CRendererSoftware::CRenderBufferImpl::ReleasePicture()
   __super::ReleasePicture();
 }
 
-bool CRendererSoftware::CRenderBufferImpl::UploadBuffer()
+bool CRendererSoftware::UploadBuffer(CRenderBuffer* buffer)
 {
-  if (!videoBuffer)
+  if (!buffer)
     return false;
 
-  if (videoBuffer->GetFormat() != AV_PIX_FMT_D3D11VA_VLD)
+  CRenderBufferImpl* buf = static_cast<CRenderBufferImpl*>(buffer);
+  if(!buf->videoBuffer)
+	return false;
+
+  if (buf->videoBuffer->GetFormat() != AV_PIX_FMT_D3D11VA_VLD)
   {
-    m_bLoaded = true;
-    return true;
+	buf->SetLoaded();
+	return buf->IsLoaded();
   }
 
-  if (!m_staging)
+  if (!buffer->GetStaging())
     return false;
 
-  if (m_msr.pData == nullptr)
+  if (buf->GetMappedResourcePtr()->pData == nullptr)
   {
     // map will finish copying data from GPU to CPU
-    m_bLoaded = SUCCEEDED(DX::DeviceResources::Get()->GetImmediateContext()->Map(
-        m_staging.Get(), 0, D3D11_MAP_READ, 0, &m_msr));
+    SUCCEEDED(DX::DeviceResources::Get()->GetImmediateContext()->Map(buffer->GetStaging(), 0, D3D11_MAP_READ, 0, buf->GetMappedResourcePtr())) ? buffer->SetLoaded(): buffer->ResetLoaded();
   }
 
-  return m_bLoaded;
+  return buf->IsLoaded();
 }

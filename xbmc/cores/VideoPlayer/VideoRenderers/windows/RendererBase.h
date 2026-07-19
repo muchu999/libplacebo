@@ -57,6 +57,7 @@ enum class HDR_TYPE
 
 class CRenderBuffer
 {
+  //friend class CRendererSoftware;
 public:
   virtual ~CRenderBuffer() = default;
 
@@ -66,7 +67,6 @@ public:
 
   virtual void AppendPicture(const VideoPicture& picture);
   virtual void ReleasePicture();
-  virtual bool UploadBuffer() { return false; }
   virtual HRESULT GetResource(ID3D11Resource** ppResource, unsigned* index) const;
 
   // implementation specified
@@ -93,6 +93,9 @@ public:
   AVContentLightMetadata lightMetadata = {};
   std::string stereoMode;
   uint64_t frameIdx = 0;
+  bool SetLoaded() { m_bLoaded = true; return m_bLoaded; };
+  bool ResetLoaded() { m_bLoaded = false; return m_bLoaded; };
+  ID3D11Texture2D* GetStaging() const { return m_staging.Get(); }
 
 protected:
   CRenderBuffer(AVPixelFormat av_pix_format, unsigned width, unsigned height);
@@ -115,6 +118,7 @@ class CRendererBase
 {
 public:
   virtual ~CRendererBase();
+  virtual bool UploadBuffer(CRenderBuffer* buffer) { return false; }
 
   virtual CRenderInfo GetRenderInfo();
   virtual bool Configure(const VideoPicture &picture, float fps, unsigned int orientation);

@@ -31,6 +31,7 @@ class CRendererShaders : public CRendererHQ
   class CRenderBufferImpl;
 public:
   ~CRendererShaders() = default;
+  bool UploadBuffer(CRenderBuffer* buffer) override;
 
   bool Supports(ESCALINGMETHOD method) const override;
   bool Configure(const VideoPicture& picture, float fps, unsigned orientation) override;
@@ -61,14 +62,13 @@ public:
   ~CRenderBufferImpl();
 
   void AppendPicture(const VideoPicture& picture) override;
-  bool UploadBuffer() override;
   unsigned GetViewCount() const override;
   ID3D11View* GetView(unsigned viewIdx) override;
   void ReleasePicture() override;
-
-private:
   bool UploadFromGPU();
   bool UploadFromBuffer() const;
+
+private:
 
   unsigned m_viewCount = 0;
   CD3DTexture m_textures[YuvImage::MAX_PLANES];

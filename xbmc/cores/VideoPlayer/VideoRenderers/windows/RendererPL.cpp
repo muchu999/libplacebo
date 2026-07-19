@@ -119,7 +119,8 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
 	sframe.duration = rb->duration / 1000000.0;
 	sframe.map = CRendererPL::MapFrame;
 	sframe.unmap = CRendererPL::UnmapFrame;
-	sframe.frame_data = rb;
+	SRequestContext* pCtx = new SRequestContext {this, rb};
+	sframe.frame_data = pCtx;
 	sframe.discard = CRendererPL::DiscardFrame;
 	if(picture.iFlags & DVP_FLAG_INTERLACED)
 	  if(picture.iFlags & DVP_FLAG_TOP_FIELD_FIRST)
@@ -133,30 +134,32 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
 	pl_queue_push(*PL::PLInstance::Get()->GetQueue(), &sframe);
   }
 }
-
 void CRendererPL::DiscardFrame(const struct pl_source_frame* src)
 {
-  CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
+  SRequestContext* pCtx = static_cast<SRequestContext*>(src->frame_data);
+  CRenderBuffer* rb = pCtx->buffer;
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
 
+  delete(src->frame_data);
   plbuffer->m_NeedFrame = false; //cl Shouldn't be needed but it works better, maybe just the presense of the function itself
   CLog::LogFC(LOGDEBUG, LOGPLACEBO, "DiscardFrame idx: {} pts: {:.0f}", plbuffer->frameIdx, plbuffer->pts);
 }
 
 bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame* src, struct pl_frame* frameIn)
 {
-  CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
+  SRequestContext* pCtx = static_cast<SRequestContext*>(src->frame_data);
+  CRenderBuffer* rb = pCtx->buffer;
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
   if(!plbuffer->IsLoaded())
   {
-	if (!plbuffer->UploadBuffer())
+	if (!pCtx->renderer->UploadBuffer(plbuffer))
 	{
 	  CLog::LogF(LOGERROR, "Failed to upload buffer to GPU");
 	  return false;
 	}
   }
  
-  InitializeFrameInFields(frameIn, static_cast<CRendererPL::CRenderBufferImpl*>(rb));
+  InitializeFrameInFieldsMix(frameIn, static_cast<CRendererPL::CRenderBufferImpl*>(rb));
   frameIn->user_data = plbuffer;
   plbuffer->m_NeedFrame = true;
   CLog::LogFC(LOGDEBUG, LOGPLACEBO, "MapFrame idx: {} pts: {}", plbuffer->frameIdx, plbuffer->pts);
@@ -165,10 +168,12 @@ bool CRendererPL::MapFrame(pl_gpu gpu, pl_tex* tex, const struct pl_source_frame
 
 void CRendererPL::UnmapFrame(pl_gpu gpu, struct pl_frame* frame, const struct pl_source_frame* src)
 {
-  CRenderBuffer* rb = static_cast<CRenderBuffer*>(src->frame_data);
+  SRequestContext* pCtx = static_cast<SRequestContext*>(src->frame_data);
+  CRenderBuffer* rb = pCtx->buffer;
   CRenderBufferImpl* plbuffer = static_cast<CRenderBufferImpl*>(rb);
 
-  plbuffer->m_NeedFrame = false; 
+  delete(src->frame_data);
+  plbuffer->m_NeedFrame = false;
   CLog::LogFC(LOGDEBUG, LOGPLACEBO, "UnmapFrame idx: {} pts: {:.0f}", plbuffer->frameIdx, plbuffer->pts);
 }
 
@@ -325,9 +330,9 @@ bool CRendererPL::Configure(const VideoPicture& picture, float fps, unsigned ori
     m_initialHdrEnabled = DX::Windowing()->IsHDROutput();
     CLog::LogF(LOGDEBUG, "Storing Windows HDR state: {}", m_initialHdrEnabled ? "ON" : "OFF");
 
-    const bool streamIsHDR = (picture.color_primaries == AVCOL_PRI_BT2020) &&
-                             (picture.color_transfer == AVCOL_TRC_SMPTE2084 ||
-                              picture.color_transfer == AVCOL_TRC_ARIB_STD_B67);
+	const bool streamIsHDR = (picture.color_primaries == AVCOL_PRI_BT2020) &&
+	  (picture.color_transfer == AVCOL_TRC_SMPTE2084 ||
+		picture.color_transfer == AVCOL_TRC_ARIB_STD_B67);
 
     if ((streamIsHDR && !DX::Windowing()->IsHDROutput()) || (m_videoSettings.m_PlaceboUseHdrForSdr && !DX::Windowing()->IsHDROutput()))
       DX::Windowing()->ToggleHDR();
@@ -344,10 +349,6 @@ bool CRendererPL::Configure(const VideoPicture& picture, float fps, unsigned ori
   m_chromaLocation = pl_chroma_from_av(picture.chroma_position);
   m_format = picture.videoBuffer->GetFormat();
 
-  if(!m_RtxVideoProcessor.IsInitialized())
-  {
-	m_RtxVideoProcessor.InitializePipeline(picture.iWidth, picture.iHeight, picture.iFlags);
-  }
   return true;
 }
 
@@ -433,7 +434,45 @@ void CRendererPL::CheckVideoParameters()
 {
   __super::CheckVideoParameters();
 
-  CRenderBuffer* buf = m_renderBuffers[m_iBufferIndex];
+  CRenderBuffer* buf = m_renderBuffers [m_iBufferIndex];
+  m_bUseNvRtxHdr = false;
+  m_bUseNvSuperResolution = false;
+  if(buf)
+  {
+	const bool streamIsHDR = (buf->primaries == AVCOL_PRI_BT2020) && (buf->color_transfer == AVCOL_TRC_SMPTE2084 || buf->color_transfer == AVCOL_TRC_ARIB_STD_B67);
+	if(DX::DeviceResources::Get()->IsRtxVideoHdrSupported()
+	  && DX::Windowing()->IsRtxVideoHdrSettingEnabled()
+	  && !streamIsHDR
+	  && DX::Windowing()->IsHDROutput()
+	  && buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
+	  && m_videoSettings.m_PlaceboFrameMixer == -1
+	  && m_videoSettings.m_PlaceboFrameMixerBypassQueue == true)
+	  {
+	  m_bUseNvRtxHdr = true;
+	}
+	if(DX::DeviceResources::Get()->IsSuperResolutionSupported()
+	  && DX::Windowing()->IsVideoSuperResolutionSettingEnabled()
+	  && buf->GetWidth() <= 2560
+	  && m_viewWidth > buf->GetWidth()
+	  && buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
+	  && m_videoSettings.m_PlaceboFrameMixer == -1
+	  && m_videoSettings.m_PlaceboFrameMixerBypassQueue == true)
+	{
+	  m_bUseNvSuperResolution = true;
+	}
+  }
+
+  if((m_bUseNvRtxHdr || m_bUseNvSuperResolution) && !m_RtxVideoProcessor.IsInitialized())
+  {
+	m_RtxVideoProcessor.InitializePipeline(buf->GetWidth(), buf->GetHeight(), buf->pictureFlags);
+  }
+
+  bool bUseUnordered = false;
+  if(!m_videoSettings.m_placeboOptions->getPlOptions()->params.skip_target_clearing)
+  {
+	bUseUnordered = true;
+  }
+  
   if (buf)
   {
 	// Check if color space parameters have changed
@@ -449,26 +488,21 @@ void CRendererPL::CheckVideoParameters()
 		.transfer = pl_transfer_from_av(buf->color_transfer),
 	  };
 	}
-  }
-  bool bUseUnordered = false;
-  if(!m_videoSettings.m_placeboOptions->getPlOptions()->params.skip_target_clearing)
-  {
-	bUseUnordered = true;
+	if(m_bUseNvSuperResolution || m_bUseNvRtxHdr)
+	{
+	  if(m_bUseNvSuperResolution && !m_bUseNvRtxHdr)
+	  {
+		// Use target resolution, format will be backbuffer format independent of RtxVideoHdr setting
+		CreateTempTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_R16G16B16A16_FLOAT, bUseUnordered);
+	  }
+	  else
+	  {
+		// Use source resolution, only HDR upgrade, libplacebo will handle scaling 
+		CreateTempTarget(buf->GetWidth(), buf->GetHeight(), false, DXGI_FORMAT_R16G16B16A16_FLOAT, bUseUnordered);
+	  }
+	}
   }
   CreateIntermediateTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_UNKNOWN, bUseUnordered); //cl DXGI_FORMAT_R10G10B10A2_UNORM);
-  if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled() || DX::Windowing()->IsRtxVideoHdrSettingEnabled())
-  {
-	if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled()&& !DX::Windowing()->IsRtxVideoHdrSettingEnabled())
-	{
-	  // Use target resolution, format will be backbuffer format independent of RtxVideoHdr setting
-	  CreateTempTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_R16G16B16A16_FLOAT, bUseUnordered);
-	}
-	else
-	{
-	  // Use source resolution, only HDR upgrade, libplacebo will handle scaling 
-	  CreateTempTarget(buf->GetWidth(), buf->GetHeight(), false, DXGI_FORMAT_R16G16B16A16_FLOAT, bUseUnordered);
-	}
-  }
 }
 
 bool CRendererPL::CreateTempTarget(unsigned int width, unsigned int height, bool dynamic, DXGI_FORMAT format, bool bUseUnordered)
@@ -792,9 +826,35 @@ bool CRendererPL::InitializeFrame(pl_swapchain sw, pl_frame &frameOut)
   return true;
 }
 
+void CRendererPL::InitializeFrameInFieldsMix(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer)
+{
+  frameIn->color = buffer->m_ColorSpace;
+  frameIn->repr.levels = buffer->full_range ? PL_COLOR_LEVELS_FULL : PL_COLOR_LEVELS_LIMITED;
+  frameIn->repr.sys = pl_system_from_av(buffer->color_space);
+  frameIn->repr.bits = buffer->plFormat.bits;
+  frameIn->repr.alpha = PL_ALPHA_UNKNOWN;
+
+  if(buffer->hasDoviMetadata)
+  {
+	frameIn->repr.dovi = &buffer->doviPlMetadata;
+	frameIn->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
+  }
+  else
+  {
+	if(frameIn->repr.sys == PL_COLOR_SYSTEM_UNKNOWN)
+	  frameIn->repr.sys = PL_COLOR_SYSTEM_BT_709;
+  }
+
+  frameIn->num_planes = buffer->plFormat.num_planes;
+  frameIn->planes [0] = buffer->plplanes [0];
+  frameIn->planes [1] = buffer->plplanes [1];
+  frameIn->planes [2] = buffer->plplanes [2];
+  pl_frame_set_chroma_location(frameIn, buffer->m_chromaLocation);
+}
+
 void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRenderBufferImpl* buffer)
 {
-  if(DX::Windowing()->IsRtxVideoHdrSettingEnabled())
+  if(m_bUseNvRtxHdr)
   {
 	frameIn->color.primaries = PL_COLOR_PRIM_BT_2020; //PL_COLOR_PRIM_BT_709;
 	frameIn->color.transfer = PL_COLOR_TRC_LINEAR; //L_COLOR_TRC_LINEAR; //PL_COLOR_TRC_HLG; // PL_COLOR_TRC_PQ;
@@ -807,8 +867,13 @@ void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRende
 	frameIn->repr.sys = PL_COLOR_SYSTEM_RGB;
 	frameIn->repr.bits = buffer->plFormat.bits;
 	frameIn->repr.alpha = PL_ALPHA_UNKNOWN;
+
+	frameIn->num_planes = buffer->plFormat.num_planes;
+	frameIn->planes [0] = buffer->plplanes [0];
+	frameIn->planes [1] = buffer->plplanes [1];
+	frameIn->planes [2] = buffer->plplanes [2];
   }
-  else if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled())
+  else if(m_bUseNvSuperResolution)
   {
 	frameIn->color.primaries = PL_COLOR_PRIM_BT_709;
 	frameIn->color.transfer = PL_COLOR_TRC_LINEAR;
@@ -817,32 +882,16 @@ void CRendererPL::InitializeFrameInFields(pl_frame* frameIn, CRendererPL::CRende
 	frameIn->repr.sys = PL_COLOR_SYSTEM_RGB;
 	frameIn->repr.bits = buffer->plFormat.bits;
 	frameIn->repr.alpha = PL_ALPHA_UNKNOWN;
+
+	frameIn->num_planes = buffer->plFormat.num_planes;
+	frameIn->planes [0] = buffer->plplanes [0];
+	frameIn->planes [1] = buffer->plplanes [1];
+	frameIn->planes [2] = buffer->plplanes [2];
   }
   else 
   {
-	frameIn->color = buffer->m_ColorSpace;
-	frameIn->repr.levels = buffer->full_range ? PL_COLOR_LEVELS_FULL : PL_COLOR_LEVELS_LIMITED;
-	frameIn->repr.sys = pl_system_from_av(buffer->color_space);
-	frameIn->repr.bits = buffer->plFormat.bits;
-	frameIn->repr.alpha = PL_ALPHA_UNKNOWN;
-
-	if(buffer->hasDoviMetadata)
-	{
-	  frameIn->repr.dovi = &buffer->doviPlMetadata;
-	  frameIn->repr.sys = PL_COLOR_SYSTEM_DOLBYVISION;
-	}
-	else
-	{
-	  if(frameIn->repr.sys == PL_COLOR_SYSTEM_UNKNOWN)
-		frameIn->repr.sys = PL_COLOR_SYSTEM_BT_709;
-	}
-
+	InitializeFrameInFieldsMix(frameIn, buffer);
   }
-  frameIn->num_planes = buffer->plFormat.num_planes;
-  frameIn->planes [0] = buffer->plplanes [0];
-  frameIn->planes [1] = buffer->plplanes [1];
-  frameIn->planes [2] = buffer->plplanes [2];
-  pl_frame_set_chroma_location(frameIn, buffer->m_chromaLocation);
 }
 
 class PlQueueCheck {
@@ -917,6 +966,7 @@ void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destP
   {
 	return;
   }
+
   ComPtr<ID3D11Texture2D> pTexture = {};
   ComPtr<ID3D11Resource> pResource;
 
@@ -1005,7 +1055,7 @@ void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destP
   buffer->plplanes [0].component_mapping [3] = PL_CHANNEL_NONE;
 
   // Signal to the rest of Kodi/libplacebo that this image has exactly 1 RGB plane now
-  if(buffer->plFormat.num_planes == -1)
+  //if(buffer->plFormat.num_planes == -1)  //cl optimize
   {
 	PL::PLInstance::Get()->fill_d3d_format(&buffer->plFormat, DXGI_FORMAT_R16G16B16A16_FLOAT);
   }
@@ -1018,7 +1068,12 @@ void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destP
 void CRendererPL::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts)
 {
   CRect dst = ApplyTransforms(CRect(destPoints [0], destPoints [2])); //uses m_renderOrientation
-  if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled() || DX::Windowing()->IsRtxVideoHdrSettingEnabled())
+  CRenderBuffer* buf = m_renderBuffers [m_iBufferIndex];
+  if(!buf || !buf->IsLoaded())
+	return;
+  CRenderBufferImpl* buffer = static_cast<CRenderBufferImpl*>(buf);
+
+  if((m_bUseNvSuperResolution || m_bUseNvRtxHdr) && buffer->bUseTempBuffer)
   {
 	RenderDx(target, sourceRect, destPoints, flags, renderPts);
 	sourceRect.x1 = 0;
@@ -1830,26 +1885,31 @@ void CRendererPL::CRenderBufferImpl::AppendPicture(const VideoPicture& picture)
   }
 }
 
-bool CRendererPL::CRenderBufferImpl::UploadBuffer()
+bool CRendererPL::UploadBuffer(CRenderBuffer* buffer)
 {
-  if (!videoBuffer)
+  if(!buffer)
 	return false;
 
-  if (videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
+  CRenderBufferImpl* buf = static_cast<CRenderBufferImpl*>(buffer);
+  if(!buf->videoBuffer)
+	return false;
+
+  if (buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
   {
-	if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled() || DX::Windowing()->IsRtxVideoHdrSettingEnabled())
+	if(m_bUseNvSuperResolution || m_bUseNvSuperResolution)
 	{
-	  m_bLoaded = true;
-	  return m_bLoaded;
+	  buf->bUseTempBuffer = true;
+	  return buf->SetLoaded();
 	}
 	else
 	{
-	  return UploadWrapPlanes();
+	  buf->bUseTempBuffer = false;
+	  return buf->UploadWrapPlanes();
 	}
   }
   else
   {
-	return UploadPlanes();
+	return buf->UploadPlanes();
   }
 }
 
@@ -1903,7 +1963,7 @@ bool CRendererPL::CRenderBufferImpl::UploadWrapPlanes()
 	return false;
   }
 
-  if (plFormat.num_planes==-1)
+  //if (plFormat.num_planes == -1) //cl optimize?
   {
 	//fill the plane data information needed for the conversion only once
 	const auto dxva_buf = dynamic_cast<DXVA::CVideoBuffer*>(videoBuffer);
@@ -2081,150 +2141,3 @@ bool CRTXVideoProcessor::ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, 
 
   return true;
 }
-
-#if 0 garbage
-bool CRendererPL::CRenderBufferImpl::UploadBuffer2(CD3DTexture* pTempTexture)
-{
-  if(!videoBuffer)
-	return false;
-  if(!pTempTexture->Get()) return true;
-  if(videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD)
-  {
-	HRESULT hr;
-	ComPtr<ID3D11Resource> pResource;
-	ComPtr<ID3D11Texture2D> pTexture;
-
-	// Get the underlying D3D11 texture index from the DXVA video buffer
-	unsigned arrayIdx;
-	hr = GetResource(&pResource, &arrayIdx); //cl get buffer from decoder...
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "GetResource for arrayIdx failed");
-	  return false;
-	}
-
-	// Query for the ID3D11Texture2D interface from the resource
-	hr = pResource->QueryInterface(__uuidof(ID3D11Texture2D), (void**) &pTexture);
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "Query for the ID3D11Texture2D interface failed");
-	}
-
-	// Get video device interface from the primary D3D11 device
-	ID3D11VideoDevice* pVideoDevice = nullptr;
-	hr = DX::DeviceResources::Get()->GetD3DDevice()->QueryInterface(__uuidof(ID3D11VideoDevice), reinterpret_cast<void**>(&pVideoDevice));
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "Query for the ID3D11VideoDevice interface failed");
-	}
-
-	// Get video processor enumerator interface
-	D3D11_VIDEO_PROCESSOR_CONTENT_DESC contentDesc = {};
-	contentDesc.InputFrameFormat = pictureFlags & DVP_FLAG_INTERLACED ? pictureFlags & DVP_FLAG_TOP_FIELD_FIRST ? D3D11_VIDEO_FRAME_FORMAT_INTERLACED_TOP_FIELD_FIRST : D3D11_VIDEO_FRAME_FORMAT_INTERLACED_BOTTOM_FIELD_FIRST : D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
-	//contentDesc.InputFrameRate.Numerator = 24000;                     // e.g., 23.976fps
-	//contentDesc.InputFrameRate.Denominator = 1001;
-	contentDesc.InputWidth = m_width;                                   // Source width (SDR input)
-	contentDesc.InputHeight = m_height;                                 // Source height
-	//contentDesc.OutputFrameRate.Numerator = 24000; //60;              // Target display rate (or match input)
-	//contentDesc.OutputFrameRate.Denominator = 1001; //1;
-	contentDesc.OutputWidth = pTempTexture->GetWidth();                 // Target width
-	contentDesc.OutputHeight = pTempTexture->GetHeight();               // Target height
-	contentDesc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
-	ID3D11VideoProcessorEnumerator* pVideoProcessorEnumerator = nullptr;
-	hr = pVideoDevice->CreateVideoProcessorEnumerator(&contentDesc, &pVideoProcessorEnumerator);
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "CreateVideoProcessorEnumerator failed");
-	}
-
-	// Query for the video context interface
-	ID3D11Device* pRootDevice = DX::DeviceResources::Get()->GetD3DDevice();
-	ComPtr<ID3D11DeviceContext> pRawImmediateContext;
-	pRootDevice->GetImmediateContext(&pRawImmediateContext);
-	ID3D11VideoContext* pVideoContext = nullptr;
-	hr = pRawImmediateContext->QueryInterface(__uuidof(ID3D11VideoContext), reinterpret_cast<void**>(&pVideoContext));
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "Query for the ID3D11VideoContext interface failed");
-	}
-
-	// Create the video processor profile. 
-	// Index 0 selects the driver's preferred default capability profile.
-	ID3D11VideoProcessor* pVideoProcessor = nullptr;
-	hr = pVideoDevice->CreateVideoProcessor(pVideoProcessorEnumerator, 0, &pVideoProcessor);
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "CreateVideoProcessor failed");
-	}
-
-	// Create the video processor input view for the DXVA decoder output
-	D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
-	inputViewDesc.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D; // Explicitly map to a 2D Texture
-	inputViewDesc.Texture2D.ArraySlice = arrayIdx;           // Target the specific frame index
-	inputViewDesc.Texture2D.MipSlice = 0;
-	ID3D11VideoProcessorInputView* pInputView = nullptr;
-	hr = pVideoDevice->CreateVideoProcessorInputView(pTexture.Get(), pVideoProcessorEnumerator, &inputViewDesc, &pInputView);
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "CreateVideoProcessorInputView failed");
-	}
-
-	// Create a video processor output view for the HDR output texture
-	D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC outputDesc = {};
-	outputDesc.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-	outputDesc.Texture2D.MipSlice = 0;
-	ID3D11VideoProcessorOutputView* pOutputHdrSurfaceView = nullptr;
-	hr = pVideoDevice->CreateVideoProcessorOutputView(pTempTexture->Get(), pVideoProcessorEnumerator, &outputDesc, &pOutputHdrSurfaceView);
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "CreateVideoProcessorOutputView failed");
-	}
-
-	// Execute the Blit. NVIDIA's driver processes the AI SDR->HDR conversion here.
-	D3D11_VIDEO_PROCESSOR_STREAM stream = {};
-	stream.Enable = TRUE;
-	stream.pInputSurface = pInputView; // Input from DXVA Decoder
-	hr = pVideoContext->VideoProcessorBlt(pVideoProcessor, pOutputHdrSurfaceView, 0, 1, &stream);
-	if(FAILED(hr))
-	{
-	  CLog::LogF(LOGERROR, "VideoProcessorBlt failed");
-	}
-
-	// Wrap the HDR output texture for libplacebo
-	D3D11_TEXTURE2D_DESC srcDesc = {};
-	pTempTexture->GetDesc(&srcDesc);
-
-	pl_d3d11_wrap_params params = {};
-	params.tex = pTempTexture->Get();            // Your distinct HDR texture
-	params.w = srcDesc.Width;             // Match target dimensions
-	params.h = srcDesc.Height;
-	params.fmt = DXGI_FORMAT_R10G10B10A2_UNORM;
-	params.array_slice = 0;               // Always 0 because your distinct target is not a texture array
-
-	pltex [0] = pl_d3d11_wrap(PL::PLInstance::Get()->GetGpu(), &params);
-	if(!pltex [0])
-	{
-	  CLog::LogF(LOGERROR, "libplacebo failed to wrap the RTX HDR output texture.");
-	  return false;
-	}
-
-	// Populate libplacebo plane info for a standard interleaved RGB plane
-	plplanes [0].texture = pltex [0];
-	plplanes [0].components = 3; // R, G, B channels
-	plplanes [0].component_mapping [0] = PL_CHANNEL_R;
-	plplanes [0].component_mapping [1] = PL_CHANNEL_G;
-	plplanes [0].component_mapping [2] = PL_CHANNEL_B;
-	plplanes [0].component_mapping [3] = PL_CHANNEL_NONE;
-
-	// Signal to the rest of Kodi/libplacebo that this image has exactly 1 RGB plane now
-	if(plFormat.num_planes == -1)
-	{
-	  PL::PLInstance::Get()->fill_d3d_format(&plFormat, DXGI_FORMAT_R10G10B10A2_UNORM);
-	}
-  }
-  else
-  {
-	return UploadPlanes();
-  }
-}
-#endif
