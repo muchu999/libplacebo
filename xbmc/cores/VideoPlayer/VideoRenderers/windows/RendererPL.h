@@ -64,23 +64,50 @@ struct SRequestContext
 
 class CRTXVideoProcessor
 {
-private:
-  // Tracker to know if initialization was successful
-  bool m_bInitialized = false;
-
 public:
-  bool IsInitialized() const { return m_bInitialized; }
   Microsoft::WRL::ComPtr<ID3D11VideoDevice>           m_pVideoDevice;
   Microsoft::WRL::ComPtr<ID3D11VideoContext>          m_pVideoContext;
   Microsoft::WRL::ComPtr<ID3D11VideoProcessor>        m_pVideoProcessor;
   Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator> m_pVideoEnumerator;
 
-  bool InitializePipeline(unsigned int width, unsigned int height, unsigned int iFlags);
+  UINT m_currentInputWidth = 0;
+  UINT m_currentInputHeight = 0;
+  UINT m_currentOutputWidth = 0;
+  UINT m_currentOutputHeight = 0;
+  
+  bool IsInitialized() const { return m_bInitialized; }
+
+  bool InitializePipeline(unsigned int width, unsigned int height, unsigned int iFlags, unsigned int m_viewWidth, unsigned int m_viewHeight);
   void ProcessVideoFrame(ID3D11VideoProcessorInputView* inputView, ID3D11VideoProcessorOutputView* outputView);
   void UninitializePipeline();
-  bool ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, ID3D11VideoProcessorOutputView* pOutputView);
+  bool ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, ID3D11VideoProcessorOutputView* pOutputView, bool bIsInterlaced, uint64_t flags, uint64_t frameIdx);
   void DebugBypassToDisplay(ID3D11Texture2D* pOutputWindowTexture, ID3D11Texture2D* pTempTarget, CPoint(&destPoints) [4]);
   bool ConfigureHdrColorSpaces(ID3D11VideoProcessor* pProcessor);
+  bool EnsureProcessorSize(UINT inW, UINT inH, unsigned int iFlags, UINT outW, UINT outH);
+  void FlushHistoryQueue();
+  void EvaluateRtxCapability(const VideoPicture& picture);
+  bool IsVsrViable() const {return m_isVsrViable;}
+  bool IsRtxHdrViable() const { return m_isRtxHdrViable; }
+  bool IsRtxPipelineViable() const { return m_isRtxPipelineViable; }
+  bool IsRtxPipelineEnabled() const { return m_isRtxPipelineEnabled; }
+  void EnablePipeline() { m_isRtxPipelineEnabled = true; }
+  void DisablePipeline() { m_isRtxPipelineEnabled = false; }
+  const unsigned int m_canvasWidth = 3840;
+  const unsigned int m_canvasHeight = 2160;
+
+private:
+  bool m_bInitialized = false;
+  bool m_isVsrViable = false;
+  bool m_isRtxHdrViable = false;
+  bool m_isRtxPipelineViable = false;
+  bool m_isRtxPipelineEnabled = false;
+
+  UINT m_numPastFrames = 0;
+  UINT m_numFutureFrames = 0;
+
+  // Deque to cache incoming frame views. 
+  // They must remain alive in VRAM until pushed out of the tracking history window.
+  std::deque<Microsoft::WRL::ComPtr<ID3D11VideoProcessorInputView>> m_historyQueue;
 
 };
 

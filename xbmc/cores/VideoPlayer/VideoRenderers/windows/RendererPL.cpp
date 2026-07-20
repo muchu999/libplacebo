@@ -108,8 +108,9 @@ void CRendererPL::AddVideoPicture(const VideoPicture& picture, int index)
   if (m_renderBuffers[index])
   {
 	m_renderBuffers[index]->AppendPicture(picture);
-	m_renderBuffers[index]->frameIdx = index;
-	//m_frameIdx += 2;
+	//m_renderBuffers[index]->frameIdx = index;
+	m_renderBuffers [index]->frameIdx = m_frameIdx;
+	m_frameIdx += 2;
   }
   if(!((m_videoSettings.m_placeboOptions->getPlOptions()->params.frame_mixer == NULL) && m_videoSettings.m_PlaceboFrameMixerBypassQueue))
   {
@@ -276,7 +277,6 @@ bool CRTXVideoProcessor::ConfigureHdrColorSpaces(ID3D11VideoProcessor* pProcesso
 {
   if(!m_pVideoContext) return false;
 
-  // 1. Query the 11.1+ Enhanced Video Context interface
   Microsoft::WRL::ComPtr<ID3D11VideoContext1> pVideoContext1;
   HRESULT hr = m_pVideoContext.As(&pVideoContext1);
   if(FAILED(hr))
@@ -285,7 +285,6 @@ bool CRTXVideoProcessor::ConfigureHdrColorSpaces(ID3D11VideoProcessor* pProcesso
 	return false;
   }
 
-  // 2. Configure the INPUT video stream (Index 0)
   // Most sub-4K video files are standard Rec. 709 with Limited/Studio Range (16-235)
   DXGI_COLOR_SPACE_TYPE inputColorSpace = DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709;
 
@@ -294,14 +293,13 @@ bool CRTXVideoProcessor::ConfigureHdrColorSpaces(ID3D11VideoProcessor* pProcesso
 
   pVideoContext1->VideoProcessorSetStreamColorSpace1(pProcessor, 0, inputColorSpace); //cl
 
-  // 3. Configure the OUTPUT target surface (m_TempTarget)
-  // To trigger the RTX HDR engine, the output target color space MUST be configured 
-  // as an HDR container. We use Rec. 2020 with the ST.2084 (PQ) transfer function, 
-  // matching your DXGI_FORMAT_R10G10B10A2_UNORM 10-bit texture structure.
-  //DXGI_COLOR_SPACE_TYPE outputColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
-  DXGI_COLOR_SPACE_TYPE outputColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+  // To trigger the RTX HDR engine, the output target color space MUST be configured as an HDR container. 
+  // Rec. 2020 with the ST.2084 (PQ) transfer function matches DXGI_FORMAT_R10G10B10A2_UNORM 10-bit texture structure 
+  // DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 matches DXGI_FORMAT_R10G10B10A2_UNORM
+  // DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709 matches DXGI_FORMAT_R16G16B16A16_FLOAT
+  DXGI_COLOR_SPACE_TYPE outputColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;  
 
-  pVideoContext1->VideoProcessorSetOutputColorSpace1(pProcessor, outputColorSpace); //cl
+  pVideoContext1->VideoProcessorSetOutputColorSpace1(pProcessor, outputColorSpace);
 
   return true;
 }
@@ -348,6 +346,18 @@ bool CRendererPL::Configure(const VideoPicture& picture, float fps, unsigned ori
   };
   m_chromaLocation = pl_chroma_from_av(picture.chroma_position);
   m_format = picture.videoBuffer->GetFormat();
+
+  m_RtxVideoProcessor.EvaluateRtxCapability(picture);
+  if(m_RtxVideoProcessor.IsRtxPipelineViable())  //cl add condition from settings to disable pipeline entirely
+  {
+	m_RtxVideoProcessor.EnablePipeline();
+	if(!m_RtxVideoProcessor.IsInitialized())
+	  if(!m_RtxVideoProcessor.InitializePipeline(picture.iWidth, picture.iHeight, picture.iFlags, m_RtxVideoProcessor.m_canvasWidth, m_RtxVideoProcessor.m_canvasHeight))
+	  {
+		CLog::LogF(LOGDEBUG, "Rtx InitializePipeline failed");
+		return false;
+	  }
+  }
 
   return true;
 }
@@ -437,70 +447,55 @@ void CRendererPL::CheckVideoParameters()
   CRenderBuffer* buf = m_renderBuffers [m_iBufferIndex];
   m_bUseNvRtxHdr = false;
   m_bUseNvSuperResolution = false;
+
   if(buf)
   {
-	const bool streamIsHDR = (buf->primaries == AVCOL_PRI_BT2020) && (buf->color_transfer == AVCOL_TRC_SMPTE2084 || buf->color_transfer == AVCOL_TRC_ARIB_STD_B67);
-	if(DX::DeviceResources::Get()->IsRtxVideoHdrSupported()
-	  && DX::Windowing()->IsRtxVideoHdrSettingEnabled()
-	  && !streamIsHDR
-	  && DX::Windowing()->IsHDROutput()
-	  && buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
-	  && m_videoSettings.m_PlaceboFrameMixer == -1
-	  && m_videoSettings.m_PlaceboFrameMixerBypassQueue == true)
-	  {
-	  m_bUseNvRtxHdr = true;
-	}
-	if(DX::DeviceResources::Get()->IsSuperResolutionSupported()
-	  && DX::Windowing()->IsVideoSuperResolutionSettingEnabled()
-	  && buf->GetWidth() <= 2560
-	  && m_viewWidth > buf->GetWidth()
-	  && buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
-	  && m_videoSettings.m_PlaceboFrameMixer == -1
-	  && m_videoSettings.m_PlaceboFrameMixerBypassQueue == true)
-	{
-	  m_bUseNvSuperResolution = true;
-	}
-  }
-
-  if((m_bUseNvRtxHdr || m_bUseNvSuperResolution) && !m_RtxVideoProcessor.IsInitialized())
-  {
-	m_RtxVideoProcessor.InitializePipeline(buf->GetWidth(), buf->GetHeight(), buf->pictureFlags);
-  }
-
-  bool bUseUnordered = false;
-  if(!m_videoSettings.m_placeboOptions->getPlOptions()->params.skip_target_clearing)
-  {
-	bUseUnordered = true;
-  }
-  
-  if (buf)
-  {
 	// Check if color space parameters have changed
-	if (buf->color_space != m_lastColorSpace ||
+	if(buf->color_space != m_lastColorSpace ||
 	  buf->color_transfer != m_lastColorTransfer ||
 	  buf->primaries != m_lastPrimaries)
 	{
 	  m_lastColorSpace = buf->color_space;
 	  m_lastColorTransfer = buf->color_transfer;
 	  m_lastPrimaries = buf->primaries;
-	  m_colorSpace = pl_color_space{
+	  m_colorSpace = pl_color_space {
 		.primaries = pl_primaries_from_av(buf->primaries),
 		.transfer = pl_transfer_from_av(buf->color_transfer),
 	  };
 	}
-	if(m_bUseNvSuperResolution || m_bUseNvRtxHdr)
+
+	if(m_RtxVideoProcessor.IsRtxPipelineEnabled())
 	{
-	  if(m_bUseNvSuperResolution && !m_bUseNvRtxHdr)
+	  if(m_RtxVideoProcessor.IsVsrViable())
 	  {
-		// Use target resolution, format will be backbuffer format independent of RtxVideoHdr setting
-		CreateTempTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_R16G16B16A16_FLOAT, bUseUnordered);
+		if(DX::Windowing()->IsVideoSuperResolutionSettingEnabled()
+		  && buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
+		  && m_videoSettings.m_PlaceboFrameMixer == -1
+		  && m_videoSettings.m_PlaceboFrameMixerBypassQueue == true)
+		{
+		  m_bUseNvSuperResolution = true;
+		}
 	  }
-	  else
+	  if(m_RtxVideoProcessor.IsRtxHdrViable())
 	  {
-		// Use source resolution, only HDR upgrade, libplacebo will handle scaling 
-		CreateTempTarget(buf->GetWidth(), buf->GetHeight(), false, DXGI_FORMAT_R16G16B16A16_FLOAT, bUseUnordered);
+		if(DX::Windowing()->IsRtxVideoHdrSettingEnabled()
+		  && DX::Windowing()->IsHDROutput()
+		  && buf->videoBuffer->GetFormat() == AV_PIX_FMT_D3D11VA_VLD
+		  && m_videoSettings.m_PlaceboFrameMixer == -1
+		  && m_videoSettings.m_PlaceboFrameMixerBypassQueue == true)
+		{
+		  m_bUseNvRtxHdr = true;
+		}
 	  }
 	}
+  }
+
+  bool bUseUnordered = false;
+  if(!m_videoSettings.m_placeboOptions->getPlOptions()->params.skip_target_clearing)
+	bUseUnordered = true;
+  if(m_RtxVideoProcessor.IsRtxPipelineEnabled())
+  {
+	CreateTempTarget(m_RtxVideoProcessor.m_canvasWidth, m_RtxVideoProcessor.m_canvasHeight, false, DXGI_FORMAT_R16G16B16A16_FLOAT, bUseUnordered);
   }
   CreateIntermediateTarget(m_viewWidth, m_viewHeight, false, DXGI_FORMAT_UNKNOWN, bUseUnordered); //cl DXGI_FORMAT_R10G10B10A2_UNORM);
 }
@@ -956,6 +951,11 @@ static HRESULT SafeGetQueryData(ID3D11DeviceContext* pContext, ID3D11Query* pQue
 void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints) [4], uint32_t flags, double renderPts)
 {
   HRESULT hr;
+  ComPtr<ID3D11Texture2D> pTexture = {};
+  ComPtr<ID3D11Resource> pResource;
+  pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
+  ID3D11DeviceContext* pDeviceContext = nullptr;
+  d3d11->device->GetImmediateContext(&pDeviceContext);
 
   CRenderBuffer* buf = m_renderBuffers [m_iBufferIndex];
   if(!buf) // || !buf->IsLoaded())
@@ -966,9 +966,6 @@ void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destP
   {
 	return;
   }
-
-  ComPtr<ID3D11Texture2D> pTexture = {};
-  ComPtr<ID3D11Resource> pResource;
 
   // Get the underlying D3D11 texture index from the DXVA video buffer
   unsigned arrayIdx;
@@ -986,6 +983,17 @@ void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destP
 	CLog::LogF(LOGERROR, "Query for the ID3D11Texture2D interface failed");
   }
 
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+  {
+	pMultithread->Enter();
+  }
+
+  // Update processor sizes if required
+  D3D11_TEXTURE2D_DESC srcDesc, destDesc;
+  pTexture->GetDesc(&srcDesc);
+  m_RtxVideoProcessor.EnsureProcessorSize(srcDesc.Width, srcDesc.Height, buffer->pictureFlags, m_RtxVideoProcessor.m_canvasWidth, m_RtxVideoProcessor.m_canvasHeight);
+
   // Set the color space for the video processor 
   D3D11_VIDEO_PROCESSOR_COLOR_SPACE inputColorSpace = {};
   inputColorSpace.Usage = 0; // 0 = Playback optimization
@@ -993,9 +1001,7 @@ void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destP
   inputColorSpace.YCbCr_Matrix = 1; // 0 = BT.601 (Old SD), 1 = BT.709 (HD Video)
   inputColorSpace.YCbCr_xvYCC = 0; // 0 = Standard conventional color gamut
   inputColorSpace.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235; // Matches Limited
-
   m_RtxVideoProcessor.m_pVideoContext->VideoProcessorSetStreamColorSpace(m_RtxVideoProcessor.m_pVideoProcessor.Get(), 0, &inputColorSpace);
-
 
   // Create the video processor input view for the DXVA decoder output
   D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC inputViewDesc = {};
@@ -1011,24 +1017,44 @@ void CRendererPL::RenderDx(CD3DTexture& target, CRect& sourceRect, CPoint(&destP
   }
 
   RECT srcRect = {sourceRect.x1, sourceRect.y1, sourceRect.x2, sourceRect.y2};
-  RECT streamDestRect = {0, 0, m_TempTarget.GetWidth(), m_TempTarget.GetHeight()};
-  RECT destRect = {0, 0, m_TempTarget.GetWidth(), m_TempTarget.GetHeight()};
+  RECT destRect = {};
+
+  if(m_bUseNvSuperResolution)
+  {
+	// Stretch across full 4K canvas to engage Tensor Core Upscaling
+	destRect = {0, 0, static_cast<LONG>(m_TempTarget.GetWidth()), static_cast<LONG>(m_TempTarget.GetHeight())};
+  }
+  else
+  {
+	// Force 1:1 scale bounds. This shuts down RTX Super Resolution
+	destRect = srcRect;
+  }
+  RECT streamDestRect = destRect;
 
   m_RtxVideoProcessor.m_pVideoContext->VideoProcessorSetStreamSourceRect(m_RtxVideoProcessor.m_pVideoProcessor.Get(), 0, TRUE, &srcRect);
   m_RtxVideoProcessor.m_pVideoContext->VideoProcessorSetStreamDestRect(m_RtxVideoProcessor.m_pVideoProcessor.Get(), 0, TRUE, &streamDestRect);
   m_RtxVideoProcessor.m_pVideoContext->VideoProcessorSetOutputTargetRect(m_RtxVideoProcessor.m_pVideoProcessor.Get(), TRUE, &destRect);
 
-  // Execute the Blit. NVIDIA's driver processes the AI SDR->HDR conversion here.
+
+  if(m_bUseNvRtxHdr)
+    m_RtxVideoProcessor.ConfigureHdrColorSpaces(m_RtxVideoProcessor.m_pVideoProcessor.Get());  //cl placement
+
+
   if(m_RtxVideoProcessor.IsInitialized())
   {
-	// Execute the operation passing the raw pointers of your input/output frame views
-	bool blitSuccess = m_RtxVideoProcessor.ExecuteBlit(pInputView.Get(), m_pTempTargetView.Get());
+	
+	bool blitSuccess = m_RtxVideoProcessor.ExecuteBlit(pInputView.Get(), m_pTempTargetView.Get(), buffer->pictureFlags & DVP_FLAG_INTERLACED, flags, buf->frameIdx);
 	//m_RtxVideoProcessor.DebugBypassToDisplay(target.Get(), m_TempTarget.Get(), destPoints); return;
 
 	if(!blitSuccess)
 	{
 	  //cl Fall back to standard SDR ???
 	}
+  }
+
+  if(pMultithread)
+  {
+	pMultithread->Leave();
   }
 
   // Wrap the output texture for libplacebo
@@ -2018,37 +2044,58 @@ void CRendererPL::InitProfiling() {
 	m_queryRing [i].is_active = false;
   }
 }
-
-bool CRTXVideoProcessor::InitializePipeline(unsigned int width, unsigned int height, unsigned int iFlags)
+void CRTXVideoProcessor::UninitializePipeline()
 {
-  // Fetch the raw root device from Kodi's infrastructure
-  ID3D11Device* pRootDevice = DX::DeviceResources::Get()->GetD3DDevice();
-  if(!pRootDevice) return false;
+  // Reset output view first before tearing down the parent video device
+  //cl m_pOutputView.Reset();
 
-  // 1. Query the Video Device Interface
-  HRESULT hr = pRootDevice->QueryInterface(__uuidof(ID3D11VideoDevice), reinterpret_cast<void**>(m_pVideoDevice.GetAddressOf()));
-  if(FAILED(hr)) return false;
+  m_pVideoProcessor.Reset();
+  m_pVideoEnumerator.Reset();
+  m_pVideoContext.Reset();
+  m_pVideoDevice.Reset();
 
-  // 2. Query the Immediate Context for the Video Context Interface
-  Microsoft::WRL::ComPtr<ID3D11DeviceContext> pImmediateContext;
-  pRootDevice->GetImmediateContext(&pImmediateContext);
+  m_bInitialized = false;
+}
 
-  hr = pImmediateContext->QueryInterface(__uuidof(ID3D11VideoContext), reinterpret_cast<void**>(m_pVideoContext.GetAddressOf()));
-  if(FAILED(hr)) return false;
+bool CRTXVideoProcessor::EnsureProcessorSize(UINT inW, UINT inH, unsigned int iFlags, UINT outW, UINT outH)
+{
+  if(m_bInitialized &&
+	m_currentInputWidth == inW && m_currentInputHeight == inH &&
+	m_currentOutputWidth == outW && m_currentOutputHeight == outH) //cl interleave mode shouldn't change
+  {
+	return true;
+  }
 
-  // 4. Create the Enumerator
+  CLog::LogF(LOGDEBUG, "RTX Processor: Re-creating pipeline. Input: %dx%d, Output: %dx%d", inW, inH, outW, outH);
+
+  // Update internal tracker dimensions
+  m_currentInputWidth = inW;
+  m_currentInputHeight = inH;
+  m_currentOutputWidth = outW;
+  m_currentOutputHeight = outH;
+
+  // Reset old interfaces to avoid memory leaks
+  m_pVideoProcessor.Reset();
+  m_pVideoEnumerator.Reset();
+  m_bInitialized = false;
+
+  // Re-populate descriptor with the real-time runtime dimensions
   D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc = {};
   desc.InputFrameFormat = iFlags & DVP_FLAG_INTERLACED ? iFlags & DVP_FLAG_TOP_FIELD_FIRST ? D3D11_VIDEO_FRAME_FORMAT_INTERLACED_TOP_FIELD_FIRST : D3D11_VIDEO_FRAME_FORMAT_INTERLACED_BOTTOM_FIELD_FIRST : D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
-  desc.InputWidth = width;
-  desc.InputHeight = height;
-  desc.OutputWidth = 3140;
-  desc.OutputHeight = 2160;
+  desc.InputWidth = inW;
+  desc.InputHeight = inH;
+  desc.OutputWidth = outW;
+  desc.OutputHeight = outH;
   desc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
-  ID3D11VideoProcessorEnumerator* pVideoProcessorEnumerator = nullptr;
-  hr = m_pVideoDevice->CreateVideoProcessorEnumerator(&desc, m_pVideoEnumerator.GetAddressOf());
+  desc.InputFrameRate.Numerator = 60; // Max expected
+  desc.InputFrameRate.Denominator = 1;
+  desc.OutputFrameRate.Numerator = 60;
+  desc.OutputFrameRate.Denominator = 1;
+
+
+  HRESULT hr = m_pVideoDevice->CreateVideoProcessorEnumerator(&desc, m_pVideoEnumerator.GetAddressOf());
   if(FAILED(hr)) return false;
 
-  // 5. Create the Video Processor
   hr = m_pVideoDevice->CreateVideoProcessor(m_pVideoEnumerator.Get(), 0, m_pVideoProcessor.GetAddressOf());
   if(FAILED(hr)) return false;
 
@@ -2056,9 +2103,86 @@ bool CRTXVideoProcessor::InitializePipeline(unsigned int width, unsigned int hei
   return true;
 }
 
+bool CRTXVideoProcessor::InitializePipeline(unsigned int width, unsigned int height, unsigned int iFlags, unsigned int m_viewWidth, unsigned int m_viewHeight)
+{
+  // Get D3D device
+  ID3D11Device* pRootDevice = DX::DeviceResources::Get()->GetD3DDevice();
+  if(!pRootDevice) return false;
+
+  // Get video Device
+  HRESULT hr = pRootDevice->QueryInterface(__uuidof(ID3D11VideoDevice), reinterpret_cast<void**>(m_pVideoDevice.GetAddressOf()));
+  if(FAILED(hr)) return false;
+
+  // Get Immediate context, had problem getting it from DX::DeviceResources
+  Microsoft::WRL::ComPtr<ID3D11DeviceContext> pImmediateContext;
+  pRootDevice->GetImmediateContext(&pImmediateContext);
+
+  // Get video context
+  hr = pImmediateContext->QueryInterface(__uuidof(ID3D11VideoContext), reinterpret_cast<void**>(m_pVideoContext.GetAddressOf()));
+  if(FAILED(hr)) return false;
+
+  // Create the Enumerator
+  D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc = {};
+  desc.InputFrameFormat = iFlags & DVP_FLAG_INTERLACED ? iFlags & DVP_FLAG_TOP_FIELD_FIRST ? D3D11_VIDEO_FRAME_FORMAT_INTERLACED_TOP_FIELD_FIRST : D3D11_VIDEO_FRAME_FORMAT_INTERLACED_BOTTOM_FIELD_FIRST : D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+  desc.InputWidth = width;
+  desc.InputHeight = height;
+  desc.OutputWidth = m_viewWidth;
+  desc.OutputHeight = m_viewHeight;
+  desc.InputFrameRate.Numerator = 60; // Max expected
+  desc.InputFrameRate.Denominator = 1;
+  desc.OutputFrameRate.Numerator = 60;
+  desc.OutputFrameRate.Denominator = 1;
+  desc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
+  ID3D11VideoProcessorEnumerator* pVideoProcessorEnumerator = nullptr;
+  hr = m_pVideoDevice->CreateVideoProcessorEnumerator(&desc, m_pVideoEnumerator.GetAddressOf());
+  if(FAILED(hr)) return false;
+
+  // Check how many past and future reference frames the NVIDIA driver needs
+  //D3D11_VIDEO_PROCESSOR_CAPS processorCaps = {};
+  //m_pVideoEnumerator->GetVideoProcessorCaps(&processorCaps);
+  D3D11_VIDEO_PROCESSOR_RATE_CONVERSION_CAPS rateCaps = {};
+  m_pVideoEnumerator->GetVideoProcessorRateConversionCaps(0, &rateCaps);
+
+  // Store these values as member variables!
+  m_numPastFrames = rateCaps.PastFrames;   
+  m_numFutureFrames = rateCaps.FutureFrames;
+
+  // Create the Video Processor
+  hr = m_pVideoDevice->CreateVideoProcessor(m_pVideoEnumerator.Get(), 0, m_pVideoProcessor.GetAddressOf());
+  if(FAILED(hr)) return false;
+
+  m_bInitialized = true;
+  return true;
+}
+
+void CRTXVideoProcessor::FlushHistoryQueue()
+{
+  pl_d3d11 d3d11 = PL::PLInstance::Get()->GetD3d11();
+  ID3D11DeviceContext* pDeviceContext = nullptr;
+  d3d11->device->GetImmediateContext(&pDeviceContext);
+  Microsoft::WRL::ComPtr<ID3D11Multithread> pMultithread;
+  if(SUCCEEDED(pDeviceContext->QueryInterface(IID_PPV_ARGS(&pMultithread))))
+  {
+	pMultithread->Enter();
+  }
+
+  if(!m_historyQueue.empty())
+  {
+	// 2. Drop all cached frame view references instantly
+	m_historyQueue.clear();
+
+	CLog::LogF(LOGDEBUG, "RTX Video Processor: Flushed advanced deinterlacing history queue due to seek/skip.");
+  }
+  if(pMultithread)
+  {
+	pMultithread->Leave();
+  }
+
+}
+
 void CRTXVideoProcessor::DebugBypassToDisplay(ID3D11Texture2D* pOutputWindowTexture, ID3D11Texture2D* pTempTarget, CPoint(&destPoints) [4])
 {
-  // Fetch the standard graphics immediate context from your root D3D device setup
+  // Get the immediate context
   ID3D11DeviceContext* pGraphicsContext = nullptr;
   DX::DeviceResources::Get()->GetD3DDevice()->GetImmediateContext(&pGraphicsContext);
   
@@ -2069,12 +2193,10 @@ void CRTXVideoProcessor::DebugBypassToDisplay(ID3D11Texture2D* pOutputWindowText
   pTempTarget->GetDesc(&srcDesc);
   pOutputWindowTexture->GetDesc(&destDesc);
 
-  // SAFETY CHECK: CopyResource requires BOTH textures to have matching dimensions.
-  // If your m_TempTarget is fixed at 4K (Tech 1) but your Kodi window is currently 
-  // resized to a smaller window, you must use CopySubresourceRegion instead!
+  // SAFETY CHECK
   if(srcDesc.Width == destDesc.Width && srcDesc.Height == destDesc.Height)
   {
-	// Pure 1:1 hardware copy straight to the screen swapchain buffer
+	// Pure 1:1 hardware copy 
 	pGraphicsContext->CopyResource(pOutputWindowTexture, pTempTarget);
   }
   else
@@ -2090,13 +2212,13 @@ void CRTXVideoProcessor::DebugBypassToDisplay(ID3D11Texture2D* pOutputWindowText
 
 	pGraphicsContext->CopySubresourceRegion(
 	  pOutputWindowTexture, 0, // Destination texture and subresource index
-	  0, destPoints [0].y, 0,                 // Destination X, Y, Z offsets
-	  pTempTarget, 0,   // Source texture and subresource index
+	  0, destPoints [0].y, 0,  // Destination X, Y, Z offsets
+	  pTempTarget, 0,          // Source texture and subresource index
 	  &sourceBox               // Boundary box to read from
 	);
   }
 }
-bool CRTXVideoProcessor::ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, ID3D11VideoProcessorOutputView* pOutputView)
+bool CRTXVideoProcessor::ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, ID3D11VideoProcessorOutputView* pOutputView, bool bIsInterlaced, uint64_t flags, uint64_t frameIdx)
 {
   if(!m_bInitialized || !m_pVideoContext || !m_pVideoProcessor)
   {
@@ -2109,14 +2231,60 @@ bool CRTXVideoProcessor::ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, 
 	return false;
   }
 
-  ConfigureHdrColorSpaces(m_pVideoProcessor.Get());
+  m_historyQueue.push_back(pInputView);
+
+  // We need current + past + future frames to run processing safely
+  UINT totalNeeded = 1 + m_numPastFrames + m_numFutureFrames;
+  if(m_historyQueue.size() < totalNeeded)
+  {
+	// Not enough frame depth built up yet to execute a motion-adaptive blit
+	return false;
+  }
+
+  while(m_historyQueue.size() > totalNeeded)
+  {
+	m_historyQueue.pop_front(); // Evict oldest frame past the boundary
+  }
+
+  // Identify the active 'Current' target frame
+  UINT currentFrameIndex = m_numPastFrames;
+
+  // Construct the input arrays for the driver
+  std::vector<ID3D11VideoProcessorInputView*> pastSurfaces(m_numPastFrames, nullptr);
+  std::vector<ID3D11VideoProcessorInputView*> futureSurfaces(m_numFutureFrames, nullptr);
+  for(UINT i = 0; i < m_numPastFrames; i++) {
+	pastSurfaces [i] = m_historyQueue [i].Get();  }
+  for(UINT i = 0; i < m_numFutureFrames; i++) {
+	futureSurfaces [i] = m_historyQueue [currentFrameIndex + 1 + i].Get();  }
 
   D3D11_VIDEO_PROCESSOR_STREAM streamData = {};
   streamData.Enable = TRUE;
-  streamData.OutputIndex = 0;
-  streamData.InputFrameOrField = 0;
-  streamData.pInputSurface = pInputView; // Assigns the raw input view pointer
+  streamData.pInputSurface = m_historyQueue [currentFrameIndex].Get(); // Current Frame Target
+  streamData.PastFrames = m_numPastFrames;
+  streamData.ppPastSurfaces = pastSurfaces.data();
+  streamData.FutureFrames = m_numFutureFrames;
+  streamData.ppFutureSurfaces = futureSurfaces.data();
 
+  D3D11_VIDEO_FRAME_FORMAT dxvaFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+
+  if((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_TOP))
+	dxvaFrameFormat = D3D11_VIDEO_FRAME_FORMAT_INTERLACED_TOP_FIELD_FIRST;
+  else if((flags & RENDER_FLAG_FIELD1) && (flags & RENDER_FLAG_BOT))
+	dxvaFrameFormat = D3D11_VIDEO_FRAME_FORMAT_INTERLACED_TOP_FIELD_FIRST;
+  else if((flags & RENDER_FLAG_FIELD0) && (flags & RENDER_FLAG_BOT))
+	dxvaFrameFormat = D3D11_VIDEO_FRAME_FORMAT_INTERLACED_BOTTOM_FIELD_FIRST;
+  else if((flags & RENDER_FLAG_FIELD1) && (flags & RENDER_FLAG_TOP))
+	dxvaFrameFormat = D3D11_VIDEO_FRAME_FORMAT_INTERLACED_BOTTOM_FIELD_FIRST;
+
+  m_pVideoContext->VideoProcessorSetStreamFrameFormat(m_pVideoProcessor.Get(), 0, dxvaFrameFormat);
+
+  const bool frameProgressive = dxvaFrameFormat == D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+
+  const bool secondField = ((flags & RENDER_FLAG_FIELD1) && !frameProgressive) ? 1 : 0;
+  streamData.InputFrameOrField = frameIdx + (secondField ? 1 : 0);
+  streamData.OutputIndex = secondField;
+
+  /////
   HRESULT hr = m_pVideoContext->VideoProcessorBlt(
 	m_pVideoProcessor.Get(), // Retrieves raw ID3D11VideoProcessor*
 	pOutputView,             // Uses the raw ID3D11VideoProcessorOutputView* passed as parameter
@@ -2140,4 +2308,16 @@ bool CRTXVideoProcessor::ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, 
   }
 
   return true;
+}
+
+void CRTXVideoProcessor::EvaluateRtxCapability(const VideoPicture& picture)
+{
+  
+  m_isVsrViable = DX::DeviceResources::Get()->IsSuperResolutionSupported() && (picture.iWidth < 3840 && picture.iHeight < 2160);
+  
+
+  bool streamIsHDR = (picture.color_primaries == AVCOL_PRI_BT2020) && (picture.color_transfer == AVCOL_TRC_SMPTE2084 || picture.color_transfer == AVCOL_TRC_ARIB_STD_B67);
+  m_isRtxHdrViable = DX::DeviceResources::Get()->IsRtxVideoHdrSupported() && !streamIsHDR;
+
+  m_isRtxPipelineViable = (m_isVsrViable || m_isRtxHdrViable);
 }
