@@ -510,9 +510,7 @@ void CRendererPL::CheckVideoParameters()
   }
   bPreviousNvr = m_bUseNvSuperResolution;
 
-  bool bUseUnordered = false;
-  if(!m_videoSettings.m_placeboOptions->getPlOptions()->params.skip_target_clearing)
-	bUseUnordered = true;
+  bool bUseUnordered = !m_videoSettings.m_placeboOptions->getPlOptions()->params.skip_target_clearing ? true : false;
   if(m_RtxVideoProcessor.IsRtxPipelineEnabled())
   {
 	CreateTempTarget(m_RtxVideoProcessor.m_canvasWidth, m_RtxVideoProcessor.m_canvasHeight, false, TempTargetDxgiFormat, bUseUnordered);
@@ -2123,38 +2121,16 @@ bool CRTXVideoProcessor::EnsureProcessorSize(UINT inW, UINT inH, unsigned int iF
 	return true;
   }
 
-  CLog::LogF(LOGDEBUG, "RTX Processor: Re-creating pipeline. Input: %dx%d, Output: %dx%d", inW, inH, outW, outH);
-
-  // Update internal tracker dimensions
-  m_currentInputWidth = inW;
-  m_currentInputHeight = inH;
-  m_currentOutputWidth = outW;
-  m_currentOutputHeight = outH;
+  CLog::LogF(LOGDEBUG, "RTX Processor: Re-creating pipeline. Input: {}x{}, Output: {}x{}", inW, inH, outW, outH);
 
   // Reset old interfaces to avoid memory leaks
   m_pVideoProcessor.Reset();
   m_pVideoEnumerator.Reset();
+  m_pVideoContext.Reset();
+  m_pVideoDevice.Reset();
   m_bInitialized = false;
 
-  // Re-populate descriptor with the real-time runtime dimensions
-  D3D11_VIDEO_PROCESSOR_CONTENT_DESC desc = {};
-  desc.InputFrameFormat = iFlags & DVP_FLAG_INTERLACED ? iFlags & DVP_FLAG_TOP_FIELD_FIRST ? D3D11_VIDEO_FRAME_FORMAT_INTERLACED_TOP_FIELD_FIRST : D3D11_VIDEO_FRAME_FORMAT_INTERLACED_BOTTOM_FIELD_FIRST : D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
-  desc.InputWidth = inW;
-  desc.InputHeight = inH;
-  desc.OutputWidth = outW;
-  desc.OutputHeight = outH;
-  desc.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
-  desc.InputFrameRate.Numerator = 60; // Max expected
-  desc.InputFrameRate.Denominator = 1;
-  desc.OutputFrameRate.Numerator = 60;
-  desc.OutputFrameRate.Denominator = 1;
-
-
-  HRESULT hr = m_pVideoDevice->CreateVideoProcessorEnumerator(&desc, m_pVideoEnumerator.GetAddressOf());
-  if(FAILED(hr)) return false;
-
-  hr = m_pVideoDevice->CreateVideoProcessor(m_pVideoEnumerator.Get(), 0, m_pVideoProcessor.GetAddressOf());
-  if(FAILED(hr)) return false;
+  InitializePipeline(inW, inH, iFlags, outW, outH);
 
   m_bInitialized = true;
   return true;
@@ -2175,8 +2151,8 @@ bool CRTXVideoProcessor::InitializePipeline(unsigned int width, unsigned int hei
   pRootDevice->GetImmediateContext(&pImmediateContext);
 
   // Update internal tracker dimensions
-  m_currentInputWidth = FFALIGN(width, 32);
-  m_currentInputHeight = FFALIGN(height, 32);
+  m_currentInputWidth = width; //FFALIGN(width, 32);  //cl on first call, size is taken from picture, it can differ from allocated texture due to 16/32 aligment, just re-do it once later when we have the correct size instead of guessing
+  m_currentInputHeight = height; //FFALIGN(height, 32);
   m_currentOutputWidth = m_viewWidth;  //cl?
   m_currentOutputHeight = m_viewHeight;
 
@@ -2214,6 +2190,7 @@ bool CRTXVideoProcessor::InitializePipeline(unsigned int width, unsigned int hei
   hr = m_pVideoDevice->CreateVideoProcessor(m_pVideoEnumerator.Get(), 0, m_pVideoProcessor.GetAddressOf());
   if(FAILED(hr)) 
 	return false;
+
   m_pVideoContext->VideoProcessorSetStreamAutoProcessingMode(m_pVideoProcessor.Get(), 0, FALSE);
   m_pVideoContext->VideoProcessorSetStreamOutputRate(m_pVideoProcessor.Get(), 0, D3D11_VIDEO_PROCESSOR_OUTPUT_RATE_NORMAL, FALSE, 0);
   ComPtr<ID3D11VideoContext1> videoCtx1;
