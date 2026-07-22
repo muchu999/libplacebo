@@ -80,9 +80,9 @@ public:
   bool InitializePipeline(unsigned int width, unsigned int height, unsigned int iFlags, unsigned int m_viewWidth, unsigned int m_viewHeight);
   void ProcessVideoFrame(ID3D11VideoProcessorInputView* inputView, ID3D11VideoProcessorOutputView* outputView);
   void UninitializePipeline();
-  bool ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, ID3D11VideoProcessorOutputView* pOutputView, bool bIsInterlaced, uint64_t flags, uint64_t frameIdx);
+  bool ExecuteBlit(ID3D11VideoProcessorInputView* pInputView, ID3D11VideoProcessorOutputView* pOutputView, unsigned int pictFlags, uint32_t flags, uint64_t frameIdx);
   void DebugBypassToDisplay(ID3D11Texture2D* pOutputWindowTexture, ID3D11Texture2D* pTempTarget, CPoint(&destPoints) [4]);
-  bool ConfigureHdrColorSpaces(ID3D11VideoProcessor* pProcessor);
+  bool ConfigureHdrColorSpaces(ID3D11VideoProcessor* pProcessor, bool bUseNvRtxHdr);
   bool EnsureProcessorSize(UINT inW, UINT inH, unsigned int iFlags, UINT outW, UINT outH);
   void FlushHistoryQueue();
   void EvaluateRtxCapability(const VideoPicture& picture);
@@ -92,15 +92,21 @@ public:
   bool IsRtxPipelineEnabled() const { return m_isRtxPipelineEnabled; }
   void EnablePipeline() { m_isRtxPipelineEnabled = true; }
   void DisablePipeline() { m_isRtxPipelineEnabled = false; }
+  bool IsStreamHdr() const { return m_bStreamIsHDR; }
+  void EnableNvidiaVideoExtension();
   const unsigned int m_canvasWidth = 3840;
   const unsigned int m_canvasHeight = 2160;
+  uint64_t m_lastFrameIdx = 0;
 
 private:
+  bool m_bStreamIsHDR = false;
   bool m_bInitialized = false;
   bool m_isVsrViable = false;
   bool m_isRtxHdrViable = false;
   bool m_isRtxPipelineViable = false;
   bool m_isRtxPipelineEnabled = false;
+  bool m_wasVsrEnabled = false;
+  bool m_wasHdrEnabled = false;
 
   UINT m_numPastFrames = 0;
   UINT m_numFutureFrames = 0;
@@ -148,6 +154,8 @@ public:
   DXVA::SupportedConversionsArgs m_conversionsArgs;
   bool m_tryVSR {false};
   DXVA::ProcessorConversion ChooseConversion(const DXVA::ProcessorConversions& conversions) const;
+  void OnRtxSettingChanged();
+  void HandleDeferredSync();
 
 
 protected:
@@ -219,6 +227,8 @@ private:
   CRTXVideoProcessor m_RtxVideoProcessor;
   bool m_bUseNvRtxHdr = false;
   bool m_bUseNvSuperResolution = false;
+  bool m_bPendingRtxToggleStateChange = false;
+
 };
 
 class CRendererPL::CRenderBufferImpl : public CRenderBuffer
@@ -266,6 +276,10 @@ public:
   PL::pl_d3d_format plFormat = {};
   //planes are used to create the frame
   pl_plane plplanes[3] = {};
+
+  unsigned int m_pictureWidth = 0;
+  unsigned int m_pictureHeight = 0;
+
 
   // they are only kept for plane reference
 // we could put them to null according to libplacebo doc but it crash right away

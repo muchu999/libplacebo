@@ -25710,11 +25710,15 @@ msgid "Multithreaded reduces judder but might increase latency and CPU/GPU memor
 msgstr ""
 
 msgctxt "#55386"
-msgid "Super resolution (NVIDIA+DXVA only, no frame mixing)"
+msgid "  Video super resolution"
 msgstr ""
 
 msgctxt "#55387"
-msgid "RTX video HDR (NVIDIA+DXVA only, no frame mixing)"
+msgid "  Video HDR"
+msgstr ""
+
+msgctxt "#55388"
+msgid "RTX video pipeline (req. playback restart, NVIDIA, DXVA, mixing disabled)"
 msgstr ""
 
 

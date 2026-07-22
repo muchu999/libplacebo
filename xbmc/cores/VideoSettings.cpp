@@ -118,6 +118,7 @@ void CVideoSettings::copy(const CVideoSettings& other)
   m_PlaceboDisplayHdrPeakLuminance = other.m_PlaceboDisplayHdrPeakLuminance;
   m_PlaceboDisplaySdrPeakLuminance = other.m_PlaceboDisplaySdrPeakLuminance;
   m_PlaceboTargetContrast = other.m_PlaceboTargetContrast;
+  m_PlaceboNvRtxPipelineEnabled = other.m_PlaceboNvRtxPipelineEnabled;
   m_PlaceboNvSuperResolutionEnabled = other.m_PlaceboNvSuperResolutionEnabled;
   m_PlaceboNvRtxHdrEnabled = other.m_PlaceboNvRtxHdrEnabled;
   m_PlaceboSdrTargetContrast = other.m_PlaceboSdrTargetContrast;
@@ -241,6 +242,7 @@ void CVideoSettings::ResetSdrToHdrSettings(PlOptionsWrapper::reset_type type)
   // Overriding SDR default values for SDR to HDR mapping
   m_PlaceboDisplaySdrPeakLuminance = 480;
   m_PlaceboTargetContrast = 0;
+  m_PlaceboNvRtxPipelineEnabled = false;
   m_PlaceboNvSuperResolutionEnabled = false;
   m_PlaceboNvRtxHdrEnabled = false;
   m_PlaceboSdrTargetContrast = -1;
@@ -367,6 +369,7 @@ bool CVideoSettings::operator!=(const CVideoSettings& right) const
   if (m_PlaceboDisplayHdrPeakLuminance != right.m_PlaceboDisplayHdrPeakLuminance) return true;
   if (m_PlaceboDisplaySdrPeakLuminance != right.m_PlaceboDisplaySdrPeakLuminance) return true;
   if (m_PlaceboTargetContrast != right.m_PlaceboTargetContrast) return true;
+  if (m_PlaceboNvRtxPipelineEnabled != right.m_PlaceboNvRtxPipelineEnabled) return true;
   if (m_PlaceboNvSuperResolutionEnabled != right.m_PlaceboNvSuperResolutionEnabled) return true;
   if (m_PlaceboNvRtxHdrEnabled != right.m_PlaceboNvRtxHdrEnabled) return true;
   if (m_PlaceboSdrTargetContrast != right.m_PlaceboSdrTargetContrast) return true;
