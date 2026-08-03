@@ -522,9 +522,9 @@ bool pl_color_space_is_hdr(const struct pl_color_space *csp)
            pl_color_transfer_is_hdr(csp->transfer);
 }
 
-bool pl_color_space_is_black_scaled(const struct pl_color_space *csp)
+bool pl_color_space_is_black_scaled(const struct pl_color_space *csp)  //cl 
 {
-    switch (csp->transfer) {
+  switch (csp->transfer) {
     case PL_COLOR_TRC_UNKNOWN:
     case PL_COLOR_TRC_SRGB:
     case PL_COLOR_TRC_LINEAR:
@@ -947,7 +947,7 @@ void pl_color_space_infer_ref(struct pl_color_space *space,
     infer_both_ref(space, &ref);
 }
 
-void pl_color_space_infer_map(struct pl_color_space *src,
+void pl_color_space_infer_map(struct pl_color_space *src,  //cl
                               struct pl_color_space *dst)
 {
     bool unknown_src_contrast = !src->hdr.min_luma;
